@@ -41,21 +41,47 @@ extern "C" {
 // Maximum global variable slots.
 //
 // COST: one slot is a 16-byte `Variable` (name pointer, Value, three
-// flags) in .bss, so this table is 3 KB on the target. Raising it does
-// not slow *reads* down: `find_global` scans `global_count`, not this
-// bound, so a lookup costs what the workspace actually holds. The two
-// paths that do walk the whole array are `variables_init` (once, at
-// startup) and creating a global that does not exist yet (once per
-// name) -- neither is on a frame loop's path.
+// flags) in .bss, so this table is 4 KB on the target -- 992 B more
+// than the 192 it was, measured as +0.19 points of SRAM on all three
+// boards (88.89/86.38/91.29 % to 89.08/86.57/91.48). That is the
+// whole cost: raising it does NOT slow reads down, because
+// `find_global` goes through the hash index in variables.c and a
+// lookup is a hash and a probe whatever the table holds. (A line
+// that used to stand here said a big workspace is a linear scan on
+// every read. It predates that index and was wrong when M3 raised
+// this.) The two paths that do walk the whole array are
+// `variables_init` (once, at startup) and creating a global that does
+// not exist yet (once per name) -- neither is on a frame loop's path.
 //
-// A big workspace is still a linear scan on every global read, so this
-// is not free to keep raising -- 192 is what lets a game (Turtle Trails
-// is the fattest at ~119) load with the frame profiler or a second
-// program on top, which 128 no longer did.
+// 254 is what BATTLEZONE NEEDS, and it is the first program in this
+// tree to come anywhere near the bound. Its P13 M2 -- the plain, the
+// obstacles, the enemy, both shells and the radar -- already stood at
+// 189 of the old 192, because the design pays for a 1.31x faster
+// frame by putting every hot-path temporary in the flat global
+// namespace (docs/battlezone-design.md section 13, L0.5). M3's lives,
+// score, four enemy kinds, two models, cracked screen, sound and high
+// score table add more and it does not fit. Turtle Trails, the
+// fattest game before it, is ~119.
+//
+// MEASURED, AND THE PEAK IS NOT THE LOAD-TIME COUNT: battlezone is 186
+// entries after `load` and 233 once a game has been played, because
+// fifty of its names are minted the first time a procedure that uses
+// them runs rather than by a top-level `make`. A board reported exactly
+// that gap -- on firmware built at 192 the file loads and the attract
+// screen runs, then the first spawn fails with `Out of space`. So the
+// number to check a program against is the one it reaches in play, and
+// `test_the_game_fits_the_global_table_with_room_to_spare` measures it
+// by playing rather than by reading the source.
+//
+// 254 IS THE CEILING OF THE CURRENT REPRESENTATION and not a round
+// number: `global_hash` holds slot + 1 in a `uint8_t`, which the
+// static assert below pins. Going further means widening those
+// entries, which is a real change and should be made by whatever
+// needs it rather than in advance.
 //
 // OVERFLOW: `var_set` returns `false` when the table is full; callers
 // surface this as `ERR_OUT_OF_SPACE`.
-#define MAX_GLOBAL_VARIABLES 192
+#define MAX_GLOBAL_VARIABLES 254
 
 // Maximum depth of the "currently executing procedure" name stack used
 // for the pause prompt and trace output. This is independent of the

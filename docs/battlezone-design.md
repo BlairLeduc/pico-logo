@@ -1896,13 +1896,203 @@ the tank turns and drives faster for no reason a player can see.
 supertank → saucer), the cracked screen, the attract screen, the high score
 table, sound.
 
+### 16.7 M3 is built, and it is waiting on a board
+
+`logo/games/battlezone` is the game now rather than the engine: three tanks, the
+arcade's score table, the four enemies on a ring, the shattered periscope, an
+attract screen with ten high scores kept in `/games/battlezone.scores`, and the
+four sounds §11 asked for. **124 host tests, 84/84 ctest green**, and all three
+presets link.
+
+**What M3 costs the frame is almost nothing, and that is the point of having
+done it last.** The score, the lives and the enemy sequence are arithmetic on
+*events* and not on frames; the sound is four gates a frame at worst; the only
+new per-frame drawing is the shatter, and only while you are cracked. Both new
+models are **cheaper than the tank**:
+
+| | edges | divides |
+|---|---:|---:|
+| tank / supertank (§8.2) | 13 | 6 |
+| saucer | 12 | 5 |
+| missile | 4 | 4 |
+| cracked screen (while cracked) | 12 | 0 |
+
+So there is no frame in this game more expensive than the worst one M2 measured
+at 51.7 ms, and the board run is a confirmation rather than a gate.
+
+#### 16.7.1 §8 has no missile and no saucer, and both found a symmetry
+
+The one thing M3 had to invent. Both are cut the way the tank is — the camera's
+rotation folded in **once**, the perspective divides counted — and each turned
+out to have a symmetry the tank does not, which is why both came in under it.
+
+**A missile is a spike with four fins, and it draws in four edges.** Two
+savings, and neither is an approximation. First, *a vertical offset does not
+change z*, so the fins above and below the tail sit at the tail's own (x, z) and
+share its divide: two of the six vertices are free, and since the divide is the
+expensive part of a vertex that is most of what a fin costs. Second — the one
+that surprised the count — *the upper tip, the tail and the lower tip are three
+points on one straight line*, so a single stroke through the middle point is the
+same ink as two strokes out of it. Four fins, three edges, one pen-up where
+`draw.box` needs four for its verticals. The design predicted five edges before
+the test counted four.
+
+**A saucer is a square bipyramid, and it is rotationally symmetric.** Its own
+heading never enters the transform, which is the whole saving: the four rim
+points sit at ±r along the *world* axes, so the camera turns them into one
+offset pair and its own perpendicular — §8.2's free-90-degrees trick without
+even the multiply that earns it there, two statements where the hull needs four.
+Four rim points plus the centre is five divides, and the dome and the keel share
+the centre's.
+
+The shape is right for the reason that matters rather than for economy. A tank's
+periscope is 12 steps off the plain and the saucer floats at 90, so it is seen
+very nearly **edge-on** — a plate with a dome above and a hull below, which is
+exactly what a rim quad and two apexes draw from that angle. It is the only view
+this game has, and the model is cut for it.
+
+#### 16.7.2 The three booleans, and why the frame never asks what it is looking at
+
+Four enemies could have been four comparisons in every procedure that touches
+one. Instead a spawn reads a **row** — `set.kind`, one procedure per kind, all
+fifteen numbers together — into the live `e.*` names, and leaves three booleans
+behind: `e.gun` (has a barrel, draws one, fires), `e.ram` (kills by *arriving*,
+which is the missile and only the missile), `e.drift` (does not hunt, does not
+fire, and is not stopped by an obstacle, which is the saucer flying over the
+plain at 90 steps). After that **the frame costs exactly nothing for having four
+kinds**: `hunt`, `move.enemy`, both collisions and the draw dispatch each read a
+boolean where they would have compared a kind number, and a boolean read is
+cheaper than a comparison.
+
+**One block a kind, and §16.6.1 is why.** The failure that cost M2 a play test
+was two constants that only mean something against each other written down in
+different sections and never compared — the stand-off and the hit box. Eight
+parallel lists indexed by kind is that failure with a mechanism. A row keeps an
+enemy's numbers where they can be read together, and `e.range` and `e.wob` are
+three lines apart in every one of them.
+
+**And the invariant is now a test over every kind that carries a gun**, which is
+what M3 needed it to be: the supertank is "smarter" by wobbling **7°** rather
+than 10, and a *tighter* cone at the same distance is a cone that fits inside
+the hit box — M2's defect, reopened by the fix for it. So the supertank's
+stand-off had to go **out** rather than in: 420 against the tank's 400, which
+puts 297 · tan 7° = 36.5 steps against a 30 box. The test drives all four kinds
+and requires at least two guns, so a third gun kind cannot be added without
+meeting it.
+
+#### 16.7.3 The refused-clock rate cut is taken, and nothing else moves with it
+
+§16.6 measured the fallback and found it does not work — two obstacles at 150 MHz
+is a peak frame of 77.0 against 66.7, still over by 10.3 — and left the rate cut
+to M3 as "a decision rather than a measurement". **Taken: `slow.fps` is 12, and
+two obstacles at 12 fps is 77.0 against 83.3, in hand by 6.3.**
+
+The interesting half is what *did not* move. §16.6.2 says `turn.rate` and
+`tread.step` are per frame and cannot be read without `fps`, which reads like an
+instruction to re-cut them at 12. It is the opposite. **Every** constant in the
+file spelled "a frame" is per frame — the treads, the turn, both shells' speed
+and life, the enemy's step and its reload, the radar's spin, the explosion — so
+moving only `fps` runs the whole game at **0.8×, uniformly**, and a player
+cannot see a proportion that has not changed. Re-cutting the two the player's
+hands touch is what would break it: a tank turning and driving at full speed
+while every shell in the air flies a fifth slower is §16.6.2's complaint
+backwards. The fallback is two numbers and the rest of the file does not know
+about it, and the test names every constant that must not have moved.
+
+#### 16.7.4 The interpreter ran out of globals, and this game is why
+
+**M3 does not fit in 192 global variables, and M2 did not have room to spare
+either: it stood at 189.** That is not a defect, it is the bill for §13's L0.5 —
+the frame is 1.31× faster because every hot-path temporary lives in the flat
+global namespace, and the price of that decision was always going to be paid in
+slots. Turtle Trails, the fattest program in this tree before Battlezone, is
+about 119.
+
+Both halves were done. **The file was economised**: every single-use constant
+that had been hoisted for readability went back to its call site — the four
+score values, the four kind numbers, every sound frequency and duration, the
+name-field geometry — and the two new projections borrow `p.` temporaries the
+tank's projection has already finished with rather than taking their own. That
+is 34 names. **And `MAX_GLOBAL_VARIABLES` went 192 → 254**, which is the ceiling
+of the current representation rather than a round number: `global_hash` holds
+slot + 1 in a `uint8_t`, and a static assert pins it.
+
+**The number that matters is the peak and not the load-time count**, and the
+difference between them is what a board reported. Battlezone is **186 entries
+after `load` and 233 once a game has been played**: fifty of its names — every
+`p.` temporary in the three projections, the `mt.` ones in the horizon,
+`tk.dx`/`tk.dz`/`tk.guard` in the collisions, `e.b` and `e.d` in the hunt,
+`e.left` in `set.kind` — are minted the first time a procedure that uses them
+runs, not by a top-level `make`. So **nothing observable at load says the table
+is about to fill**, which is precisely the failure a Pico 2 W hit: on firmware
+built before the cap moved, the file loaded, the attract screen ran, and
+`init.game` then died with `Out of space in spawn.enemy` — `spawn.enemy` being
+simply the procedure that happened to be executing when the last slot went.
+Reproduced on the host by building the suite at 192: load 186, attract 186,
+`init.game` fails at exactly 192.
+
+`test_the_game_fits_the_global_table_with_room_to_spare` therefore **plays a
+game** rather than reading the source, and asserts the peak against a stated
+budget of 16 free slots. 233 of 254 leaves 21, so it passes by 5 — and that
+margin is a budget rather than slack: a player's own program, a startup file or
+a profiler loaded beside the game all come out of the same table.
+
+It costs **992 B of SRAM** (62 slots × a 16-byte `Variable`), measured as +0.19
+points on all three boards — 88.89 / 86.38 / 91.29 % to 89.08 / 86.57 / 91.48.
+It costs **nothing in time**: `find_global` has gone through a hash index since
+P11 M4, so a read is a hash and a probe whatever the table holds, and the line in
+`limits.h` that said otherwise predated that index and is corrected.
+
+#### 16.7.5 Four things building it found
+
+**Two spawns for one death, and nothing on the screen would have said so.** A
+missile sets its own `e.boom` and *then* kills you, so both countdowns start on
+the same frame and run out on the same one — and `step.enemy` spawns from its
+counter a moment after `respawn` spawns from the tank's. The ring advanced twice
+and one of the two enemies was never seen. It is invisible from the driving seat,
+because there is an enemy out there either way; the test is on the sequence
+position and not on the picture. The enemy's own countdown wins, because it is
+the one that was already going to fire. This is the same shape as §16.6.1 and
+§9's near plane: **two pieces of state that only mean something against each
+other, written in different procedures**, and it is the third time this design
+has found one.
+
+**`init.game` arms `setrefresh "sync`, and on the host `sync` really waits.**
+Every test that set a game up and then drove frames was sleeping a real 1/15 s a
+frame; the suite went from a second to minutes and looked exactly like a hang.
+The tests now go through one helper that disarms it, and the reason is written
+where the helper is.
+
+**The mock's sound gate log holds 64 entries and a centred pair spends two of
+them a note.** The alarm test counted 36 notes into a 32-note log and then
+concluded the alarm was one note rather than two — a test failing for a reason
+that had nothing to do with the thing it was testing. It now checks the two
+notes *first* and counts inside the budget.
+
+**`show.game.over` flushes the key ring before it reads a name**, which is the
+guard that stops the keypress that ended the game arriving as the first letter
+of a name — and it therefore eats a test's queued input. `read.name` is driven
+directly and `show.game.over` gets a stub, which is the shape `test_asteroids.c`
+already arrived at for the same reason.
+
+#### 16.7.6 What only a board can answer
+
+The frame budget, as ever, and this time it is a confirmation and not a gate:
+the table above says no frame is more expensive than M2's worst, so the readout
+should land where M2's did. What it is really being asked is whether **the game
+plays** — whether a missile is dodgeable at 15 fps, whether the shatter takes
+enough of the view to hurt without making the game unplayable, whether the
+engine idle and the closing alarm do what §11 claims for them, and whether the
+saucer reads as a saucer from a tank's eye height. Every one of those is M4's
+material and none of them is a number.
+
 **M4 — tuning.** Played, then cut.
 
 ## 17. Tests
 
 `tests/test_battlezone.c` on the mock device, mirroring `test_asteroids.c`'s
-shape. **38 at M1's close; 73 at M2's.** The ones that are specific to
-this game:
+shape. **38 at M1's close; 73 at M2's; 124 at M3's.** The ones that are specific
+to this game:
 
 - **The projection is right.** Known camera, known world point, known screen
   coordinate, computed by hand. This is the test that would have caught a
@@ -1948,6 +2138,38 @@ M2's additions, and the failure each exists for:
   halves, through the mock's settable clock and through a mock with no settable
   clock at all.
 
+M3's additions, and the failure each exists for:
+
+- **No kind that shoots can park where it cannot miss.** §16.6.1's invariant,
+  now a loop over every kind carrying a gun and refusing to run against fewer
+  than two of them. The supertank's tighter wobble is exactly the change that
+  reopens M2's defect, and this is what closes it.
+- **Every kind sets a whole row.** `set.kind` chooses by comparing against four
+  literals, so a kind matching none of them would leave the *previous* enemy's
+  numbers in place — a supertank wearing a saucer's score, and nothing on the
+  host or the board that says so.
+- **The frame draws the model that matches the kind.** A saucer drawn as a tank
+  would be twelve edges either way, so the assertion is that the edge count
+  *moves* with the kind: 13, 4, 13, 12.
+- **A saucer's outline does not turn with its heading.** It is rotationally
+  symmetric and that is the whole saving; an outline that turned would mean the
+  heading had leaked into the transform and the projection was doing work the
+  symmetry exists to remove.
+- **A saucer flies over an obstacle a tank is stopped by.** Both halves, in the
+  same test, because "it flies" is one boolean in one procedure and the only
+  proof it is wired up is a tank grounded in the same place.
+- **The shatter is static.** Every stroke's endpoints, twice, not just the
+  count: what is stored is a bearing and two lengths, and a shatter re-rolled
+  each frame would be a snowstorm rather than damage to the glass.
+- **A bonus tank arrives on stepping over the boundary.** A 5,000-point saucer
+  can carry a score from 14,000 to 19,000 without ever equalling 15,000, which
+  is what a `remainder` would miss.
+- **A refused clock cuts the rate and nothing else.** §16.7.3's decision, with
+  every per-frame constant that must not have moved named in the test.
+- **The session asks for the clock before any game.** M2 asked once per game;
+  M3 asks once per session, because ESC now returns to an attract screen and a
+  fourth game should not pay for a wireless bus teardown again.
+
 ## 18. Risks
 
 | Risk | Where it bites | What answers it |
@@ -1964,9 +2186,12 @@ M2's additions, and the failure each exists for:
 1. **Does a P9 tilemap layer compose underneath turtle graphics?** If it does,
    the horizon is nearly free (§8.4) and this is the cheapest 3.9 ms in the
    document. Nothing in this tree establishes it either way.
-2. **Is `splitscreen`'s text area usable while `sync` is driving the graphics
-   half?** §6 assumes the score can live there and be written with `print`
-   rather than costing graphics rows.
+2. ~~**Is `splitscreen`'s text area usable while `sync` is driving the graphics
+   half?**~~ **Answered at M1, once B49 was fixed: yes.** `draw.hud` writes
+   there every frame and a board reads it, which is why §6's assumption that the
+   score can live in the text area rather than cost graphics rows holds — and
+   M3's score row is written on the event rather than on the tally for exactly
+   that reason.
 3. ~~**Should the enemy's hunt logic run every frame?**~~ **Answered at M2: no,
    one frame in three.** `hunt` decides the turn, the drive and the fire and
    leaves those three *intents* behind; the two frames in between act on them,
@@ -1982,9 +2207,11 @@ M2's additions, and the failure each exists for:
    minutes. **This is the one open question that is not about Battlezone**, and
    it should be answered before M1 spends L0.5 on the strength of a host
    measurement.
-6. **Does a *tiered* Pico 2 run this frame?** (§16.3.) The untiered one does
-   not, by a factor of two, and the flag is now on. The prediction is that it
-   lands within a few per cent of the Pico 2 W; the run is one `p13m0` away.
+6. ~~**Does a *tiered* Pico 2 run this frame?**~~ **Answered at M0: yes, and
+   the prediction was 7 % low** (§16.3). It reads 70.6 ms against a predicted
+   65.7 and closes to **55.1 with §12.1's levers, 11.6 ms in hand** — so a
+   tiered Pico 2 is the *slowest* of the three boards rather than the twin of
+   the Pico 2 W, and the radio is not the only difference between them.
 8. **Should the tank pivot about a point behind the eye?** (§8.3b.) A real tank
    rotates about its hull while the periscope sits forward of that, so a turn
    swings the eye sideways as well as rotating it — which makes near objects

@@ -1,4 +1,4 @@
-; Battlezone -- M2: the enemy. See
+; Battlezone -- M3: the game. See
 ; docs/battlezone-design.md.
 ;
 ;   load "battlezone
@@ -6,19 +6,63 @@
 ;
 ; 1/Q drive the left tread, 0/P the
 ; right, ] fires, space pauses, ESC
-; quits.
+; quits to the attract screen.
+;
+; The attract screen carries the top ten
+; scores, kept beside this file in
+; /games/battlezone.scores
+; beside this file.
 ;
 ; M1 was the plain, the obstacles, the
 ; tread controls, the horizon and the
 ; gunsight -- the milestone that proved
-; the PROJECTION is right. M2 adds the
+; the PROJECTION is right. M2 added the
 ; enemy tank, its hunt logic, both
 ; shells, the collisions, the explosions
-; and the radar, and it is the FRAME
+; and the radar, and it was the FRAME
 ; BUDGET milestone: P11's M2 is the one
-; that missed by 19.7 ms, and this is
-; the point at which this game finds out
-; whether it has the same problem.
+; that missed by 19.7 ms, and M2 is
+; where this game found out that it does
+; not -- 51.7 ms on the worst frame at
+; 300 MHz against 66.7.
+;
+; M3 IS THE ONE THAT MAKES IT A GAME.
+; Lives and a score, the four enemies in
+; a sequence, the cracked screen, the
+; attract screen with its high score
+; table, and the sound. Everything M2
+; left as a tally on a development
+; readout -- `kills` and `hits` -- is
+; now something the player wins or
+; loses.
+;
+; WHAT M3 SPENDS. Almost nothing in the
+; frame, which is the point of doing it
+; last: the score, the lives and the
+; enemy sequence are arithmetic on
+; events rather than on frames, the
+; sound is four gates a frame at worst,
+; and the only new per-frame drawing is
+; the cracked screen -- twelve edges,
+; and only while you are cracked. The
+; two new MODELS cost what they draw and
+; nothing else, and both are cheaper
+; than the tank: a missile is FOUR edges
+; over four divides and a saucer is
+; twelve over five, against the tank's
+; thirteen over six. There is no frame
+; in this game that is more expensive
+; than M2's measured worst one.
+;
+; SECTION 8 HAS NO MISSILE AND NO SAUCER
+; IN IT, and that is the one thing M3
+; had to invent rather than build. Both
+; are written as the tank is -- the
+; camera rotation folded in ONCE and the
+; perspective divides counted -- and
+; both exploit a symmetry the tank does
+; not have. See `project.missile` and
+; `project.saucer`.
 ;
 ; WHAT M2 SPENDS, AND WHERE IT GOT THE
 ; ROOM. M1 measured 50.8 ms a frame at
@@ -243,6 +287,12 @@
 ; horizontal field of view is 63
 ; degrees, close to the cabinet's.
 
+; `fps` IS SET BY `clock` AND NOT HERE.
+; 15 is the rate every board that took
+; the overclock runs at; a board that
+; refuses it gets `slow.fps` instead.
+; See `clock` for why the number below
+; is the only one that moves with it.
 make "fps 15
 make "k 260
 make "eye 12
@@ -289,9 +339,50 @@ make "coll.r 90
 ; obstacles to two -- is worth 7.3 ms,
 ; which is the difference. M4 turns
 ; these two numbers; nothing else does.
+;
+; AND A RATE, WHICH IS M3'S DECISION.
+; M2 measured the refused-clock
+; fallback and found it does not work:
+; two obstacles at 150 MHz is a peak
+; frame of 77.0 against 66.7, still over
+; by 10.3, and getting the PEAK inside
+; the budget at stock needs the obstacle
+; field gone entirely, which is not a
+; game. What fits is a rate cut -- two
+; obstacles at 12 fps is 77.0 against
+; 83.3, in hand by 6.3 -- and design
+; section 16.6 left the decision here.
+;
+; TAKEN, AND NOTHING ELSE MOVES WITH IT.
+; Section 16.6.2's caution says
+; `turn.rate` and `tread.step` are per
+; frame and cannot be read without
+; `fps`, which reads like an instruction
+; to re-cut them at 12. It is the
+; opposite. EVERY constant in this file
+; that is spelled "a frame" is per
+; frame -- the treads, the turn, both
+; shells' speed and life, the enemy's
+; step and its reload, the radar's spin,
+; the explosion -- so leaving all of
+; them alone and moving only `fps` runs
+; the whole game at 0.8x, uniformly, and
+; a player cannot see a proportion that
+; has not changed. Re-cutting the two
+; the player's hands touch is what would
+; break it: a tank that turns and drives
+; at full speed while every shell in the
+; air flies a fifth slower is the exact
+; complaint 16.6.2 raised, backwards.
+;
+; So the fallback is two numbers and the
+; rest of the file does not know about
+; it.
 make "max.obstacles 3
 make "fast.obstacles 3
 make "slow.obstacles 2
+make "fast.fps 15
+make "slow.fps 12
 make "ob.count 8
 
 ; Obstacle half-width, cube height,
@@ -353,6 +444,11 @@ make "atom.floor 2000
 ; Smaller than an obstacle in both axes,
 ; so a tank reads as a tank next to a
 ; cube rather than as a second cube.
+; The tank's own size. M3 makes these
+; per kind -- `e.hw` and `e.te`, set
+; once at the spawn by `set.kind` -- so
+; what is written here is the row the
+; other three are cut against.
 make "ehalf 14
 make "ebodyh 16
 make "ebode :ebodyh - :eye
@@ -383,11 +479,24 @@ make "ebode :ebodyh - :eye
 ; one, and 283 * tan 10 is 50 against a
 ; 30 box. `e.wob` below is the other
 ; half of the same fix.
+;
+; THESE EIGHT ARE LIVE STATE FROM M3 ON,
+; not tuning. `set.kind` writes the row
+; of whichever of the four enemies has
+; just spawned into them, and everything
+; downstream -- `hunt`, `move.enemy`,
+; both projections, the collisions --
+; reads them without knowing which kind
+; it is looking at. What is written here
+; is the tank's row and the shape of the
+; other three.
 make "e.step 6
 make "e.turn 4
 make "e.range 400
 make "e.aim 7
 make "e.naim 0 - :e.aim
+make "e.hw :ehalf
+make "e.te :ebode
 
 ; The aim error, in degrees either way,
 ; and the span `random` needs to produce
@@ -426,10 +535,168 @@ make "e.reload 24
 ; collision half-widths: what a shell
 ; has to come within to kill it, and
 ; what it has to come within to be
-; stopped by an obstacle.
+; stopped by an obstacle. `e.hit` is
+; per kind from M3 on; `e.coll` is not,
+; because it guards against an obstacle
+; and an obstacle is the same size
+; whatever is driving at it.
 make "e.spawn 620
 make "e.hit 34
 make "e.coll 60
+
+;--------------------------------------
+; The four enemies
+;
+; Design section 2 lists them and design
+; section 8 models only the first, so
+; three of these four rows are M3's
+; invention and are marked as such. The
+; arcade's score table is not: 1,000 for
+; a tank, 2,000 for a missile, 3,000 for
+; a supertank and 5,000 for a saucer,
+; which is the cabinet's.
+;
+; A ROW IS READ ONCE, AT THE SPAWN, into
+; the live `e.*` names above -- so the
+; frame never asks what kind of enemy it
+; is looking at and the four kinds cost
+; the frame exactly nothing. That is why
+; this is `set.kind` with four blocks
+; rather than eight parallel lists
+; indexed by kind: eight lists that have
+; to stay aligned is precisely the
+; failure section 16.6.1 caught -- two
+; numbers that only mean something
+; against each other, written down
+; apart. One block a kind keeps an
+; enemy's numbers where they can be read
+; together.
+;
+; THREE BOOLEANS CARRY THE BEHAVIOUR,
+; and nothing else in the file compares
+; a kind:
+;
+; * `e.gun` -- it has a barrel, draws
+;   one, and fires shells.
+; * `e.ram` -- it kills by ARRIVING
+;   rather than by shooting, which is
+;   the missile and only the missile.
+; * `e.drift` -- it does not hunt, does
+;   not fire and is not stopped by an
+;   obstacle, which is the saucer
+;   floating over the plain.
+;
+; A supertank is a tank with a better
+; row, exactly as the cabinet's is, and
+; it is bigger so that a player can see
+; which one is coming: the numbers a
+; supertank differs by -- speed, turn
+; rate, reload, aim -- are all invisible
+; until it is too late to matter.
+
+; The sequence. `spawn.enemy` walks this
+; ring, so the cabinet's escalation --
+; tank, then a missile, then a supertank
+; and eventually a saucer -- is a list
+; and not a state machine. The tank is
+; the staple and the saucer is rare,
+; which is what a 5,000-point enemy that
+; cannot hurt you has to be.
+make "e.order [1 2 1 3 1 2 3 4]
+
+
+;--------------------------------------
+; The missile, and the saucer
+;
+; NEITHER IS IN DESIGN SECTION 8. Both
+; are cut the way the tank is -- the
+; camera's rotation folded in once, the
+; perspective divides counted -- and
+; both are CHEAPER than the tank,
+; because each has a symmetry the tank
+; does not.
+;
+; A MISSILE IS A SPIKE WITH FOUR FINS,
+; and the saving is that a vertical
+; offset does not change z: the fins
+; above and below the tail share the
+; tail's divide and are free. Nose,
+; tail, and one fin either side is four
+; divides for five edges. `ms.ln` is
+; half its length, `ms.fin` the span of
+; a fin.
+make "ms.ln 15
+make "ms.fin 7
+
+; A SAUCER IS A SQUARE BIPYRAMID, and
+; the saving is that it is rotationally
+; symmetric, so its own heading never
+; enters the transform: the four rim
+; points sit at plus and minus the
+; radius along the WORLD axes, and the
+; camera turns those into one pair of
+; offsets and its own perpendicular --
+; the same free-90-degrees trick the
+; enemy hull uses, without the multiply
+; that earns it. Four rim points plus
+; the centre is five divides, and the
+; dome and the keel share the centre's.
+;
+; It is the right shape for the reason
+; that matters rather than for economy.
+; A tank sits on the plain and the
+; periscope is 12 steps up, so a saucer
+; floating at `sc.y` is seen very nearly
+; edge-on -- a plate, a dome on top and
+; a hull below, which is what the rim
+; quad and the two apexes draw.
+make "sc.r 22
+make "sc.y 90
+; The dome 12 above the rim and the keel
+; 9 below it, folded into their heights
+; above the eye once here so the
+; projection is one add and not two.
+make "sc.a 102
+make "sc.k 81
+
+;--------------------------------------
+; Lives and the score
+;
+; The arcade's: three tanks, and another
+; every `extra.at` points. One `if` on
+; the way through `add.score` is enough
+; because the largest single award is a
+; 5,000-point saucer and the bonus is
+; 15,000 apart, so a score can step OVER
+; a boundary but never over two.
+make "start.lives 3
+make "extra.at 15000
+
+;--------------------------------------
+; The cracked screen
+;
+; Design section 2: being hit shatters
+; the periscope glass and it stays
+; shattered until you respawn. It is the
+; arcade's real penalty for being hit --
+; it costs you the view rather than a
+; number -- and it is the reason the
+; explosion is not the whole of getting
+; killed.
+;
+; SIX CRACKS, TWELVE EDGES, AND NO
+; PER-FRAME ARITHMETIC AT ALL. Each is
+; two strokes with a kink, walked with
+; the turtle from the point the shell
+; arrived at, and what is stored is the
+; BEARING, the two lengths and the kink
+; rather than four screen coordinates:
+; the turtle redraws the identical
+; figure from them every frame, so the
+; shatter is static, which is what makes
+; it read as damage to the glass rather
+; than as something happening on the
+; plain.
 
 ;--------------------------------------
 ; The shells
@@ -498,6 +765,100 @@ make "rd.sw 0
 make "world.colour 249
 make "moon.colour 254
 make "sight.colour 248
+
+;--------------------------------------
+; Sound
+;
+; Design section 11's four: an engine
+; idle whose pitch follows the treads, a
+; noise burst for the cannon, a pitched
+; explosion, and the rising two-tone
+; alarm. Four voice-pairs, one each, and
+; a pair is one sound centred across
+; both ears -- Asteroids' arrangement,
+; and the timbres are set once because
+; `stopsound` preserves them.
+;
+;   [0 4] engine, lower half
+;   [1 5] engine, upper half
+;   [2 6] the alarm
+;   [3 7] the cannon and both explosions
+;
+; THE WAVEFORM RULE: 3 and 7 are the
+; NOISE voices and 0-2 / 4-6 are the
+; tone voices, and asking for the wrong
+; family is an error rather than a
+; shrug. So the cannon and the
+; explosions share [3 7] -- everything
+; in this game that wants noise is
+; something blowing up or going off, and
+; the two can only ever interrupt each
+; other, which is what they should do.
+;
+; THE ENGINE IS TWO PAIRS AND THAT IS
+; THE WHOLE POINT OF IT. One tone at 96
+; Hz is a hum. Two a few hertz apart
+; BEAT against each other, and the slow
+; wobble that produces is what a diesel
+; sounds like -- so `eng.beat` is not a
+; detune to be tidied away, it is the
+; sound. It is a narrow pulse for
+; Asteroids' reason: a small speaker
+; cannot move air at 96 Hz on a
+; fundamental and reproduces the note
+; through its harmonics, which a 12 %
+; pulse has and a triangle does not.
+;
+; Re-gated on EVERY frame rather than
+; started and stopped, which is
+; Galaxian's dive-siren idiom: a 110 ms
+; note against a 67 ms frame sounds
+; continuous, a released key decays
+; inside one frame, and there is no
+; gate-off statement anywhere to get
+; wrong. The attack of 5 ms is what
+; keeps the re-gate from clicking.
+; The rise is per unit of tread, and
+; both treads turning is two units: 96
+; Hz idling to 140 driving.
+make "eng.hz 96
+make "eng.up 22
+
+; The alarm is a TEMPO as much as a
+; pitch (design section 11, and P11
+; section 11's lesson): two notes
+; alternating with the gap between them
+; closing as the enemy closes, so a
+; hunting supertank is frightening
+; before it is visible. The gap is the
+; enemy's own diamond distance divided
+; down, clamped at both ends -- the
+; floor because two 90 ms notes less
+; than three frames apart run together
+; into one tone and lose the tempo that
+; is the whole point, and the ceiling so
+; that an enemy at the far plane still
+; ticks rather than falling silent.
+make "al.min 2
+make "al.max 9
+
+; The cannon, and the two explosions.
+; PITCH SAYS WHAT DIED: an enemy going
+; up is a sharp crack at 3,200 Hz and
+; your own tank is a low crump at 900,
+; so you never have to look at the
+; screen to know which of you it was.
+
+; The bonus tank's bell takes the
+; ALARM's pair and not the engine's. The
+; engine re-gates on every frame, so a
+; 245 ms bell put there would be cut off
+; after one; the alarm is intermittent
+; by construction and takes its pair
+; back on its next note, which is a bite
+; out of a bell rather than the end of
+; one.
+
 
 ;======================================
 ; The world
@@ -619,6 +980,19 @@ make "e.t 0
 make "e.f 0
 make "e.fire false
 
+; Which of the four it is, what it is
+; worth, the three booleans that carry
+; its behaviour, and where in `e.order`
+; the sequence has got to. All of them
+; are written once, by `set.kind`, at
+; the moment of the spawn.
+make "e.kind 1
+make "e.pts 0
+make "e.gun true
+make "e.ram false
+make "e.drift false
+make "e.seq 0
+
 ; The player's shell and the enemy's.
 ; World position, the velocity fixed at
 ; the moment of firing -- a shell flies
@@ -641,6 +1015,16 @@ make "es.vz 0
 make "es.dx 0
 make "es.dz 0
 make "es.life 0
+; The height it left the barrel at,
+; frozen at the moment of firing for the
+; same reason the velocity is: the enemy
+; that fired it can die and be replaced
+; by one of a different height while the
+; shell is still in the air, and a shell
+; that jumped to the new enemy's barrel
+; height mid-flight would be a defect
+; nobody could explain from the picture.
+make "es.y 0
 
 ; The explosion, in screen space, and
 ; the pause a hit costs the player.
@@ -648,6 +1032,45 @@ make "bm.x 0
 make "bm.y 0
 make "bm.n 0
 make "tk.boom 0
+
+; The cracked glass. `cracked` is the
+; whole of the per-frame test; the four
+; lists are the shatter, walked with the
+; turtle from (cr.x, cr.y). Mutated in
+; place, and set at TOP LEVEL rather
+; than inside `crack.screen` -- a list
+; literal in a procedure body belongs to
+; the stored procedure and `.setitem`
+; would scribble on the source for good.
+make "cracked false
+make "cr.x 0
+make "cr.y 0
+make "cr.b [0 0 0 0 0 0]
+make "cr.l1 [0 0 0 0 0 0]
+make "cr.l2 [0 0 0 0 0 0]
+make "cr.k [0 0 0 0 0 0]
+
+; The game: what you have scored, what
+; you have left, where the next bonus
+; tank is, and the two flags the loops
+; read. `playing` ends a game -- run out
+; of tanks or press ESC -- and `leaving`
+; ends the session from the attract
+; screen, which is what gives the clock
+; back.
+make "score 0
+make "lives 3
+make "extra.due 15000
+make "playing false
+make "leaving false
+
+; Sound state: the alternating alarm's
+; countdown and which of its two notes
+; is next.
+make "au.in 0
+make "au.alt false
+make "au.hz 0
+make "au.d 0
 
 ; What the readout tallies besides the
 ; milliseconds.
@@ -1520,6 +1943,7 @@ to step.tank
     make "left.tread 0
     make "right.tread 0
     make "bumped false
+    if 1 > :tk.boom [respawn]
     stop
   ]
   treads
@@ -1590,8 +2014,8 @@ make "gunx [0 0]
 make "guny [0 0]
 
 to project.enemy
-  make "p.fx :ehalf * :e.es
-  make "p.fz :ehalf * :e.ec
+  make "p.fx :e.hw * :e.es
+  make "p.fz :e.hw * :e.ec
   make "p.px :p.fx * :cs - :p.fz * :sn
   make "p.pz :p.fz * :cs + :p.fx * :sn
   make "p.za :e.zc + :p.pz
@@ -1609,27 +2033,27 @@ to project.enemy
   make "p.iz :k / :p.z1
   .setitem 1 :cx (:p.xa + :p.pz) * :p.iz
   .setitem 1 :cy1 :hz - :eye * :p.iz
-  .setitem 1 :cy2 :hz + :ebode * :p.iz
+  .setitem 1 :cy2 :hz + :e.te * :p.iz
   make "p.iz :k / :p.z2
   .setitem 2 :cx (:p.xa - :p.pz) * :p.iz
   .setitem 2 :cy1 :hz - :eye * :p.iz
-  .setitem 2 :cy2 :hz + :ebode * :p.iz
+  .setitem 2 :cy2 :hz + :e.te * :p.iz
   make "p.iz :k / :p.z3
   .setitem 3 :cx (:p.xb - :p.pz) * :p.iz
   .setitem 3 :cy1 :hz - :eye * :p.iz
-  .setitem 3 :cy2 :hz + :ebode * :p.iz
+  .setitem 3 :cy2 :hz + :e.te * :p.iz
   make "p.iz :k / :p.z4
   .setitem 4 :cx (:p.xb + :p.pz) * :p.iz
   .setitem 4 :cy1 :hz - :eye * :p.iz
-  .setitem 4 :cy2 :hz + :ebode * :p.iz
+  .setitem 4 :cy2 :hz + :e.te * :p.iz
   make "p.iz :k / :e.zc
   .setitem 1 :gunx :e.xc * :p.iz
-  .setitem 1 :guny :hz + :ebode * :p.iz
+  .setitem 1 :guny :hz + :e.te * :p.iz
   make "p.g :e.zc + :p.pz + :p.pz
   make "p.iz :k / :p.g
   make "p.g :e.xc + :p.px + :p.px
   .setitem 2 :gunx :p.g * :p.iz
-  .setitem 2 :guny :hz + :ebode * :p.iz
+  .setitem 2 :guny :hz + :e.te * :p.iz
   output "true
 end
 
@@ -1644,6 +2068,222 @@ to draw.enemy
   pu (setpos item 1 :gunx item 1 :guny)
   pd (setpos item 2 :gunx item 2 :guny)
   pu
+end
+
+;--------------------------------------
+; The missile
+;
+; A spike with four fins, and it draws
+; in FOUR edges over four divides --
+; cheaper than a shape with six vertices
+; has any right to be, for two separate
+; reasons.
+;
+; A VERTICAL OFFSET DOES NOT CHANGE Z.
+; The fins above and below the tail sit
+; at the tail's own (x, z) with only the
+; height moved, so they share the tail's
+; perspective divide exactly -- and
+; since the divide is the expensive part
+; of a vertex, two of the six vertices
+; here are free. The left and right fins
+; are the only ones that cost anything,
+; and they cost one divide each.
+;
+; The transverse offset is the forward
+; one turned 90 degrees, which COMMUTES
+; with the camera's rotation, so it is
+; read straight off the forward offset
+; as (p.qz, -p.qx) with no second pair
+; of trig -- the enemy hull's trick,
+; used again.
+;
+; It flies at eye height because it is
+; aimed at the eye, so its centre line
+; sits on `hz` and a missile coming
+; straight at you is dead in the middle
+; of the gunsight. That is the shot you
+; have to take or dodge.
+;
+; AND THE TWO VERTICAL FINS ARE ONE
+; STROKE. They sit at the tail's own x
+; with only the height moved, so the
+; upper tip, the tail and the lower tip
+; are three points on one straight line
+; -- and a line through the middle point
+; is the same ink as two lines out of
+; it. Four fins, three edges. `draw.box`
+; needed four pen-ups for its verticals
+; and this needs one.
+;
+; The four cull tests are the nose, the
+; tail and the two side fins. The
+; vertical fins cannot fail one the tail
+; passed, since they are at its z.
+to project.missile
+  make "p.fx :ms.ln * :e.es
+  make "p.fz :ms.ln * :e.ec
+  make "p.px :p.fx * :cs - :p.fz * :sn
+  make "p.pz :p.fz * :cs + :p.fx * :sn
+  make "p.fx :ms.fin * :e.es
+  make "p.fz :ms.fin * :e.ec
+  make "p.za :p.fx * :cs - :p.fz * :sn
+  make "p.zb :p.fz * :cs + :p.fx * :sn
+  make "p.z1 :e.zc + :p.pz
+  make "p.z2 :e.zc - :p.pz
+  make "p.z3 :p.z2 - :p.za
+  make "p.z4 :p.z2 + :p.za
+  if :near > :p.z1 [output "false]
+  if :near > :p.z2 [output "false]
+  if :near > :p.z3 [output "false]
+  if :near > :p.z4 [output "false]
+  make "p.xa :e.xc - :p.px
+  make "p.iz :k / :p.z1
+  make "apx (:e.xc + :p.px) * :p.iz
+  make "apy :hz
+  make "p.iz :k / :p.z2
+  .setitem 1 :cx :p.xa * :p.iz
+  .setitem 1 :cy1 :hz
+  .setitem 1 :cy2 :hz + :ms.fin * :p.iz
+  .setitem 2 :cy2 :hz - :ms.fin * :p.iz
+  make "p.iz :k / :p.z3
+  .setitem 2 :cx (:p.xa + :p.zb) * :p.iz
+  .setitem 2 :cy1 :hz
+  make "p.iz :k / :p.z4
+  .setitem 3 :cx (:p.xa - :p.zb) * :p.iz
+  .setitem 3 :cy1 :hz
+  output "true
+end
+
+; Four edges in eight statements: the
+; body from the nose back to the tail
+; and on out to the left fin, the tail
+; out to the right fin, and both
+; vertical fins as one stroke THROUGH
+; the tail rather than two out of it.
+to draw.missile
+  pu (setpos :apx :apy)
+  pd (setpos item 1 :cx item 1 :cy1)
+  (setpos item 2 :cx item 2 :cy1)
+  pu (setpos item 1 :cx item 1 :cy1)
+  pd (setpos item 3 :cx item 3 :cy1)
+  pu (setpos item 1 :cx item 1 :cy2)
+  pd (setpos item 1 :cx item 2 :cy2)
+  pu
+end
+
+;--------------------------------------
+; The saucer
+;
+; A square bipyramid: a rim quad, a dome
+; above it and a keel below. Twelve
+; edges over FIVE divides -- four rim
+; points and the centre, which the dome
+; and the keel share because they differ
+; from it only in height.
+;
+; IT IS ROTATIONALLY SYMMETRIC, SO IT
+; HAS NO HEADING IN THE TRANSFORM. That
+; is the whole saving and it is the
+; reason this is the cheapest object in
+; the game per edge: the rim points sit
+; at plus and minus `sc.r` along the
+; WORLD axes, so the camera turns them
+; into one offset pair (r*cs, r*sn) and
+; its own perpendicular (-r*sn, r*cs) --
+; the enemy hull's four columns without
+; the multiply that earns them, and two
+; statements instead of four.
+;
+; It still DRIFTS on a heading; the
+; heading just never reaches the shape,
+; which is what a disc means.
+;
+; Seen from a periscope 12 steps off the
+; plain, a plate at `sc.y` is very
+; nearly edge-on, and that is what it
+; should look like: the rim quad
+; foreshortens to a sliver and the dome
+; and keel stand off it. The shape is
+; cut for that view because it is the
+; only view this game has.
+;
+; The centre's z is the mean of each
+; opposite pair of rim points, so it
+; cannot be nearer than the nearest of
+; them: four cull tests cover all six
+; vertices.
+to project.saucer
+  make "p.px :sc.r * :cs
+  make "p.pz :sc.r * :sn
+  make "p.z1 :e.zc + :p.pz
+  make "p.z2 :e.zc + :p.px
+  make "p.z3 :e.zc - :p.pz
+  make "p.z4 :e.zc - :p.px
+  if :near > :p.z1 [output "false]
+  if :near > :p.z2 [output "false]
+  if :near > :p.z3 [output "false]
+  if :near > :p.z4 [output "false]
+  make "p.iz :k / :p.z1
+  .setitem 1 :cx (:e.xc + :p.px) * :p.iz
+  .setitem 1 :cy1 :hz + :sc.y * :p.iz
+  make "p.iz :k / :p.z2
+  .setitem 2 :cx (:e.xc - :p.pz) * :p.iz
+  .setitem 2 :cy1 :hz + :sc.y * :p.iz
+  make "p.iz :k / :p.z3
+  .setitem 3 :cx (:e.xc - :p.px) * :p.iz
+  .setitem 3 :cy1 :hz + :sc.y * :p.iz
+  make "p.iz :k / :p.z4
+  .setitem 4 :cx (:e.xc + :p.pz) * :p.iz
+  .setitem 4 :cy1 :hz + :sc.y * :p.iz
+  make "p.iz :k / :e.zc
+  make "apx :e.xc * :p.iz
+  make "apy :hz + :sc.a * :p.iz
+  make "p.g :hz + :sc.k * :p.iz
+  output "true
+end
+
+; Twelve edges in seventeen statements,
+; and the pen-ups are the same four
+; `draw.pyr` needs: a fan out of an apex
+; cannot be walked without lifting.
+to draw.saucer
+  pu (setpos item 1 :cx item 1 :cy1)
+  pd (setpos item 2 :cx item 2 :cy1)
+  (setpos item 3 :cx item 3 :cy1)
+  (setpos item 4 :cx item 4 :cy1)
+  (setpos item 1 :cx item 1 :cy1)
+  (setpos :apx :apy)
+  (setpos item 2 :cx item 2 :cy1)
+  pu (setpos item 3 :cx item 3 :cy1)
+  pd (setpos :apx :apy)
+  (setpos item 4 :cx item 4 :cy1)
+  pu (setpos item 1 :cx item 1 :cy1)
+  pd (setpos :apx :p.g)
+  (setpos item 2 :cx item 2 :cy1)
+  pu (setpos item 3 :cx item 3 :cy1)
+  pd (setpos :apx :p.g)
+  (setpos item 4 :cx item 4 :cy1)
+  pu
+end
+
+; THE FRAME NEVER ASKS WHICH KIND IT IS.
+; It asks two booleans, which is what
+; `set.kind` left behind at the spawn --
+; the same trade the hunt makes, and for
+; the same reason: a comparison against
+; a kind number is a read and a call
+; where a boolean is a read.
+to draw.foe
+  if :e.ram [
+    if project.missile [draw.missile]
+    stop
+  ]
+  if :e.drift [
+    if project.saucer [draw.saucer]
+    stop
+  ]
+  if project.enemy [draw.enemy]
 end
 
 ; The enemy's offset from the camera in
@@ -1704,6 +2344,7 @@ end
 ; diagonal is an enemy that presses a
 ; little harder from the corners.
 to hunt
+  if :e.drift [stop]
   make "e.b (arctan :e.dz :e.dx) + 180
   make "e.b :e.b - :e.h + 180
   make "e.b (modulo :e.b 360) - 180
@@ -1714,6 +2355,7 @@ to hunt
   make "e.f 1
   if :e.range > :e.d [make "e.f 0]
   make "e.fire false
+  if not :e.gun [stop]
   if 1 > :e.cool [
     if :e.aim > abs :e.b [
       if :far > :e.d [make "e.fire true]
@@ -1735,7 +2377,9 @@ to move.enemy
   make "tk.dx :e.dx + :e.vx
   make "tk.dz :e.dz + :e.vz
   make "tk.guard :e.coll
-  if blocked? [stop]
+  if not :e.drift [
+    if blocked? [stop]
+  ]
   make "e.d :e.x + :e.vx
   make "e.x modulo :e.d :world
   make "e.d :e.z + :e.vz
@@ -1757,6 +2401,7 @@ to enemy.fires
   make "es.vz :sh.step * cos :e.d
   make "es.dx :e.dx
   make "es.dz :e.dz
+  make "es.y :e.te
   make "es.life :sh.frames
 end
 
@@ -1785,7 +2430,164 @@ end
 ; bearing unlikely and four in a row
 ; negligible, and the fallback is the
 ; behaviour this replaced.
+; The four rows, one procedure each, and
+; the whole reason they are shaped like
+; this is section 16.6.1: the failure
+; that cost M2 a play test was two
+; numbers that only mean something
+; against each other, written down in
+; different places and never compared.
+; `e.range` and `e.wob` are exactly such
+; a pair -- a stand-off closer than
+; range/sqrt2 * tan(wob) > `tk.hit` is
+; an enemy that cannot miss -- so they
+; are three lines apart in every row
+; here and the invariant is a test over
+; every kind that carries a gun.
+;
+; A SUPERTANK IS THE TANK'S ROW, BETTER
+; IN FOUR PLACES: faster, turns harder,
+; reloads in fifteen frames rather than
+; twenty-four, and its aim wobbles 7
+; degrees rather than 10. That last one
+; is what "smarter" means here, and it
+; is why its stand-off had to go OUT
+; rather than in: a tighter cone at the
+; same distance is a cone that fits
+; inside the hit box, which is M2's
+; defect exactly. It is also visibly
+; bigger, because every number above is
+; invisible until it is too late.
+to kind.tank
+  make "e.gun true
+  make "e.ram false
+  make "e.drift false
+  make "e.hw :ehalf
+  make "e.te :ebode
+  make "e.step 6
+  make "e.turn 4
+  make "e.range 400
+  make "e.wob 10
+  make "e.wob2 21
+  make "e.aim 7
+  make "e.reload 24
+  make "e.hit 34
+  make "e.left 0
+  make "e.pts 1000
+end
+
+to kind.super
+  make "e.gun true
+  make "e.ram false
+  make "e.drift false
+  make "e.hw 17
+  make "e.te 20
+  make "e.step 9
+  make "e.turn 5
+  make "e.range 420
+  make "e.wob 7
+  make "e.wob2 15
+  make "e.aim 6
+  make "e.reload 15
+  make "e.hit 40
+  make "e.left 0
+  make "e.pts 3000
+end
+
+; A missile has no gun and no stand-off:
+; it closes forever and kills by
+; ARRIVING, which is what `e.ram` says.
+; It is faster than you can drive -- 11
+; steps a frame against the treads' 8 --
+; so it cannot be outrun, and it turns
+; at 2 degrees a frame against your 4,
+; so it can be turned inside. That pair
+; is the whole mechanic: you dodge it,
+; you do not escape it.
+;
+; `e.te` is 0 because it flies at eye
+; height, which is also where its
+; wreckage belongs.
+to kind.missile
+  make "e.gun false
+  make "e.ram true
+  make "e.drift false
+  make "e.hw :ms.fin
+  make "e.te 0
+  make "e.step 11
+  make "e.turn 2
+  make "e.range 0
+  make "e.wob 10
+  make "e.wob2 21
+  make "e.aim 0
+  make "e.reload 0
+  make "e.hit 24
+  make "e.left 0
+  make "e.pts 2000
+end
+
+; It drifts, it is harmless, and it is
+; worth more than anything else on the
+; plain. `e.left` is the one thing only
+; a saucer has: it crosses and then
+; leaves, so ignoring it costs you the
+; points rather than stalling the
+; sequence behind it.
+;
+; It is not stopped by an obstacle,
+; because it is 90 steps up and an
+; obstacle is 40 tall. `move.enemy` is
+; where that is spent -- one boolean
+; read -- and it is the only place in
+; the file that knows a saucer flies.
+to kind.saucer
+  make "e.gun false
+  make "e.ram false
+  make "e.drift true
+  make "e.hw :sc.r
+  make "e.te :sc.y
+  make "e.step 5
+  make "e.turn 0
+  make "e.range 0
+  make "e.wob 10
+  make "e.wob2 21
+  make "e.aim 0
+  make "e.reload 0
+  make "e.hit 40
+  make "e.left 220
+  make "e.pts 5000
+end
+
+; The sequence is a ring rather than a
+; state machine, so the escalation the
+; cabinet runs -- tank, missile, tank,
+; supertank, and eventually a saucer --
+; is one list that M4 can re-cut without
+; touching a line of code.
+to next.kind
+  make "e.seq :e.seq + 1
+  if :e.seq > count :e.order [
+    make "e.seq 1
+  ]
+  make "e.kind 0 + item :e.seq :e.order
+  set.kind
+end
+
+; The one derived number is hoisted out
+; of the four rows rather than repeated
+; in each of them, which is the only
+; thing this procedure does besides
+; choose.
+to set.kind
+  if 3 = :e.kind [kind.super]
+  if 2 = :e.kind [kind.missile]
+  if 4 = :e.kind [kind.saucer]
+  if 1 = :e.kind [kind.tank]
+  make "e.naim 0 - :e.aim
+end
+
 to spawn.enemy
+  next.kind
   repeat 4 [
     place.enemy
     make "tk.dx :e.dx
@@ -1793,6 +2595,21 @@ to spawn.enemy
     make "tk.guard :e.coll
     if not blocked? [stop]
   ]
+end
+
+; A saucer that has outstayed its dwell
+; simply GOES: no explosion, no score,
+; and the next enemy on the ring one
+; frame later. `e.boom` 1 is what buys
+; that -- `step.enemy` already spawns
+; the next one when the count runs out,
+; and `bm.n` is left at zero so
+; `draw.boom` has nothing to draw. A
+; departure and a death are the same
+; two lines apart.
+to leave.enemy
+  make "e.alive false
+  make "e.boom 1
 end
 
 to place.enemy
@@ -1820,6 +2637,17 @@ end
 ; the camera-frame pair after it, so the
 ; projection and the radar both read the
 ; place the enemy actually ended up.
+;
+; THE TWO KIND-SPECIFIC LINES ARE BOTH
+; AT THE END, after the move, and that
+; is not tidiness: a missile that rams
+; you and a saucer that leaves both have
+; to be decided against where the thing
+; ENDED UP this frame, or a missile
+; would kill you from where it was
+; standing a frame ago. Each costs one
+; boolean read on a frame where it does
+; not apply.
 to step.enemy
   if :e.boom > 0 [
     make "e.boom :e.boom - 1
@@ -1839,6 +2667,33 @@ to step.enemy
   if not 0 = :e.f [move.enemy]
   enemy.camera
   if :e.fire [enemy.fires]
+  if :e.ram [enemy.rams]
+  if :e.drift [
+    make "e.left :e.left - 1
+    if 1 > :e.left [leave.enemy]
+  ]
+end
+
+; A missile's whole attack. It is the
+; enemy shell's collision with a
+; different name on it -- two
+; comparisons against the origin of the
+; camera-relative frame, because that is
+; where the player is -- and the only
+; difference is that the weapon is the
+; enemy, so it dies of the hit it
+; scores.
+;
+; No points for it. You did not shoot
+; it; it shot you.
+to enemy.rams
+  if :tk.hit > abs :e.dx [
+    if :tk.hit > abs :e.dz [
+      make "e.alive false
+      make "e.boom :boom.frames
+      hit.player
+    ]
+  ]
 end
 
 ;======================================
@@ -1892,6 +2747,7 @@ to fire
   make "sh.dx 0
   make "sh.dz 0
   make "sh.life :sh.frames
+  (sound [3 7] 5200 70 12)
 end
 
 to step.shell
@@ -1983,7 +2839,7 @@ to draw.eshell
   make "p.xc :es.dx * :cs - :es.dz * :sn
   make "p.iz :k / :p.zc
   make "p.sx :p.xc * :p.iz
-  make "p.sy :hz + :ebode * :p.iz
+  make "p.sy :hz + :es.y * :p.iz
   make "p.s2 :p.sx + 4
   pu (setpos :p.sx :p.sy)
   pd (setpos :p.s2 :p.sy)
@@ -2023,27 +2879,173 @@ to kill.enemy
   make "e.alive false
   make "e.boom :boom.frames
   make "kills :kills + 1
+  (sound [3 7] 3200 220 12)
+  add.score :e.pts
   make "bm.n 0
   if :near > :e.zc [stop]
   make "p.iz :k / :e.zc
   make "bm.x :e.xc * :p.iz
-  make "bm.y :hz + :ebode * :p.iz
+  make "bm.y :hz + :e.te * :p.iz
   make "bm.n :boom.frames
 end
 
-; Being hit costs the player the pause
-; and nothing else yet: lives, the score
-; and the cracked screen are M3. The
-; explosion is at the centre of the view
-; because that is where the shell was
-; when it arrived.
+; EVERY POINT IN THIS GAME ARRIVES HERE,
+; which is what makes the bonus tank one
+; `if` rather than a rule scattered over
+; four scorers. One test and not a loop
+; because the largest single award is a
+; 5,000-point saucer against a 15,000
+; bonus: a score can step OVER a
+; boundary but it cannot step over two,
+; so `until` would be machinery for a
+; case that cannot arise.
+;
+; It repaints the score row itself. A
+; number that changed a second ago and
+; is still showing the old value is
+; worse than no number at all, and the
+; readout below is on a one-second
+; tally -- so the game's own figures are
+; drawn on the event and the frame
+; timings on the tally, which is the
+; difference between what a player reads
+; and what a milestone measures.
+to add.score :n
+  make "score :score + :n
+  if not :score < :extra.due [
+    make "hud.a :extra.due + :extra.at
+    make "extra.due :hud.a
+    make "lives :lives + 1
+    (sound [2 6] 1760 245 11)
+  ]
+  draw.score
+end
+
+; Being hit costs a tank, a pause, and
+; the view. The explosion is at the
+; centre of the screen because that is
+; where the shell was when it arrived,
+; and the shatter starts from the same
+; point for the same reason.
+;
+; IT DOES NOT END THE GAME HERE. The
+; count goes down and `respawn` reads it
+; when the pause runs out, ten frames
+; later -- so the player watches their
+; own tank come apart before the card
+; goes up, which is the cabinet's timing
+; and is the only reason the two are not
+; one procedure.
 to hit.player
   make "es.on false
   make "hits :hits + 1
+  make "lives :lives - 1
   make "tk.boom :boom.frames
+  (sound [3 7] 900 220 13)
   make "bm.x 0
   make "bm.y :hz
   make "bm.n :boom.frames
+  crack.screen
+  draw.score
+end
+
+;--------------------------------------
+; The cracked screen
+;
+; What is stored is a BEARING, two
+; lengths and a kink -- not four screen
+; points -- so the turtle redraws the
+; identical figure every frame from four
+; numbers a crack. The shatter is
+; therefore static, and a static
+; overlay is the only kind that reads as
+; damage to the glass rather than as
+; something moving on the plain.
+;
+; The kink is what stops it looking like
+; a starburst: a crack in glass runs,
+; catches and runs again, and one change
+; of direction is enough to say so.
+;
+; `(random 81) - 40` needs those
+; parentheses -- a call's last argument
+; absorbs trailing infix, so the bare
+; form asks for `random 41`.
+to crack.screen
+  make "cracked true
+  make "cr.x :bm.x
+  make "cr.y :bm.y
+  repeat 6 [
+    .setitem repcount :cr.b random 360
+    make "bm.t 18 + random 34
+    .setitem repcount :cr.l1 :bm.t
+    make "bm.t (random 81) - 40
+    .setitem repcount :cr.k :bm.t
+    make "bm.t 16 + random 46
+    .setitem repcount :cr.l2 :bm.t
+  ]
+end
+
+; No procedure call and no local: the
+; item reads go through `repcount`
+; directly, because this runs on every
+; frame of a cracked life and a local
+; read costs 1.5x a global's (design
+; section 13, L0.5). It is the same
+; argument `boom.frag` decided the other
+; way, and it comes out the other way
+; because that runs on ten frames and
+; this runs until you respawn.
+to draw.cracks
+  setpc :sight.colour
+  repeat 6 [
+    pu (setpos :cr.x :cr.y)
+    seth item repcount :cr.b
+    pd fd item repcount :cr.l1
+    rt item repcount :cr.k
+    fd item repcount :cr.l2
+  ]
+  pu
+  setpc :world.colour
+end
+
+; The glass is replaced with the tank.
+; A fresh enemy comes with it -- the one
+; that killed you is not still sitting
+; at its stand-off with your new tank in
+; its sights, which is the courtesy the
+; cabinet extends and the only reason
+; the spawn is here rather than left to
+; run on.
+;
+; And when there are none left this is
+; where the game ends, which is why it
+; is `step.tank` that calls it: the
+; pause has to be watched out before the
+; card goes up.
+;
+; IT DOES NOT SPAWN OVER AN ENEMY THAT
+; IS ALREADY EXPLODING, and that guard
+; is not defensive. A missile sets its
+; own `e.boom` and then kills you, so
+; both countdowns start on the same
+; frame and run out on the same one --
+; and `step.enemy` spawns from its
+; counter a moment after this spawns
+; from the tank's. Two spawns for one
+; death: the ring advanced twice and one
+; of the two enemies was never seen. The
+; enemy's own countdown wins, because it
+; is the one that was already going to
+; fire.
+to respawn
+  make "cracked false
+  if 1 > :lives [
+    make "playing false
+    stop
+  ]
+  if :e.boom > 0 [stop]
+  spawn.enemy
 end
 
 to boom.frag :d
@@ -2133,6 +3135,96 @@ to radar
 end
 
 ;======================================
+; Sound
+;
+; Set once, because `stopsound`
+; preserves timbres -- the arrangement
+; both shipped shooters use and the one
+; Asteroids argued out. See the tuning
+; above for which pair carries what and
+; why the engine takes two of them.
+;
+; The envelopes are cut against the
+; engine's 3.5 ms refill block, exactly
+; as Asteroids' were: an attack under
+; about 7 ms is a full-scale step
+; whatever number is asked for, so the
+; engine's 5 is the smallest ramp that
+; is a ramp and the cannon's 0 is a step
+; on purpose -- a gun is nothing but its
+; onset.
+to setup.sound
+  (setwave [0 4] "pulse 12)
+  setenv [0 4] [5 0 12 40]
+  (setwave [1 5] "pulse 12)
+  setenv [1 5] [5 0 12 40]
+  setwave [2 6] "square
+  setenv [2 6] [0 20 11 40]
+  setwave [3 7] "white
+  setenv [3 7] [0 0 15 200]
+end
+
+; The pitch follows how much tread is
+; turning rather than how fast the tank
+; is going, so a pivot -- which is two
+; treads and no ground speed at all --
+; revs exactly as hard as driving
+; straight does. That is what a tracked
+; vehicle sounds like and it is the
+; wrong answer for anything with wheels.
+;
+; Re-gated every frame; see the tuning
+; for why there is no gate-off anywhere.
+to engine
+  make "au.hz abs :left.tread
+  make "au.hz :au.hz + abs :right.tread
+  make "au.hz :eng.hz + :eng.up * :au.hz
+  (sound [0 4] :au.hz 110 8)
+  make "au.hz :au.hz + 5
+  (sound [1 5] :au.hz 110 8)
+end
+
+; A TEMPO AND NOT A PITCH. The two notes
+; never change; what changes is the gap
+; between them, and it closes with the
+; enemy's own diamond distance -- the
+; number `hunt` computes anyway.
+;
+; Only when the enemy is IN FRONT of
+; you, which is one comparison against
+; the camera-frame z the projection and
+; the radar have both already read. An
+; alarm that sounded for something
+; behind you would be telling you to
+; turn round without saying which way,
+; and the radar is what answers that.
+;
+; A countdown rather than a remainder,
+; because the period moves underneath
+; it: a remainder against a shrinking
+; divisor either double-beats or skips.
+to alarm
+  if not :e.alive [stop]
+  if 0 > :e.zc [stop]
+  make "au.in :au.in - 1
+  if 0 < :au.in [stop]
+  make "au.d (abs :e.dx) + (abs :e.dz)
+  make "au.in intquotient :au.d 70
+  if :au.in > :al.max [
+    make "au.in :al.max
+  ]
+  if :al.min > :au.in [
+    make "au.in :al.min
+  ]
+  make "au.alt not :au.alt
+  ifelse :au.alt [
+    (sound [2 6] 440 90 9)
+  ] [
+    (sound [2 6] 587 90 9)
+  ]
+end
+
+;======================================
 ; Input
 ;
 ; `pollkeys` reads the keyboard's STATE
@@ -2159,7 +3251,10 @@ to poll.input
     stop
   ]
   if :paused [stop]
-  if keyhit? 177 [make "quit true]
+  if keyhit? 177 [
+    make "quit true
+    make "playing false
+  ]
   if keyhit? 93 [fire]
 end
 
@@ -2253,13 +3348,44 @@ to hud.tally
   if :hud.n = :hud.every [draw.hud]
 end
 
-to draw.hud
+; The game's own row, drawn on the EVENT
+; and not on the tally: `add.score` and
+; every path that costs or wins a tank
+; call this, so the two numbers a player
+; is actually reading are never a second
+; stale. M1's `POS` and `HDG` were
+; development readouts and this is what
+; design section 11 said would replace
+; them.
+;
+; The trailing blanks are the erase. A
+; score goes from 9,000 to 10,000 and a
+; life count goes from 3 to 2, so a
+; field that is not cleared to its full
+; width leaves the old last digit behind
+; -- and `clean` takes the graphics half
+; only, so nothing else in this game
+; ever erases the text panel.
+to draw.score
   setcursor [0 24]
-  print (se [POS] int :px int :pz)
-  setcursor [14 24]
-  print (se [HDG] int :ph)
-  setcursor [26 24]
-  print (se [CPU] :cpu.at)
+  type (se [SCORE] :score)
+  type "|      |
+  setcursor [22 24]
+  type (se [TANKS] :lives)
+  type "|   |
+end
+
+; Rows 25 to 27, on the one-second
+; tally: the two frame figures that this
+; game's whole design rests on, and the
+; clock they have to be read against.
+; M3 does not retire them -- every
+; milestone here has been closed by a
+; board reading these two numbers while
+; somebody drove, and the readout being
+; inside the measured body is what makes
+; it honest.
+to draw.hud
   make "hud.a int :hud.bs / :hud.n
   setcursor [0 25]
   print (se [BODY] :hud.a)
@@ -2271,9 +3397,9 @@ to draw.hud
   setcursor [14 26]
   print (se [MAX] :hud.fm)
   setcursor [0 27]
-  print (se [KILLS] :kills)
+  print (se [CPU] :cpu.at)
   setcursor [14 27]
-  print (se [HITS] :hits)
+  print (se [KILLS] :kills)
   make "hud.n 0
   make "hud.bs 0
   make "hud.fs 0
@@ -2364,19 +3490,20 @@ to play.frame
     step.enemy
     step.shell
     step.eshell
+    engine
+    alarm
     clean
     setpc :world.colour
     ground
     horizon
     moon
     draw.field
-    if :e.alive [
-      if project.enemy [draw.enemy]
-    ]
+    if :e.alive [draw.foe]
     if :sh.on [draw.shell]
     if :es.on [draw.eshell]
     draw.boom
     gunsight
+    if :cracked [draw.cracks]
     radar
     hud.tally
     reclaim
@@ -2427,8 +3554,10 @@ to clock
   catch "error [hw.setcpu "fast]
   catch "error [make "cpu.at hw.cpu]
   make "max.obstacles :fast.obstacles
+  make "fps :fast.fps
   if not "fast = :cpu.at [
     make "max.obstacles :slow.obstacles
+    make "fps :slow.fps
   ]
 end
 
@@ -2460,13 +3589,397 @@ to restore.clock
   catch "error [hw.setcpu :cpu.was]
 end
 
-to battlezone
+
+;======================================
+; The high score table
+;
+; Kept beside the game rather than in a
+; fixed place, so a copy played off the
+; SD card keeps its own scores. The
+; directory half has to agree with the
+; file half, and `save.scores` creates
+; it rather than erroring out of the
+; game at the exact moment a player has
+; just earned a place in the table --
+; which is what a missing `/games` would
+; otherwise do on a bare filesystem.
+make "hs.file "/games/battlezone.scores
+make "hs.dir "/games
+make "scores.top 10
+make "name.max 10
+
+make "hs.score [0 0 0 0 0 0 0 0 0 0]
+make "hs.name (list "|| "|| "|| "|| "||)
+make "hs.name se :hs.name :hs.name
+make "hs.count 0
+
+to clear.scores
+  repeat :scores.top [
+    .setitem repcount :hs.score 0
+    .setitem repcount :hs.name "||
+  ]
+  make "hs.count 0
+end
+
+; No file is the FIRST RUN and not an
+; error, and the `file?` test is also
+; what stops `open` creating an empty
+; one just to read it.
+to load.scores
+  local "line
+  local "n
+  clear.scores
+  if not file? :hs.file [stop]
+  open :hs.file
+  setread :hs.file
+  make "line readlist
+  until [empty? :line] [
+    if :hs.count < :scores.top [
+      make "hs.count :hs.count + 1
+      make "n :hs.count
+      .setitem :n :hs.score first :line
+      .setitem :n :hs.name item 2 :line
+    ]
+    make "line readlist
+  ]
+  setread []
+  close :hs.file
+end
+
+to save.scores
+  if not dir? :hs.dir [
+    createdir :hs.dir
+  ]
+  if file? :hs.file [
+    erasefile :hs.file
+  ]
+  open :hs.file
+  setwrite :hs.file
+  repeat :hs.count [
+    (print item repcount :hs.score
+           item repcount :hs.name)
+  ]
+  setwrite []
+  close :hs.file
+end
+
+; Where a score belongs, 1 to
+; `scores.top`, or 0 for one that does
+; not make the table. STRICTLY GREATER,
+; so a score equal to one already there
+; ranks below it and whoever got there
+; first keeps the higher line. An empty
+; slot holds 0, so a game that scored
+; nothing cannot rank either.
+to score.rank :n
+  repeat :scores.top [
+    if (item repcount :hs.score) < :n [
+      output repcount
+    ]
+  ]
+  output 0
+end
+
+; Everything below the new line slides
+; down one and the last falls off the
+; bottom. The slots past `hs.count` hold
+; zeros, so shifting through them costs
+; nothing and needs no second case for a
+; table that is not full yet.
+to insert.score :r :n :who
+  local "i
+  local "j
+  local "v
+  make "i :scores.top
+  until [:i = :r] [
+    make "j :i - 1
+    make "v item :j :hs.score
+    .setitem :i :hs.score :v
+    make "v item :j :hs.name
+    .setitem :i :hs.name :v
+    make "i :j
+  ]
+  .setitem :r :hs.score :n
+  .setitem :r :hs.name :who
+  if :hs.count < :scores.top [
+    make "hs.count :hs.count + 1
+  ]
+end
+
+;--------------------------------------
+; Typing a name
+;
+; With the keyboard the game is already
+; polling rather than through `readword`
+; -- the field has to stay where the
+; card put it, the name has to be
+; filtered as it is typed, and
+; `readword` would echo wherever the
+; text cursor happened to be.
+;
+; Enter arrives as 13 on the board (the
+; keyboard driver folds LF to CR) and as
+; 10 through a host console, so both end
+; the entry.
+to done.key? :k
+  if 13 = :k [output true]
+  if 10 = :k [output true]
+  output false
+end
+
+; A-Z, a-z and 0-9, and nothing else
+; reaches the file.
+to name.key? :k
+  if :k < 48 [output false]
+  if :k < 58 [output true]
+  if :k < 65 [output false]
+  if :k < 91 [output true]
+  if :k < 97 [output false]
+  if :k < 123 [output true]
+  output false
+end
+
+; The field is redrawn WHOLE on every
+; keystroke, trailing blanks and all: a
+; backspace that erased by walking the
+; cursor back over the character would
+; have to know what the console does
+; with `char 8`, and this knows nothing
+; but where the field is. The `_` is the
+; caret.
+to show.name :w
+  setcursor list 14 22
+  type :w
+  type "_
+  repeat (:name.max - count :w) [
+    type "| |
+  ]
+end
+
+to next.name :w :k
+  if 8 = :k [
+    if empty? :w [output :w]
+    output bl :w
+  ]
+  if not name.key? :k [output :w]
+  if not ((count :w) < :name.max) [
+    output :w
+  ]
+  output word :w uppercase char :k
+end
+
+to read.name
+  local "w
+  local "k
+  make "w "||
+  show.name :w
+  make "k wait.for.key
+  until [done.key? :k] [
+    make "w next.name :w :k
+    show.name :w
+    make "k wait.for.key
+  ]
+  if empty? :w [output "GUNNER]
+  output :w
+end
+
+;======================================
+; The attract screen, the game, and
+; game over
+;
+; Iterative and not recursive, as every
+; game in this tree is: one that called
+; itself for the next tank would grow
+; the stack for as long as the player
+; kept playing.
+;
+; Every screen outside the frame loop
+; waits on a key rather than reading one
+; a frame, so `wait.for.key` blocks.
+to wait.for.key
+  local "k
+  make "k 0
+  until [0 < :k] [
+    if key? [make "k ascii readchar]
+  ]
+  output :k
+end
+
+; The frame loop's `pollkeys` already
+; drops the characters its keypresses
+; buffer, so the ring should be empty by
+; the time a game ends. This is the
+; guard for the paths that do not go
+; through a frame, and it costs one
+; `key?` when there is nothing to drop.
+to flush.keys
+  until [not key?] [ignore readchar]
+end
+
+; The scores are read once on the way in
+; rather than per redraw. Space plays, H
+; shows the instructions and comes back
+; here -- which is why the drawing is a
+; procedure of its own -- and ESC is the
+; way OUT of the game, which is the key
+; that gives the clock back.
+to attract.screen
+  local "k
+  load.scores
+  make "k 0
+  until [32 = :k] [
+    draw.attract
+    make "k wait.for.key
+    if 72 = :k [show.instructions]
+    if 104 = :k [show.instructions]
+    if 27 = :k [
+      make "leaving true
+      stop
+    ]
+  ]
+end
+
+; Every line is a bar-quoted word rather
+; than a list -- `print` puts a single
+; space between the words of a list,
+; which would collapse the columns.
+to draw.attract
+  textscreen
+  ct
+  settc [3 4]
+  setcursor [15 3]
+  print "|BATTLEZONE|
+  setcursor [14 6]
+  print "|HIGH SCORES|
+  ifelse 0 = :hs.count [
+    setcursor [13 9]
+    print "|No scores yet|
+  ] [
+    repeat :hs.count [
+      show.entry repcount (7 + repcount)
+    ]
+  ]
+  setcursor [10 28]
+  print "|Press Space to play|
+  setcursor [9 29]
+  print "|or H for instructions|
+end
+
+; One line of the table in three
+; columns. The rank and the score are
+; printed back from where they must END
+; -- the point on column 11, the last
+; digit on column 20 -- because both are
+; of a width that changes, and a table
+; of scores that does not line up on its
+; right edge is not a table of scores.
+to show.entry :i :row
+  local "s
+  make "s item :i :hs.score
+  setcursor list (11 - count :i) :row
+  type word :i ".
+  setcursor list (21 - count :s) :row
+  type :s
+  setcursor list 23 :row
+  type item :i :hs.name
+end
+
+to show.instructions
+  textscreen
+  ct
+  settc [3 4]
+  setcursor [15 2]
+  print "|BATTLEZONE|
+  setcursor [3 5]
+  print "|You are a tank. So is it.|
+  setcursor [11 8]
+  print "|Tank       1000|
+  setcursor [11 9]
+  print "|Missile    2000|
+  setcursor [11 10]
+  print "|Super tank 3000|
+  setcursor [11 11]
+  print "|Saucer     5000|
+  setcursor [4 13]
+  print "|The saucer cannot hurt you|
+  setcursor [6 14]
+  print "|and will not wait about|
+  setcursor [3 16]
+  print "|A missile flies faster than|
+  setcursor [3 17]
+  print "|you drive and turns slower.|
+  setcursor [8 18]
+  print "|Turn inside it.|
+  setcursor [4 20]
+  print "|Hide behind the obstacles|
+  setcursor [3 22]
+  print "|An extra tank every 15000|
+  setcursor [2 25]
+  print "|1 Q  left tread fwd / back|
+  setcursor [2 26]
+  print "|0 P  right tread fwd / back|
+  setcursor [2 27]
+  print "|]  Fire   SPACE  Pause|
+  setcursor [2 28]
+  print "|ESC  Quit to this screen|
+  setcursor [13 30]
+  print "|Press any key|
+  ignore wait.for.key
+end
+
+; ESC means "back to the attract
+; screen", which is what quitting a game
+; means here; only running out of tanks
+; is worth a card.
+to show.game.over
+  local "r
+  local "who
+  textscreen
+  ct
+  setcursor [15 10]
+  print [GAME OVER]
+  setcursor [11 12]
+  (print [FINAL SCORE:] :score)
+  setcursor [11 14]
+  (print [TANKS KILLED:] :kills)
+  make "r score.rank :score
+  if 0 = :r [wait 2000 stop]
+  setcursor [12 18]
+  print "|A NEW HIGH SCORE|
+  setcursor [5 20]
+  print "|Type a name, then Enter|
+  flush.keys
+  make "who read.name
+  insert.score :r :score :who
+  save.scores
+end
+
+;======================================
+; One game
+;
+; `cs` restores automatic refresh, so it
+; comes BEFORE the `setrefresh "sync`
+; and not after -- Asteroids logged that
+; one the hard way. `window` comes after
+; `cs` for the same reason: `cs` puts
+; the boundary mode back to `wrap`, and
+; a wireframe drawn under `wrap` smears
+; a horizon segment across the whole
+; screen and looks exactly like a
+; projection fault.
+;
+; The clock is NOT asked for here. It is
+; asked for once per session, in
+; `battlezone`, because it costs a bus
+; teardown on a board with a radio up
+; and a player starting their fourth
+; game should not pay for it again.
+to init.game
   cs
   splitscreen
   ct
   window
   ht
-  clock
   make "px 800
   make "pz 800
   make "ph 0
@@ -2478,28 +3991,90 @@ to battlezone
   make "bm.n 0
   make "tk.boom 0
   make "e.boom 0
+  make "cracked false
   make "kills 0
   make "hits 0
   make "rd.sw 0
+  make "score 0
+  make "lives :start.lives
+  make "extra.due :extra.at
+  make "e.seq 0
+  make "au.in 0
   spawn.enemy
   make "paused false
   make "quit false
+  make "playing true
   make "frame.count 0
   make "hud.n 0
   make "hud.bs 0
   make "hud.fs 0
   make "hud.bm 0
   make "hud.fm 0
+  draw.score
   (setrefresh "sync :fps)
   ; A baseline poll, so the keypress
   ; that started the game is not
   ; delivered to the first frame as a
   ; hit.
   pollkeys
-  until [:quit] [play.frame]
+end
+
+; The state machine is two flags.
+; `playing` ends a game -- ESC or the
+; last tank -- and `leaving` ends the
+; session, which only the attract screen
+; sets.
+;
+; `stopsound` is here rather than in
+; `battlezone` because the engine idles
+; on a re-gate every frame and the frame
+; loop has just stopped: without this
+; the last note it queued plays over the
+; game-over card.
+to one.game
+  attract.screen
+  if :leaving [stop]
+  init.game
+  until [not :playing] [play.frame]
+  setrefresh "auto
+  stopsound
+  if not :quit [show.game.over]
+end
+
+;======================================
+; The session
+;
+; ASK FOR THE CLOCK ONCE AND GIVE IT
+; BACK ONCE. M2 did both inside the
+; game, which was right when there was
+; one game a session; now that ESC
+; returns to an attract screen, doing it
+; per game would tear the wireless bus
+; down and rebuild it every time a
+; player pressed a key. The clock is a
+; property of the session.
+;
+; AND THERE IS A WAY OUT. M2's entry
+; point could only be left by quitting
+; the game, and this one could not be
+; left at all if the attract screen took
+; only Space -- which would strand the
+; board at 300 MHz for the rest of the
+; session, and that is exactly the thing
+; `restore.clock` exists to prevent. ESC
+; on the attract screen is the door, and
+; it is the reason `leaving` is a flag
+; rather than a `forever`.
+to battlezone
+  setup.sound
+  clock
+  make "leaving false
+  until [:leaving] [one.game]
+  stopsound
   setrefresh "auto
   restore.clock
   textscreen
   ct
-  print [Battlezone M2]
+  settc [7 0]
+  print [Battlezone M3]
 end

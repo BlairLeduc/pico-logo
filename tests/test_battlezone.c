@@ -243,6 +243,16 @@ static void camera_at(float px, float pz, float ph)
     run("ob.scan");
 }
 
+// `init.game` ends by arming `setrefresh "sync`, and on the host `sync` waits
+// the real frame period -- a 60-frame loop would take four seconds of wall
+// clock and the suite would crawl.  Every test that sets a game up and then
+// drives frames goes through this instead of calling `init.game` directly.
+static void new_game(void)
+{
+    run("init.game");
+    run("setrefresh \"auto");
+}
+
 // Put the enemy somewhere and point it somewhere, then hoist the two offsets
 // every reader of it wants: the world-axis pair the hunt and the collisions
 // use, and the camera-frame pair the projection and the radar use.  `step.enemy`
@@ -2000,18 +2010,51 @@ void test_the_tank_rescans_the_field_when_it_moves(void)
                                      "the field was not rescanned after the tank moved");
 }
 
-// `battlezone` itself is the one procedure no test can call, because it ends in
-// a loop that only a keypress leaves and a test cannot press a key in the
-// middle of a call.  Nothing in this tree tests a game's entry point for that
-// reason -- and M2 put new work in this one: the clock, the enemy's first
-// spawn and a dozen resets.  A misspelled name there is a crash on the board
-// and nothing at all on the host.
+// M3 splits what M2's entry point did in one place into two.  `battlezone` is
+// now the SESSION -- the sound, the clock, and a loop over games -- and
+// `init.game` is one game's setup.  Only the first still ends in a loop no
+// test can enter, so only the first still needs the source-reading trick.
 //
-// So this runs the entry point's statements, from the source, up to the loop
-// it cannot enter.  It is the same trick the frame-order test uses, pointed at
-// running the lines rather than counting them.
+// `init.game` a test can simply call, which is better than reading it: it runs
+// the real procedure rather than a copy of its statements, so a line that
+// works only in file order cannot pass here and fail on a board.
 void test_the_entry_point_sets_the_game_up(void)
 {
+    new_game();
+
+    // It leaves a game ready to play: an enemy out on the plain, nothing in
+    // the air, the glass intact and the score at zero.
+    TEST_ASSERT_TRUE(truth(":e.alive"));
+    TEST_ASSERT_FALSE(truth(":sh.on"));
+    TEST_ASSERT_FALSE(truth(":es.on"));
+    TEST_ASSERT_FALSE(truth(":cracked"));
+    TEST_ASSERT_TRUE(truth(":playing"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":score"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":kills"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":hits"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":tk.boom"));
+    TEST_ASSERT_EQUAL_FLOAT(num(":start.lives"), num(":lives"));
+    TEST_ASSERT_EQUAL_FLOAT(num(":extra.at"), num(":extra.due"));
+    const float d = fabsf(num(":e.dx")) + fabsf(num(":e.dz"));
+    TEST_ASSERT_TRUE_MESSAGE(d > num(":e.range"), "the game opens with an enemy in your lap");
+
+}
+
+// The session's own body, which no test can call because it ends in a loop
+// only the attract screen leaves.  So this runs its statements, from the
+// source, up to that loop -- the same trick the frame-order test uses, pointed
+// at running the lines rather than counting them.  A misspelled name in here
+// is a crash on the board and nothing at all on the host.
+//
+// The clock is what it exists to check.  M2 asked for it once per game; M3
+// asks once per SESSION, because ESC now returns to an attract screen and a
+// player starting their fourth game should not pay for a wireless bus teardown
+// again.  If it ever moved back inside `init.game` this is the test that
+// notices.
+void test_the_session_asks_for_the_clock_before_any_game(void)
+{
+    run("make \"cpu.at \"unknown  make \"leaving false");
+
     FILE *f = fopen(BATTLEZONE_SOURCE, "rb");
     TEST_ASSERT_NOT_NULL(f);
 
@@ -2033,23 +2076,11 @@ void test_the_entry_point_sets_the_game_up(void)
         ran++;
     }
     fclose(f);
-    TEST_ASSERT_TRUE_MESSAGE(ran > 10, "the entry point's body was not found");
+    TEST_ASSERT_TRUE_MESSAGE(ran >= 3, "the session's body was not found");
 
-    // It leaves a game ready to play: an enemy out on the plain, nothing in
-    // the air, and the tallies at zero.
-    TEST_ASSERT_TRUE(truth(":e.alive"));
-    TEST_ASSERT_FALSE(truth(":sh.on"));
-    TEST_ASSERT_FALSE(truth(":es.on"));
-    TEST_ASSERT_EQUAL_FLOAT(0, num(":kills"));
-    TEST_ASSERT_EQUAL_FLOAT(0, num(":hits"));
-    TEST_ASSERT_EQUAL_FLOAT(0, num(":tk.boom"));
-    const float d = fabsf(num(":e.dx")) + fabsf(num(":e.dz"));
-    TEST_ASSERT_TRUE_MESSAGE(d > num(":e.range"), "the game opens with an enemy in your lap");
-
-    // And it asked for the clock, which is what M2's budget rests on.
-    TEST_ASSERT_EQUAL_STRING("fast", value_to_string(eval_string(":cpu.at").value));
-
-    run("setrefresh \"auto");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("fast", value_to_string(eval_string(":cpu.at").value),
+                                     "the session did not ask for the clock");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":leaving"), "the session opened already leaving");
 }
 
 // The whole frame, with an enemy and both shells in the air, so that whatever
@@ -2082,19 +2113,1219 @@ void test_a_frame_with_an_enemy_and_shells_runs(void)
     TEST_ASSERT_TRUE_MESSAGE(num(":e.z") >= 0 && num(":e.z") < world, "the enemy left the plain");
 }
 
+//==========================================================================
+// M3 -- the game
+//
+// Lives, a score, the four enemies in a sequence, the cracked screen, the
+// attract screen with its high score table, and the sound.  What the host can
+// check here is everything except how it feels, which is M4's and a board's.
+//==========================================================================
+
+// The mock's hardware random source is a CONSTANT 42, so anything that draws a
+// number and expects variety has to switch to the seeded sequence first.  The
+// spawn re-roll test set the precedent at M2.
+#define SCORES_FILE "/games/battlezone.scores"
+
+static int notes_on(int voice, int from)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    int n = 0;
+    for (int i = from; i < st->sound.gate_count; i++)
+        if (st->sound.gates[i].voice == voice)
+            n++;
+    return n;
+}
+
+static uint32_t last_freq_on(int voice)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    for (int i = st->sound.gate_count - 1; i >= 0; i--)
+        if (st->sound.gates[i].voice == voice)
+            return st->sound.gates[i].freq;
+    return 0;
+}
+
+// Put one kind of enemy in front of the camera, the way a spawn would: the
+// row read into the live `e.*` names first, then the placement.
+static void foe_at(int kind, float ex, float ez, float eh)
+{
+    char expr[64];
+    snprintf(expr, sizeof(expr), "make \"e.kind %d  set.kind", kind);
+    run(expr);
+    enemy_at(ex, ez, eh);
+}
+
+//--------------------------------------------------------------------------
+// The enemy sequence
+//--------------------------------------------------------------------------
+
+// The escalation is a ring rather than a state machine, so what this checks is
+// that the ring is walked in order and comes back round.  A sequence that ran
+// off the end of the list would read `item 9` of an eight-element list, which
+// is an error on the board and nothing a play test would predict.
+void test_the_sequence_walks_the_ring_and_comes_back_round(void)
+{
+    const int len = (int)num("count :e.order");
+    TEST_ASSERT_TRUE_MESSAGE(len > 1, "the enemy sequence is not a sequence");
+
+    run("make \"e.seq 0");
+    for (int i = 1; i <= len; i++)
+    {
+        char expr[64];
+        run("next.kind");
+        snprintf(expr, sizeof(expr), "0 + item %d :e.order", i);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(expr), num(":e.kind"),
+                                        "the sequence does not follow `e.order`");
+    }
+
+    run("next.kind");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.seq"), "the ring did not come back round");
+    TEST_ASSERT_EQUAL_FLOAT(num("0 + item 1 :e.order"), num(":e.kind"));
+}
+
+// All four appear, and the tank is the staple.  A ring that had turned into
+// four saucers would still pass the test above.
+void test_the_ring_carries_all_four_kinds(void)
+{
+    int seen[5] = {0, 0, 0, 0, 0};
+    const int len = (int)num("count :e.order");
+
+    run("make \"e.seq 0");
+    for (int i = 0; i < len; i++)
+    {
+        run("next.kind");
+        const int k = (int)num(":e.kind");
+        TEST_ASSERT_TRUE_MESSAGE(k >= 1 && k <= 4, "the ring holds a kind that does not exist");
+        seen[k]++;
+    }
+
+    for (int k = 1; k <= 4; k++)
+    {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "kind %d never appears in the sequence", k);
+        TEST_ASSERT_TRUE_MESSAGE(seen[k] > 0, msg);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(seen[1] > seen[4], "the saucer is not rarer than the tank");
+}
+
+// Every row is complete.  `set.kind` chooses by comparing `e.kind` against four
+// literals, so a kind that matched none of them would leave the PREVIOUS
+// enemy's numbers in place -- a supertank wearing a saucer's score, and nothing
+// on the host or the board that says so.
+void test_every_kind_sets_a_whole_row(void)
+{
+    for (int k = 1; k <= 4; k++)
+    {
+        char expr[64], msg[96];
+        run("make \"e.pts 0  make \"e.hw 0  make \"e.hit 0");
+        snprintf(expr, sizeof(expr), "make \"e.kind %d  set.kind", k);
+        run(expr);
+
+        snprintf(msg, sizeof(msg), "kind %d is worth nothing", k);
+        TEST_ASSERT_TRUE_MESSAGE(num(":e.pts") > 0, msg);
+        snprintf(msg, sizeof(msg), "kind %d has no size", k);
+        TEST_ASSERT_TRUE_MESSAGE(num(":e.hw") > 0, msg);
+        snprintf(msg, sizeof(msg), "kind %d cannot be hit", k);
+        TEST_ASSERT_TRUE_MESSAGE(num(":e.hit") > 0, msg);
+        // `e.naim` is the one derived number and it is hoisted out of the four
+        // rows, so a row that forgot it would leave the last enemy's.
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-num(":e.aim"), num(":e.naim"),
+                                        "the aim window is not symmetric");
+    }
+}
+
+// The arcade's table, and it is the one thing in M3 that is not this design's
+// invention.
+void test_each_kind_is_worth_its_arcade_score(void)
+{
+    const struct { int kind; float pts; } table[] = {
+        {1, 1000.0f}, {2, 2000.0f}, {3, 3000.0f}, {4, 5000.0f}};
+
+    for (int i = 0; i < 4; i++)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), "make \"e.kind %d  set.kind", table[i].kind);
+        run(expr);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(table[i].pts, num(":e.pts"),
+                                        "a kind is not worth what the cabinet paid");
+    }
+}
+
+// M2's defect, generalised to every enemy that carries a gun.  The failure was
+// two constants that only mean something against each other written down in
+// different places: `e.range` is the stand-off it holds and `tk.hit` is the
+// box it is shooting at, and inside range/sqrt2 * tan(wob) < tk.hit the shot
+// cannot miss whatever the aim does.  M3 adds a second gun kind with a TIGHTER
+// wobble, which is exactly the change that reopens it -- a narrower cone at the
+// same distance is a cone that fits inside the box.
+void test_no_kind_that_shoots_can_park_where_it_cannot_miss(void)
+{
+    const float deg = (float)M_PI / 180.0f;
+    int guns = 0;
+
+    for (int k = 1; k <= 4; k++)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), "make \"e.kind %d  set.kind", k);
+        run(expr);
+        if (!truth(":e.gun"))
+            continue;
+        guns++;
+
+        // `e.d` is Manhattan, so the true distance at the stand-off is as
+        // little as range/sqrt2 on the diagonal.  The worst case, not the best.
+        const float closest = num(":e.range") / 1.4143f;
+        const float thrown = closest * tanf(num(":e.wob") * deg);
+
+        char msg[128];
+        snprintf(msg, sizeof(msg),
+                 "kind %d holds a range from which its aim cannot miss (%.0f thrown, %.0f box)",
+                 k, (double)thrown, (double)num(":tk.hit"));
+        TEST_ASSERT_TRUE_MESSAGE(thrown > num(":tk.hit"), msg);
+    }
+
+    TEST_ASSERT_TRUE_MESSAGE(guns >= 2, "the invariant was checked against fewer than two guns");
+}
+
+// "Faster, smarter" is four numbers, and a supertank that was only bigger would
+// pass every other test in this file.
+void test_a_supertank_outclasses_a_tank(void)
+{
+    run("make \"e.kind 1  set.kind");
+    const float step = num(":e.step"), turn = num(":e.turn");
+    const float reload = num(":e.reload"), wob = num(":e.wob"), hw = num(":e.hw");
+
+    run("make \"e.kind 3  set.kind");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.step") > step, "a supertank is no faster");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.turn") > turn, "a supertank turns no harder");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.reload") < reload, "a supertank reloads no faster");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.wob") < wob, "a supertank is no more accurate");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.hw") > hw, "a supertank looks exactly like a tank");
+}
+
+//--------------------------------------------------------------------------
+// The missile
+//--------------------------------------------------------------------------
+
+// It closes forever and it never fires, which is what `e.range` 0 and no gun
+// mean.  A missile that held a stand-off would sit out at 400 steps being
+// harmless.
+void test_a_missile_closes_forever_and_never_fires(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(2, 800, 1100, 180);
+    run("make \"e.cool 0  make \"es.on false  make \"frame.count 0  hunt");
+
+    TEST_ASSERT_FALSE_MESSAGE(truth(":e.gun"), "a missile has a gun");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":e.ram"), "a missile does not ram");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":e.fire"), "a missile decided to shoot at you");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.f"), "a missile stopped closing");
+
+    // And from right on top of you it is still closing, which is the whole
+    // difference between it and a tank.
+    enemy_at(800, 860, 180);
+    run("hunt");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.f"), "a missile held a stand-off");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":e.fire"), "a missile fired a shell");
+}
+
+// It kills by ARRIVING, and it dies of the hit it scores.  A missile that rammed
+// you and survived would be an unkillable enemy standing in your lap.
+void test_a_missile_kills_by_arriving_and_dies_of_it(void)
+{
+    new_game();
+    camera_at(800, 800, 0);
+    foe_at(2, 800, 810, 180);
+    run("make \"tk.boom 0  make \"e.boom 0  make \"hits 0");
+    const float lives = num(":lives");
+
+    run("enemy.rams");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":hits"), "the missile did not reach the player");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(lives - 1, num(":lives"), "the ram cost no tank");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":e.alive"), "the missile survived hitting you");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.boom") > 0, "the missile did not blow up");
+
+    // And it scores the player nothing: you did not shoot it, it shot you.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":score"), "being rammed scored points");
+
+}
+
+// Out of range it does nothing at all, which is the other half of two
+// comparisons: a guard that tested only one axis would let a missile passing
+// 300 steps to your left kill you.
+void test_a_missile_that_has_not_arrived_does_nothing(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(2, 1100, 800, 180);
+    run("make \"tk.boom 0  make \"hits 0  enemy.rams");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":hits"), "a missile 300 steps away hit the player");
+    TEST_ASSERT_TRUE(truth(":e.alive"));
+}
+
+// Four edges: the body, two side fins, and both vertical fins as ONE stroke --
+// they are three points on a straight line through the tail, so a line through
+// the middle one is the same ink as two lines out of it.  The count is what
+// pins the model, exactly as the cube's twelve and the enemy's thirteen do,
+// and it is four rather than five because of that stroke.
+void test_a_missile_draws_four_edges(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(2, 800, 1100, 180);
+    mock_device_clear_graphics();
+    TEST_ASSERT_TRUE_MESSAGE(truth("project.missile"), "the missile in front of you was culled");
+    run("draw.missile");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, mock_device_line_count(), "the missile is not four edges");
+}
+
+// It flies at eye height, which is why a missile coming straight at you sits in
+// the middle of the gunsight -- and the gunsight's gap is cut so that the shot
+// you have to take is never covered.
+void test_a_missile_flies_at_eye_height(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(2, 800, 1100, 180);
+    run("ignore project.missile");
+
+    const float hz = num(":hz");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, hz, num(":apy"), "the nose is off the eye line");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, hz, item_of("cy1", 1), "the tail is off the eye line");
+    // The fins straddle it.
+    TEST_ASSERT_TRUE_MESSAGE(item_of("cy2", 1) > hz, "the upper fin is not above the eye line");
+    TEST_ASSERT_TRUE_MESSAGE(hz > item_of("cy2", 2), "the lower fin is not below the eye line");
+}
+
+//--------------------------------------------------------------------------
+// The saucer
+//--------------------------------------------------------------------------
+
+// It drifts and it does not hunt: `hunt` leaves immediately, so the turn intent
+// it was spawned with is all it ever has.  A saucer that turned towards you
+// would be a slow tank that could not shoot.
+void test_a_saucer_drifts_and_does_not_hunt(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(4, 800, 1100, 90);
+    run("make \"e.t 0  make \"e.f 1  make \"e.fire false  hunt");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":e.t"), "the saucer turned towards the player");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.f"), "the saucer stopped drifting");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":e.fire"), "the saucer shot at you");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":e.gun"), "the saucer has a gun");
+}
+
+// It is 90 steps up and an obstacle is 40 tall, so it goes over them.  This is
+// the one place in the file that knows a saucer flies, and a saucer that ground
+// to a halt against an invisible cube would be a defect only a play test finds.
+void test_a_saucer_flies_over_the_obstacles(void)
+{
+    // A cube dead in its path.
+    run("make \"ox [800 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [900 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+    foe_at(4, 800, 880, 0);
+
+    const float before = num(":e.z");
+    run("move.enemy");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.z") > before, "the saucer was stopped by an obstacle");
+
+    // And a tank in the same place is not.
+    foe_at(1, 800, 880, 0);
+    const float tank_before = num(":e.z");
+    run("move.enemy");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(tank_before, num(":e.z"),
+                                    "a tank drove through the obstacle the saucer flew over");
+}
+
+// It leaves rather than circling forever.  Ignoring a saucer should cost you
+// the points, not stall the sequence behind it -- and a departure is not a
+// death: no explosion and no score.
+void test_a_saucer_leaves_when_its_dwell_runs_out(void)
+{
+    new_game();
+    camera_at(800, 800, 0);
+    foe_at(4, 800, 1100, 0);
+    run("make \"e.boom 0  make \"e.left 2  make \"bm.n 0  make \"frame.count 1");
+
+    run("step.enemy");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":e.alive"), "the saucer left a frame early");
+    run("step.enemy");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":e.alive"), "the saucer never left");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":score"), "a departure scored points");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":bm.n"), "a departure drew an explosion");
+
+    // And the ring moves on: one more frame and the next enemy is out there.
+    run("step.enemy");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":e.alive"), "the sequence stalled behind the saucer");
+
+}
+
+// Twelve edges: the rim quad, four to the dome and four to the keel.
+void test_a_saucer_draws_twelve_edges(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(4, 800, 1100, 0);
+    mock_device_clear_graphics();
+    TEST_ASSERT_TRUE_MESSAGE(truth("project.saucer"), "the saucer in front of you was culled");
+    run("draw.saucer");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(12, mock_device_line_count(), "the saucer is not twelve edges");
+}
+
+// It is rotationally symmetric, so its own heading must not reach the
+// transform.  A saucer whose outline turned as it drifted would be a box, and
+// the projection would have to do the work the symmetry is there to save.
+void test_a_saucers_outline_does_not_turn_with_its_heading(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(4, 800, 1100, 0);
+    run("ignore project.saucer");
+    const float x1 = item_of("cx", 1), y1 = item_of("cy1", 1);
+    const float ax = num(":apx"), ay = num(":apy");
+
+    foe_at(4, 800, 1100, 137);
+    run("ignore project.saucer");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, x1, item_of("cx", 1), "the rim turned with the heading");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, y1, item_of("cy1", 1), "the rim turned with the heading");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, ax, num(":apx"), "the dome turned with the heading");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, ay, num(":apy"), "the dome turned with the heading");
+}
+
+// It floats, which is the whole reason it is drawn as a plate seen edge-on: the
+// dome is above the rim, the keel below it, and all three are above the horizon
+// because the periscope is 12 steps off a plain the saucer is 90 above.
+void test_a_saucer_floats_above_the_horizon(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(4, 800, 1100, 0);
+    run("ignore project.saucer");
+
+    const float hz = num(":hz");
+    const float rim = item_of("cy1", 1);
+    TEST_ASSERT_TRUE_MESSAGE(rim > hz, "the saucer is sitting on the ground");
+    TEST_ASSERT_TRUE_MESSAGE(num(":apy") > rim, "the dome is not above the rim");
+    TEST_ASSERT_TRUE_MESSAGE(rim > num(":p.g"), "the keel is not below the rim");
+}
+
+//--------------------------------------------------------------------------
+// The models, together
+//--------------------------------------------------------------------------
+
+// Culling is conservative for the two new shapes exactly as it is for the tank:
+// anything with a vertex inside the near plane goes whole, because the "some of
+// it" version is what swings a projection through infinity and throws a line
+// across the screen.
+void test_the_new_models_are_culled_at_the_near_plane(void)
+{
+    const float near = num(":near");
+
+    camera_at(800, 800, 0);
+    foe_at(2, 800, 800 + near * 0.5f, 180);
+    TEST_ASSERT_FALSE_MESSAGE(truth("project.missile"), "a missile inside the near plane was drawn");
+    foe_at(2, 800, 800 + near * 4.0f, 180);
+    TEST_ASSERT_TRUE_MESSAGE(truth("project.missile"), "a missile in clear view was culled");
+
+    foe_at(4, 800, 800 + near * 0.5f, 0);
+    TEST_ASSERT_FALSE_MESSAGE(truth("project.saucer"), "a saucer inside the near plane was drawn");
+    foe_at(4, 800, 800 + near * 4.0f, 0);
+    TEST_ASSERT_TRUE_MESSAGE(truth("project.saucer"), "a saucer in clear view was culled");
+}
+
+// The frame asks two booleans and never a kind.  What this pins is that the
+// booleans reach the right model: a saucer drawn as a tank would be twelve
+// edges either way and the count alone could not tell them apart, so the check
+// is that the number of edges MOVES with the kind.
+void test_the_frame_draws_the_model_that_matches_the_kind(void)
+{
+    const struct { int kind; int edges; } table[] = {
+        {1, EDGES_ENEMY}, {2, 4}, {3, EDGES_ENEMY}, {4, 12}};
+
+    for (int i = 0; i < 4; i++)
+    {
+        char msg[80];
+        camera_at(800, 800, 0);
+        foe_at(table[i].kind, 800, 1150, 180);
+        mock_device_clear_graphics();
+        run("draw.foe");
+        snprintf(msg, sizeof(msg), "kind %d drew %d edges, not %d",
+                 table[i].kind, mock_device_line_count(), table[i].edges);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(table[i].edges, mock_device_line_count(), msg);
+    }
+}
+
+//--------------------------------------------------------------------------
+// Lives and the score
+//--------------------------------------------------------------------------
+
+// Every point in the game arrives through `add.score`, which is what makes the
+// bonus tank one `if` rather than a rule scattered over four scorers.
+void test_a_kill_scores_what_the_enemy_is_worth(void)
+{
+    new_game();
+    run("make \"score 0");
+    camera_at(800, 800, 0);
+    foe_at(4, 800, 1100, 0);
+    run("kill.enemy");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(5000, num(":score"), "a saucer scored the wrong amount");
+
+    foe_at(1, 800, 1100, 180);
+    run("kill.enemy");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(6000, num(":score"), "a tank scored the wrong amount");
+}
+
+// The bonus tank arrives on STEPPING OVER the boundary and not on landing on
+// it, which a `remainder` would get wrong: a 5,000-point saucer can carry a
+// score from 14,000 to 19,000 without ever equalling 15,000.
+void test_a_bonus_tank_arrives_on_stepping_over_the_boundary(void)
+{
+    new_game();
+    const float at = num(":extra.at");
+    run("make \"score 0  make \"lives 3");
+    char expr[64];
+    snprintf(expr, sizeof(expr), "make \"extra.due %g", at);
+    run(expr);
+
+    snprintf(expr, sizeof(expr), "add.score %g", at - 1000.0f);
+    run(expr);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"), "a bonus tank arrived early");
+
+    // Over the line rather than onto it.
+    run("add.score 5000");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":lives"), "stepping over the boundary won nothing");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(at + at, num(":extra.due"), "the next bonus is in the past");
+
+    // And it does not fire again on the next point scored.
+    run("add.score 100");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":lives"), "the bonus repeated");
+}
+
+// Being hit costs a tank, cracks the glass and pauses you.  It does NOT end the
+// game here: the count goes down and `respawn` reads it ten frames later, so
+// the player watches their own tank come apart before the card goes up.
+void test_a_hit_costs_a_tank_and_cracks_the_glass(void)
+{
+    new_game();
+    run("make \"lives 3  make \"cracked false  make \"tk.boom 0");
+    run("hit.player");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"), "the hit cost no tank");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":cracked"), "the glass did not crack");
+    TEST_ASSERT_TRUE_MESSAGE(num(":tk.boom") > 0, "the hit did not pause the tank");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":playing"), "one hit ended the game");
+}
+
+// The pause runs out into a fresh tank, fresh glass and a FRESH ENEMY -- the
+// last is the courtesy the cabinet extends, and without it the tank that killed
+// you is still sitting at its stand-off with your new one in its sights.
+void test_the_pause_runs_out_into_a_new_tank_and_a_new_enemy(void)
+{
+    new_game();
+    camera_at(800, 800, 0);
+    run("make \"lives 3  make \"tk.boom 0  make \"es.on false");
+    enemy_at(800, 900, 180);
+    run("hit.player");
+
+    for (int i = 0; i < (int)num(":boom.frames") + 1; i++)
+        run("step.tank");
+
+    TEST_ASSERT_FALSE_MESSAGE(truth(":cracked"), "the glass stayed cracked through the respawn");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":playing"), "the game ended with tanks left");
+    const float d = fabsf(num(":e.dx")) + fabsf(num(":e.dz"));
+    TEST_ASSERT_TRUE_MESSAGE(d > num(":e.range"),
+                             "you respawned with the enemy that killed you still in your lap");
+}
+
+// TWO SPAWNS FOR ONE DEATH.  A missile sets its own `e.boom` and then kills
+// you, so both countdowns start on the same frame and run out on the same one:
+// `step.enemy` spawns from its counter and `respawn` spawns from the tank's,
+// the ring advances twice, and one of the two enemies is never seen.  Nothing
+// on the screen says so -- there is an enemy out there either way -- which is
+// why the check is on the sequence position and not on the picture.
+void test_a_ram_spawns_one_replacement_and_not_two(void)
+{
+    new_game();
+    camera_at(800, 800, 0);
+    foe_at(2, 800, 810, 180);
+    run("make \"lives 3  make \"tk.boom 0  make \"e.boom 0  make \"frame.count 1");
+    const float seq = num(":e.seq");
+
+    run("enemy.rams");
+    for (int i = 0; i < (int)num(":boom.frames") + 2; i++)
+        run("step.tank  step.enemy");
+
+    TEST_ASSERT_TRUE_MESSAGE(truth(":e.alive"), "nothing came back after the ram");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(seq + 1, num(":e.seq"),
+                                    "one death advanced the enemy sequence twice");
+}
+
+// The last tank ends the game, and it ends it AFTER the pause rather than
+// during it.
+void test_the_last_tank_ends_the_game(void)
+{
+    new_game();
+    camera_at(800, 800, 0);
+    run("make \"lives 1  make \"tk.boom 0");
+    run("hit.player");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":playing"), "the game ended before the explosion was over");
+
+    for (int i = 0; i < (int)num(":boom.frames") + 1; i++)
+        run("step.tank");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":playing"), "running out of tanks did not end the game");
+}
+
+//--------------------------------------------------------------------------
+// The cracked screen
+//--------------------------------------------------------------------------
+
+// The shatter is STATIC, which is what makes it read as damage to the glass
+// rather than as something happening on the plain.  What is stored is a bearing,
+// two lengths and a kink, so the turtle redraws the identical figure -- and a
+// shatter that was re-rolled every frame would be a snowstorm.
+void test_the_shatter_is_static_until_you_respawn(void)
+{
+    run("rerandom");
+    run("make \"bm.x 0  make \"bm.y 40  crack.screen");
+
+    mock_device_clear_graphics();
+    run("draw.cracks");
+    const int edges = mock_device_line_count();
+    TEST_ASSERT_TRUE_MESSAGE(edges > 0, "the shatter drew nothing");
+
+    // Same figure, twice: the endpoints of every stroke, not just the count.
+    MockLine first[32];
+    TEST_ASSERT_TRUE(edges <= (int)(sizeof(first) / sizeof(first[0])));
+    for (int i = 0; i < edges; i++)
+        first[i] = *mock_device_get_line(i);
+
+    mock_device_clear_graphics();
+    run("draw.cracks");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(edges, mock_device_line_count(), "the shatter changed shape");
+    for (int i = 0; i < edges; i++)
+    {
+        const MockLine *l = mock_device_get_line(i);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, first[i].x1, l->x1, "the shatter moved");
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, first[i].y1, l->y1, "the shatter moved");
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, first[i].x2, l->x2, "the shatter moved");
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, first[i].y2, l->y2, "the shatter moved");
+    }
+}
+
+// Every crack has a kink in it.  A crack in glass runs, catches and runs again;
+// six straight rays out of one point is a starburst, which is what an explosion
+// looks like and not what damage looks like.
+void test_every_crack_runs_in_two_strokes(void)
+{
+    run("rerandom");
+    run("make \"bm.x 0  make \"bm.y 40  crack.screen");
+    mock_device_clear_graphics();
+    run("draw.cracks");
+
+    const int edges = mock_device_line_count();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(12, edges, "the shatter is not six cracks of two strokes");
+
+    // The strokes pair up: the second of each pair starts where the first ended,
+    // and it is a KINK and not a continuation.
+    for (int i = 0; i < edges; i += 2)
+    {
+        const MockLine *a = mock_device_get_line(i);
+        const MockLine *b = mock_device_get_line(i + 1);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, a->x2, b->x1, "a crack is not one polyline");
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, a->y2, b->y1, "a crack is not one polyline");
+    }
+}
+
+// It is drawn only while it is cracked, and it costs a cracked frame twelve
+// edges -- which is the arcade's real penalty for being hit: it takes the view
+// rather than a number.
+void test_the_shatter_is_drawn_only_while_it_is_cracked(void)
+{
+    new_game();
+    camera_at(800, 800, 0);
+    run("make \"paused false  make \"cracked false  pollkeys");
+
+    mock_device_clear_graphics();
+    run("play.frame");
+    const int clear = mock_device_line_count();
+
+    run("rerandom  make \"bm.x 0  make \"bm.y 40  crack.screen");
+    mock_device_clear_graphics();
+    run("play.frame");
+    const int cracked = mock_device_line_count();
+
+    TEST_ASSERT_TRUE_MESSAGE(cracked > clear, "the cracked frame drew no shatter");
+}
+
+//--------------------------------------------------------------------------
+// Sound
+//--------------------------------------------------------------------------
+
+// The waveform rule is an ERROR and not a shrug: 3 and 7 are the noise voices
+// and 0-2 / 4-6 are the tone voices, so a timbre on the wrong family throws.
+// The pairs are also the arrangement -- a pair is one sound centred across both
+// ears -- so left and right must carry the same timbre or a sound arrives in
+// one ear.
+void test_the_timbres_are_set_for_every_pair(void)
+{
+    run("setup.sound");
+    const MockDeviceState *st = mock_device_get_state();
+
+    for (int v = 0; v < 4; v++)
+    {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "voice %d and %d are not the same timbre", v, v + 4);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(st->sound.wave[v].wave, st->sound.wave[v + 4].wave, msg);
+
+        snprintf(msg, sizeof(msg), "voice %d has the wrong wave family", v);
+        if (v == 3)
+            TEST_ASSERT_TRUE_MESSAGE(st->sound.wave[v].wave >= SOUND_WAVE_WHITE, msg);
+        else
+            TEST_ASSERT_TRUE_MESSAGE(st->sound.wave[v].wave < SOUND_WAVE_WHITE, msg);
+    }
+
+    // The engine's attack is a RAMP and not a step, because it is re-gated on
+    // every frame and a step there is a click fifteen times a second.  Under
+    // about 7 ms the engine's refill block makes it a step whatever is asked.
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.env[0].attack >= 5, "the engine re-gate will click");
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.env[1].attack >= 5, "the engine re-gate will click");
+}
+
+// The engine is TWO pairs a few hertz apart, and the beat between them is the
+// sound rather than a detune to be tidied away.  One pair is a hum.
+void test_the_engine_is_two_pairs_that_beat(void)
+{
+    run("make \"left.tread 0  make \"right.tread 0");
+    int mark = mock_sound_gate_count();
+    run("engine");
+
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(0, mark) > 0, "the engine's lower pair is silent");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(1, mark) > 0, "the engine's upper pair is silent");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(4, mark) > 0, "the engine is only in one ear");
+    TEST_ASSERT_TRUE_MESSAGE(last_freq_on(1) > last_freq_on(0),
+                             "the two halves of the engine are the same pitch -- there is no beat");
+}
+
+// The pitch follows how much TREAD is turning rather than how fast the tank is
+// going, so a pivot -- two treads and no ground speed at all -- revs exactly as
+// hard as driving straight does.  That is what a tracked vehicle sounds like
+// and it is the wrong answer for anything with wheels.
+void test_the_engine_pitch_follows_the_treads(void)
+{
+    run("make \"left.tread 0  make \"right.tread 0  engine");
+    const uint32_t idle = last_freq_on(0);
+
+    run("make \"left.tread 1  make \"right.tread 0  engine");
+    const uint32_t one = last_freq_on(0);
+
+    run("make \"left.tread 1  make \"right.tread 1  engine");
+    const uint32_t driving = last_freq_on(0);
+
+    // A pivot is one tread each way: no ground speed, both treads turning.
+    run("make \"left.tread 1  make \"right.tread -1  engine");
+    const uint32_t pivot = last_freq_on(0);
+
+    TEST_ASSERT_TRUE_MESSAGE(one > idle, "the engine does not rev");
+    TEST_ASSERT_TRUE_MESSAGE(driving > one, "the second tread adds nothing");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(driving, pivot, "a pivot does not rev like a drive");
+}
+
+// The alarm is a TEMPO as much as a pitch, and the gap closes as the enemy
+// closes -- so a hunting supertank is frightening before it is visible.
+void test_the_alarm_closes_its_gap_as_the_enemy_closes(void)
+{
+    camera_at(800, 800, 0);
+    enemy_at(800, 1100, 0);
+
+    // Two notes and not one: a single repeated note is a metronome.  This goes
+    // FIRST because the mock's gate log holds 64 entries and a centred pair
+    // spends two of them a note, so the counting below is what fills it.
+    run("make \"au.in 1  make \"au.alt false  alarm");
+    const uint32_t first = last_freq_on(2);
+    run("make \"au.in 1  alarm");
+    TEST_ASSERT_TRUE_MESSAGE(last_freq_on(2) != first, "the alarm is one note, not two");
+
+    enemy_at(800, 1450, 0);
+    run("make \"au.in 1");
+    int mark = mock_sound_gate_count();
+    run("repeat 30 [alarm]");
+    const int far_off = notes_on(2, mark);
+
+    enemy_at(800, 900, 0);
+    run("make \"au.in 1");
+    mark = mock_sound_gate_count();
+    run("repeat 30 [alarm]");
+    const int close = notes_on(2, mark);
+
+    char msg[128];
+    snprintf(msg, sizeof(msg), "%d notes in 30 frames at range, %d up close", far_off, close);
+    TEST_ASSERT_TRUE_MESSAGE(far_off > 0, msg);
+    TEST_ASSERT_TRUE_MESSAGE(close > far_off, msg);
+
+    // And the floor holds, which is not tidiness: two 90 ms notes closer than
+    // `al.min` frames apart run together into one tone and lose the tempo that
+    // is the whole point of the sound.
+    enemy_at(800, 805, 0);
+    run("make \"au.in 1  alarm");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":al.min"), num(":au.in"), "the alarm ran past its floor");
+}
+
+// Only for something IN FRONT of you.  An alarm that sounded for an enemy
+// behind would be telling you to turn round without saying which way, and the
+// radar is what answers that.
+void test_the_alarm_is_silent_for_what_is_behind_you(void)
+{
+    camera_at(800, 800, 0);
+    enemy_at(800, 500, 0);          // 300 steps behind
+    run("make \"au.in 1");
+    int mark = mock_sound_gate_count();
+    run("repeat 30 [alarm]");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "the alarm sounded for an enemy behind you");
+
+    // And nothing at all when there is no enemy: a dead one is not a threat.
+    enemy_at(800, 1100, 0);
+    run("make \"e.alive false  make \"au.in 1");
+    mark = mock_sound_gate_count();
+    run("repeat 30 [alarm]");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "the alarm sounded for a dead enemy");
+}
+
+// The cannon and both explosions are noise, on the pair that is allowed to
+// carry it.  Pitch says WHAT died: an enemy is a sharp crack and your own tank
+// is a low crump, so you never have to look to know which of you it was.
+void test_the_cannon_and_the_explosions_are_noise_and_differ_in_pitch(void)
+{
+    new_game();
+    run("make \"sh.on false  make \"tk.boom 0");
+    int mark = mock_sound_gate_count();
+    run("fire");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(3, mark) > 0, "the cannon made no sound");
+
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 1100, 180);
+    mark = mock_sound_gate_count();
+    run("kill.enemy");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(3, mark) > 0, "the enemy blew up in silence");
+    const uint32_t theirs = last_freq_on(3);
+
+    run("make \"lives 3  make \"tk.boom 0");
+    mark = mock_sound_gate_count();
+    run("hit.player");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(3, mark) > 0, "the player blew up in silence");
+    TEST_ASSERT_TRUE_MESSAGE(theirs > last_freq_on(3),
+                             "your death and theirs sound the same");
+}
+
+//--------------------------------------------------------------------------
+// The refused clock, and the rate
+//--------------------------------------------------------------------------
+
+// M2 measured the fallback and found two obstacles at 150 MHz still over by
+// 10.3 ms on the peak frame; design section 16.6 left the rate cut to M3 and it
+// is taken.  What this pins is that NOTHING ELSE MOVES with it.  Every constant
+// in the file spelled "a frame" is per frame, so moving only `fps` runs the
+// whole game at 0.8x uniformly and a player cannot see a proportion that has
+// not changed -- while re-cutting the two the player's hands touch would give a
+// tank that turns at full speed with shells that fly a fifth slower, which is
+// section 16.6.2's complaint backwards.
+void test_a_refused_clock_cuts_the_rate_and_nothing_else(void)
+{
+    run("clock");
+    TEST_ASSERT_EQUAL_STRING("fast", value_to_string(eval_string(":cpu.at").value));
+    const float fast_fps = num(":fps");
+    const float turn = num(":turn.rate"), step = num(":tread.step");
+    const float sh_step = num(":sh.step"), sh_frames = num(":sh.frames");
+    const float spin = num(":rd.spin"), boom = num(":boom.frames");
+
+    set_mock_cpu_khz(false, LOGO_CPU_KHZ_NORMAL);
+    run("clock");
+    TEST_ASSERT_TRUE_MESSAGE(num(":fps") < fast_fps, "a refused clock did not cut the rate");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":slow.fps"), num(":fps"), "the cut rate is not `slow.fps`");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":slow.obstacles"), num(":max.obstacles"),
+                                    "a refused clock did not cut the field");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(turn, num(":turn.rate"), "the turn rate moved with `fps`");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(step, num(":tread.step"), "the tread step moved with `fps`");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(sh_step, num(":sh.step"), "the shell speed moved with `fps`");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(sh_frames, num(":sh.frames"), "the shell life moved with `fps`");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(spin, num(":rd.spin"), "the radar spin moved with `fps`");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(boom, num(":boom.frames"), "the explosion moved with `fps`");
+
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+}
+
+//--------------------------------------------------------------------------
+// The high score table
+//--------------------------------------------------------------------------
+
+// The two lists are `scores.top` long, and a list edited to a different length
+// is a silent out-of-range read rather than a visible defect.
+void test_the_score_lists_are_as_long_as_the_table(void)
+{
+    const float top = num(":scores.top");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(top, num("count :hs.score"), "the score list is the wrong length");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(top, num("count :hs.name"), "the name list is the wrong length");
+}
+
+// STRICTLY GREATER, so a score equal to one already there ranks below it and
+// whoever got there first keeps the higher line.  An empty slot holds 0, so a
+// game that scored nothing cannot rank either.
+void test_the_table_ranks_a_score_against_what_is_already_there(void)
+{
+    run("clear.scores");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("score.rank 0"), "a score of nothing ranked");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num("score.rank 1000"), "the first score did not rank first");
+
+    run("insert.score 1 5000 \"BLAIR");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num("score.rank 5000"),
+                                    "an equal score displaced the one that got there first");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num("score.rank 5001"), "a higher score did not take the top");
+
+    // A full table with a floor above the score offered.
+    run("clear.scores");
+    for (int i = 1; i <= (int)num(":scores.top"); i++)
+    {
+        char expr[80];
+        snprintf(expr, sizeof(expr), "insert.score %d %d \"NAME%d", i, (11 - i) * 2000, i);
+        run(expr);
+    }
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("score.rank 100"), "a score below the table ranked");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num("score.rank 30000"), "a score above the table did not");
+}
+
+// Everything below the new line slides down one and the last falls off the
+// bottom, which is the half an off-by-one in the shift would silently corrupt.
+void test_inserting_a_score_slides_the_rest_down(void)
+{
+    run("clear.scores");
+    run("insert.score 1 3000 \"AAA");
+    run("insert.score 2 2000 \"BBB");
+    run("insert.score 3 1000 \"CCC");
+
+    run("insert.score 2 2500 \"NEW");
+    TEST_ASSERT_EQUAL_FLOAT(3000, item_of("hs.score", 1));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2500, item_of("hs.score", 2), "the new score is not where it ranked");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2000, item_of("hs.score", 3), "the table did not slide down");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1000, item_of("hs.score", 4), "the table did not slide down");
+    TEST_ASSERT_EQUAL_STRING("NEW", value_to_string(eval_string("item 2 :hs.name").value));
+    TEST_ASSERT_EQUAL_STRING("BBB", value_to_string(eval_string("item 3 :hs.name").value));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":hs.count"), "the table did not grow");
+}
+
+// A missing file is the FIRST RUN and not an error, and the `file?` test is
+// also what stops `open` creating an empty one just to read it.
+void test_no_score_file_is_a_first_run_and_not_an_error(void)
+{
+    run("insert.score 1 1234 \"GHOST");
+    run("load.scores");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":hs.count"), "a missing file left stale scores behind");
+}
+
+// Round trip, because the two halves are written apart and a format that only
+// one of them agrees with is a table that silently empties itself.
+void test_the_table_round_trips_through_the_file(void)
+{
+    run("clear.scores");
+    run("insert.score 1 9000 \"BLAIR");
+    run("insert.score 2 4000 \"GUNNER");
+    run("save.scores");
+
+    run("clear.scores");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":hs.count"));
+
+    run("load.scores");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":hs.count"), "the table did not come back");
+    TEST_ASSERT_EQUAL_FLOAT(9000, item_of("hs.score", 1));
+    TEST_ASSERT_EQUAL_FLOAT(4000, item_of("hs.score", 2));
+    TEST_ASSERT_EQUAL_STRING("BLAIR", value_to_string(eval_string("item 1 :hs.name").value));
+    TEST_ASSERT_EQUAL_STRING("GUNNER", value_to_string(eval_string("item 2 :hs.name").value));
+}
+
+// A-Z, a-z and 0-9, and nothing else reaches the file.  Backspace is the one
+// non-character that does anything, and it must not run off the front.
+void test_the_name_field_filters_what_it_accepts(void)
+{
+    TEST_ASSERT_EQUAL_STRING("A", value_to_string(eval_string("next.name \"|| 97").value));
+    TEST_ASSERT_EQUAL_STRING("AB", value_to_string(eval_string("next.name \"A 66").value));
+    TEST_ASSERT_EQUAL_STRING("A7", value_to_string(eval_string("next.name \"A 55").value));
+    // A space, a comma and an escape are all ignored.
+    TEST_ASSERT_EQUAL_STRING("A", value_to_string(eval_string("next.name \"A 32").value));
+    TEST_ASSERT_EQUAL_STRING("A", value_to_string(eval_string("next.name \"A 44").value));
+    TEST_ASSERT_EQUAL_STRING("A", value_to_string(eval_string("next.name \"A 27").value));
+    // Backspace, including off the front of an empty field.
+    TEST_ASSERT_EQUAL_STRING("A", value_to_string(eval_string("next.name \"AB 8").value));
+    TEST_ASSERT_EQUAL_STRING("", value_to_string(eval_string("next.name \"|| 8").value));
+    // And it stops at the field width rather than running past it.
+    TEST_ASSERT_EQUAL_STRING("ABCDEFGHIJ",
+                             value_to_string(eval_string("next.name \"ABCDEFGHIJ 75").value));
+    // Enter ends the entry on a board (13) and through a host console (10).
+    TEST_ASSERT_TRUE(truth("done.key? 13"));
+    TEST_ASSERT_TRUE(truth("done.key? 10"));
+    TEST_ASSERT_FALSE(truth("done.key? 65"));
+}
+
+//--------------------------------------------------------------------------
+// The attract screen and game over
+//--------------------------------------------------------------------------
+
+// The attract screen carries the table and the keys that do anything there, and
+// it waits on space.
+void test_the_attract_screen_prints_the_scores_and_the_keys(void)
+{
+    mock_fs_create_file(SCORES_FILE, "12000 BLAIR\n5000 GUNNER\n");
+    mock_device_clear_output();
+    set_mock_input("xy ");            // two keys it must ignore, then space
+    run("make \"leaving false  attract.screen");
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "BATTLEZONE"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "HIGH SCORES"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "1."), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "2."), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "12000"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "BLAIR"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Press Space to play"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "or H for instructions"), screen);
+    TEST_ASSERT_FALSE_MESSAGE(truth(":leaving"), "space left the session instead of starting a game");
+}
+
+// An empty table has to SAY so rather than leave the heading over a blank
+// screen, which is what a first run and a broken load look like alike.
+void test_the_attract_screen_says_so_with_no_scores(void)
+{
+    mock_device_clear_output();
+    set_mock_input(" ");
+    run("make \"leaving false  attract.screen");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mock_device_get_output(), "No scores yet"),
+                                 mock_device_get_output());
+}
+
+// H is the only other key: it puts the instructions up, any key brings the
+// attract screen back, and space still starts the game from there.
+void test_h_shows_the_instructions_and_comes_back(void)
+{
+    mock_device_clear_output();
+    set_mock_input("hx ");            // H, a key to dismiss it, then space
+    run("make \"leaving false  attract.screen");
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Tank       1000"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Saucer     5000"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "left tread"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Press any key"), screen);
+    // and it came back: the prompt is redrawn after the instructions.
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(strstr(screen, "Press any key"),
+                                        "or H for instructions"), screen);
+}
+
+// THE WAY OUT.  M2's entry point could only be left by quitting the game; M3's
+// runs games until the attract screen is told to stop, and if that screen took
+// only Space there would be no way out at all -- which would strand a board at
+// 300 MHz for the rest of the session, and that is exactly what `restore.clock`
+// exists to prevent.
+void test_escape_leaves_the_attract_screen_and_the_session(void)
+{
+    set_mock_input("\x1b");
+    run("make \"leaving false  attract.screen");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":leaving"), "escape did not leave the attract screen");
+
+    // And `one.game` then does nothing at all rather than starting a game
+    // nobody asked for.
+    run("make \"playing false");
+    set_mock_input("\x1b");
+    run("one.game");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":playing"), "the session started a game on its way out");
+}
+
+// Quitting a game is not losing one: only running out of tanks is worth a card.
+void test_game_over_prints_the_final_score(void)
+{
+    // A full table, so the score offered does not rank and ask for a name.
+    run("clear.scores");
+    for (int i = 1; i <= (int)num(":scores.top"); i++)
+    {
+        char expr[80];
+        snprintf(expr, sizeof(expr), "insert.score %d %d \"NAME%d", i, (11 - i) * 20000, i);
+        run(expr);
+    }
+
+    run("make \"score 12340  make \"kills 7");
+    mock_device_clear_output();
+    run("show.game.over");
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "GAME OVER"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "12340"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "TANKS KILLED: 7"), screen);
+    TEST_ASSERT_NULL_MESSAGE(strstr(screen, "A NEW HIGH SCORE"), screen);
+}
+
+// The field is typed with the keyboard the game is already polling rather than
+// through `readword`, so this drives it a character at a time.
+void test_a_name_is_typed_filtered_and_ended(void)
+{
+    set_mock_input("bl[a;i|r] 7\n");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("BLAIR7",
+                                     value_to_string(eval_string("read.name").value),
+                                     "the field let something through that must not reach the file");
+
+    // It stops at the field width rather than running past it.
+    set_mock_input("abcdefghijklmno\r");
+    TEST_ASSERT_EQUAL_STRING("ABCDEFGHIJ", value_to_string(eval_string("read.name").value));
+
+    // Backspace, including off the front of an empty field.
+    set_mock_input("ADZ\b\bDA\n");
+    TEST_ASSERT_EQUAL_STRING("ADA", value_to_string(eval_string("read.name").value));
+
+    // An empty name is filed under the default rather than as a blank line the
+    // table could not print.
+    set_mock_input("\b\b\n");
+    TEST_ASSERT_EQUAL_STRING("GUNNER", value_to_string(eval_string("read.name").value));
+}
+
+// A score that ranks asks for a name, files it, and SAVES -- and the file is
+// what the next attract screen reads.  `read.name` is stubbed because
+// `show.game.over` flushes the key ring before it reads, which is the guard
+// that stops the keypress that ended the game arriving as the first letter of
+// a name; the test above is what drives the real one.
+void test_a_ranking_score_is_filed_and_saved(void)
+{
+    proc_define_from_text("to read.name\noutput \"BLAIR\nend");
+    run("clear.scores  save.scores");
+    run("make \"score 25000  make \"kills 12");
+    mock_device_clear_output();
+    run("show.game.over");
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mock_device_get_output(), "A NEW HIGH SCORE"),
+                                 mock_device_get_output());
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(25000, item_of("hs.score", 1), "the score was not inserted");
+    TEST_ASSERT_EQUAL_STRING("BLAIR", value_to_string(eval_string("item 1 :hs.name").value));
+
+    run("clear.scores  load.scores");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(25000, item_of("hs.score", 1), "the score was not saved");
+}
+
+//--------------------------------------------------------------------------
+// The whole frame, with each of them in it
+//--------------------------------------------------------------------------
+
+// Whatever the pieces do separately they also do together, once per kind --
+// and the last one is the case the frame budget cares about, because it is the
+// one that both draws a model and carries a cracked screen.
+void test_a_frame_with_each_kind_runs(void)
+{
+    for (int k = 1; k <= 4; k++)
+    {
+        char msg[64];
+        new_game();
+        camera_at(800, 800, 0);
+        foe_at(k, 800, 1150, 180);
+        run("make \"paused false  pollkeys");
+
+        press_forward();
+        for (int i = 0; i < 60; i++)
+            run("play.frame");
+        release_forward();
+
+        snprintf(msg, sizeof(msg), "the workspace ran out with kind %d in the frame", k);
+        TEST_ASSERT_TRUE_MESSAGE(num("atoms") > 0, msg);
+        const float world = num(":world");
+        snprintf(msg, sizeof(msg), "kind %d left the plain", k);
+        TEST_ASSERT_TRUE_MESSAGE(num(":e.x") >= 0 && num(":e.x") < world, msg);
+        TEST_ASSERT_TRUE_MESSAGE(num(":e.z") >= 0 && num(":e.z") < world, msg);
+    }
+}
+
+// THE GLOBAL TABLE, AND THIS IS THE ONE A BOARD REPORTED.
+//
+// `MAX_GLOBAL_VARIABLES` is a hard cap shared by everything in the workspace,
+// and this game is the program that pushed it: §13's L0.5 buys a 1.31x faster
+// frame by putting every hot-path temporary in the flat global namespace, and
+// the bill comes due here.  M2 already stood at 189 of the old 192.
+//
+// WHAT MAKES IT DANGEROUS IS THAT THE PEAK IS INVISIBLE AT LOAD.  Fifty of the
+// names are minted the first time a procedure that uses them runs, not by a
+// top-level `make` -- every `p.` temporary in the two projections, the `mt.`
+// ones in the horizon, `tk.dx`/`tk.dz`/`tk.guard` in the collisions, `e.b` and
+// `e.d` in the hunt, `e.left` in `set.kind`.  So the file loads at 186, the
+// attract screen runs at 186, and the count only reaches its peak once a game
+// has actually been played.
+//
+// That gap is exactly what a Pico 2 W reported: on firmware built before the
+// cap went 192 -> 254 it loaded the file and showed the attract screen, then
+// failed with `Out of space in spawn.enemy` -- because `init.game` is where
+// the last few names are created and `spawn.enemy` is the procedure that
+// happens to be running when the table fills.  Nothing before that point can
+// tell you it is about to happen, which is why this test plays a game rather
+// than reading the source.
+//
+// The margin is a budget and not a coincidence.  A player's own program, a
+// startup file or a profiler loaded beside the game all come out of the same
+// table, so leaving slots free is the point rather than slack to be spent.
+#define GLOBAL_HEADROOM 16
+
+void test_the_game_fits_the_global_table_with_room_to_spare(void)
+{
+    const int at_load = var_global_count(true);
+
+    // Play, and play each kind, so that every procedure that mints a name has
+    // run at least once -- which is the only way to reach the peak.
+    for (int k = 1; k <= 4; k++)
+    {
+        new_game();
+        camera_at(800, 800, 0);
+        foe_at(k, 800, 1150, 180);
+        run("make \"paused false  pollkeys");
+        press(KEY_FIRE);
+        press_forward();
+        for (int i = 0; i < 30; i++)
+            run("play.frame");
+        release_forward();
+        release(KEY_FIRE);
+    }
+    run("make \"bm.x 0  make \"bm.y 40  crack.screen  draw.cracks");
+    run("engine  alarm  hit.player");
+
+    const int peak = var_global_count(true);
+
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "the peak is the same as the load-time count (%d) -- this test did not "
+             "reach the names that are minted at runtime", at_load);
+    TEST_ASSERT_TRUE_MESSAGE(peak > at_load, msg);
+
+    snprintf(msg, sizeof(msg),
+             "battlezone peaks at %d globals of %d, leaving %d -- under the %d this game "
+             "budgets for whatever else is in the workspace",
+             peak, MAX_GLOBAL_VARIABLES, MAX_GLOBAL_VARIABLES - peak, GLOBAL_HEADROOM);
+    TEST_ASSERT_TRUE_MESSAGE(peak <= MAX_GLOBAL_VARIABLES - GLOBAL_HEADROOM, msg);
+}
+
 void test_every_hot_path_temporary_is_prefixed(void)
 {
     static const char *const prefixes[] = {
         "p.", "ob.", "mt.", "tk.", "mn.", "hud.",
         // M2's four: the enemy, the two shells and the radar.  The explosion
         // shares `bm.`.
-        "e.", "sh.", "es.", "bm.", "rd.", NULL};
+        "e.", "sh.", "es.", "bm.", "rd.",
+        // M3's three: the sound, the cracked glass and the score table.
+        "au.", "cr.", "hs.", NULL};
     static const char *const state[] = {
         "px", "pz", "ph", "cs", "sn", "a", "b", "apx", "apy",
         "left.tread", "right.tread", "bumped", "paused", "quit",
         "frame.count", "frame.ms", "body.ms", "cpu.at", "cpu.was",
         "max.obstacles", "ox", "oz", "okind",
-        "kills", "hits", NULL};
+        "kills", "hits",
+        // M3's: what a player wins and loses, the two flags the loops read,
+        // and the two `clock` sets from the board's answer.
+        "score", "lives", "extra.due", "cracked", "playing", "leaving",
+        "fps", NULL};
+
+    // A name DECLARED LOCAL is exempt, and that is a strengthening of this
+    // test rather than a hole in it: the rule it enforces is "a temporary is
+    // prefixed or it is scoped", and `local` is the scoping.  M3 is where it
+    // starts to matter -- the score table, the name entry and the attract
+    // screen are not the frame loop, they run once a game, and L0.5's 1.5x on
+    // a local read buys nothing there against the safety of a name that
+    // cannot reach the camera.
+    char locals[64][64];
+    int local_count = 0;
 
     FILE *f = fopen(BATTLEZONE_SOURCE, "rb");
     TEST_ASSERT_NOT_NULL(f);
@@ -2107,10 +3338,23 @@ void test_every_hot_path_temporary_is_prefixed(void)
         while (*p == ' ' || *p == '\t') p++;
         if (*p == ';')
             continue;
-        if (!in_def && repl_line_starts_with_to(p)) { in_def = true; continue; }
+        if (!in_def && repl_line_starts_with_to(p)) { in_def = true; local_count = 0; continue; }
         if (in_def && repl_line_is_end(p)) { in_def = false; continue; }
         if (!in_def)
             continue;
+
+        for (char *m = strstr(p, "local \""); m; m = strstr(m + 1, "local \""))
+        {
+            if (local_count >= (int)(sizeof(locals) / sizeof(locals[0])))
+                break;
+            size_t n = 0;
+            for (char *q = m + 7; *q && (isalnum((unsigned char)*q) || *q == '.' || *q == '_') &&
+                                  n + 1 < sizeof(locals[0]); q++)
+                locals[local_count][n++] = *q;
+            locals[local_count][n] = '\0';
+            if (n > 0)
+                local_count++;
+        }
 
         // Every `make "name` in a procedure body, however deep in the line.
         for (char *m = strstr(p, "make \""); m; m = strstr(m + 1, "make \""))
@@ -2128,10 +3372,12 @@ void test_every_hot_path_temporary_is_prefixed(void)
                 ok = strncmp(name, prefixes[i], strlen(prefixes[i])) == 0;
             for (int i = 0; state[i] && !ok; i++)
                 ok = strcmp(name, state[i]) == 0;
+            for (int i = 0; i < local_count && !ok; i++)
+                ok = strcmp(name, locals[i]) == 0;
 
             char msg[160];
             snprintf(msg, sizeof(msg),
-                     "`make \"%s` is neither prefixed nor named game state -- see M0's `b`", name);
+                     "`make \"%s` is neither prefixed, declared local, nor named game state", name);
             TEST_ASSERT_TRUE_MESSAGE(ok, msg);
         }
     }
@@ -2142,32 +3388,26 @@ void test_every_hot_path_temporary_is_prefixed(void)
 int main(void)
 {
     UNITY_BEGIN();
-
     RUN_TEST(test_file_loads_and_sets_its_tuning);
     RUN_TEST(test_max_obstacles_is_a_constant_the_frame_reads);
-
     RUN_TEST(test_the_projection_is_right_at_a_heading_that_is_not_zero);
     RUN_TEST(test_turning_right_sweeps_the_world_to_the_left);
     RUN_TEST(test_an_object_behind_the_camera_is_culled);
     RUN_TEST(test_culling_is_conservative_at_the_near_plane);
     RUN_TEST(test_the_two_projections_agree_on_their_columns);
     RUN_TEST(test_the_near_plane_bounds_a_cube_to_about_one_screen);
-
     RUN_TEST(test_the_plain_wraps_in_the_arithmetic);
     RUN_TEST(test_the_far_plane_is_inside_the_wrap);
     RUN_TEST(test_driving_across_the_seam_keeps_the_camera_on_the_plain);
-
     RUN_TEST(test_a_cube_draws_twelve_edges);
     RUN_TEST(test_a_pyramid_draws_eight_edges);
     RUN_TEST(test_the_gunsight_is_a_fixed_overlay);
     RUN_TEST(test_no_part_of_the_gunsight_lies_along_the_horizon);
     RUN_TEST(test_the_sight_and_the_world_are_different_colours);
-
     RUN_TEST(test_the_field_is_on_the_plain_and_clear_of_the_start);
     RUN_TEST(test_the_frame_draws_no_more_than_max_obstacles);
     RUN_TEST(test_obstacles_behind_the_camera_do_not_crowd_out_the_one_in_front);
     RUN_TEST(test_an_obstacle_beyond_the_far_plane_is_not_drawn);
-
     RUN_TEST(test_the_ground_is_one_flat_line_at_the_horizon);
     RUN_TEST(test_the_horizon_cull_walks_only_the_visible_points);
     RUN_TEST(test_the_horizon_covers_the_whole_view_at_every_heading);
@@ -2176,25 +3416,19 @@ int main(void)
     RUN_TEST(test_the_horizon_maps_bearing_through_the_same_tangent_as_the_world);
     RUN_TEST(test_the_horizon_ignores_the_camera_position);
     RUN_TEST(test_the_moon_appears_only_when_it_is_in_view);
-
     RUN_TEST(test_each_key_drives_its_own_tread);
     RUN_TEST(test_one_key_arcs_and_two_keys_pivot);
     RUN_TEST(test_driving_forward_moves_along_the_heading);
-
     RUN_TEST(test_the_collision_radius_covers_the_near_plane);
     RUN_TEST(test_you_cannot_drive_close_enough_for_an_obstacle_to_vanish);
     RUN_TEST(test_a_blocked_tank_can_still_turn);
-
     RUN_TEST(test_a_frame_runs_and_draws_the_scene);
     RUN_TEST(test_a_long_run_of_frames_reclaims);
     RUN_TEST(test_a_paused_frame_neither_drives_nor_draws);
     RUN_TEST(test_quit_ends_the_loop);
-
     RUN_TEST(test_the_frame_timer_brackets_the_present);
     RUN_TEST(test_the_readout_is_averaged_over_a_second);
     RUN_TEST(test_the_readout_keeps_a_peak_not_an_average_of_peaks);
-
-    // M2 -- the enemy
     RUN_TEST(test_the_enemy_draws_thirteen_edges);
     RUN_TEST(test_the_gun_points_where_the_enemy_faces);
     RUN_TEST(test_the_enemy_hull_is_a_square_that_turns);
@@ -2203,10 +3437,7 @@ int main(void)
     RUN_TEST(test_the_enemy_thinks_on_one_frame_in_three);
     RUN_TEST(test_the_enemy_closes_and_then_holds_its_range);
     RUN_TEST(test_the_enemy_cannot_drive_through_an_obstacle);
-
     RUN_TEST(test_a_spawn_is_re_rolled_out_of_an_obstacle);
-
-    // M2 -- the shells
     RUN_TEST(test_the_shell_guards_clear_half_a_step);
     RUN_TEST(test_a_shell_flies_the_heading_it_was_fired_along);
     RUN_TEST(test_only_one_shell_is_in_the_air_at_a_time);
@@ -2217,13 +3448,9 @@ int main(void)
     RUN_TEST(test_the_enemy_cannot_park_where_it_cannot_miss);
     RUN_TEST(test_the_enemys_aim_varies_from_shot_to_shot);
     RUN_TEST(test_the_enemys_shell_hits_the_player_and_pauses_the_tank);
-
-    // M2 -- the explosion and the radar
     RUN_TEST(test_the_explosion_draws_its_fragments_and_runs_down);
     RUN_TEST(test_the_blip_is_the_enemy_in_the_camera_frame);
     RUN_TEST(test_the_radar_is_drawn_and_the_blip_is_inside_it);
-
-    // M2 -- the clock and the frame
     RUN_TEST(test_the_game_asks_for_the_fast_clock_and_reads_it_back);
     RUN_TEST(test_the_game_gives_the_clock_back_when_it_exits);
     RUN_TEST(test_the_exit_path_restores_the_clock);
@@ -2232,9 +3459,59 @@ int main(void)
     RUN_TEST(test_the_frame_moves_everything_before_it_draws_anything);
     RUN_TEST(test_the_tank_rescans_the_field_when_it_moves);
     RUN_TEST(test_the_entry_point_sets_the_game_up);
+    RUN_TEST(test_the_session_asks_for_the_clock_before_any_game);
     RUN_TEST(test_a_frame_with_an_enemy_and_shells_runs);
+    RUN_TEST(test_the_sequence_walks_the_ring_and_comes_back_round);
+    RUN_TEST(test_the_ring_carries_all_four_kinds);
+    RUN_TEST(test_every_kind_sets_a_whole_row);
+    RUN_TEST(test_each_kind_is_worth_its_arcade_score);
+    RUN_TEST(test_no_kind_that_shoots_can_park_where_it_cannot_miss);
+    RUN_TEST(test_a_supertank_outclasses_a_tank);
+    RUN_TEST(test_a_missile_closes_forever_and_never_fires);
+    RUN_TEST(test_a_missile_kills_by_arriving_and_dies_of_it);
+    RUN_TEST(test_a_missile_that_has_not_arrived_does_nothing);
+    RUN_TEST(test_a_missile_draws_four_edges);
+    RUN_TEST(test_a_missile_flies_at_eye_height);
+    RUN_TEST(test_a_saucer_drifts_and_does_not_hunt);
+    RUN_TEST(test_a_saucer_flies_over_the_obstacles);
+    RUN_TEST(test_a_saucer_leaves_when_its_dwell_runs_out);
+    RUN_TEST(test_a_saucer_draws_twelve_edges);
+    RUN_TEST(test_a_saucers_outline_does_not_turn_with_its_heading);
+    RUN_TEST(test_a_saucer_floats_above_the_horizon);
+    RUN_TEST(test_the_new_models_are_culled_at_the_near_plane);
+    RUN_TEST(test_the_frame_draws_the_model_that_matches_the_kind);
+    RUN_TEST(test_a_kill_scores_what_the_enemy_is_worth);
+    RUN_TEST(test_a_bonus_tank_arrives_on_stepping_over_the_boundary);
+    RUN_TEST(test_a_hit_costs_a_tank_and_cracks_the_glass);
+    RUN_TEST(test_the_pause_runs_out_into_a_new_tank_and_a_new_enemy);
+    RUN_TEST(test_a_ram_spawns_one_replacement_and_not_two);
+    RUN_TEST(test_the_last_tank_ends_the_game);
+    RUN_TEST(test_the_shatter_is_static_until_you_respawn);
+    RUN_TEST(test_every_crack_runs_in_two_strokes);
+    RUN_TEST(test_the_shatter_is_drawn_only_while_it_is_cracked);
+    RUN_TEST(test_the_timbres_are_set_for_every_pair);
+    RUN_TEST(test_the_engine_is_two_pairs_that_beat);
+    RUN_TEST(test_the_engine_pitch_follows_the_treads);
+    RUN_TEST(test_the_alarm_closes_its_gap_as_the_enemy_closes);
+    RUN_TEST(test_the_alarm_is_silent_for_what_is_behind_you);
+    RUN_TEST(test_the_cannon_and_the_explosions_are_noise_and_differ_in_pitch);
+    RUN_TEST(test_a_refused_clock_cuts_the_rate_and_nothing_else);
+    RUN_TEST(test_the_score_lists_are_as_long_as_the_table);
+    RUN_TEST(test_the_table_ranks_a_score_against_what_is_already_there);
+    RUN_TEST(test_inserting_a_score_slides_the_rest_down);
+    RUN_TEST(test_no_score_file_is_a_first_run_and_not_an_error);
+    RUN_TEST(test_the_table_round_trips_through_the_file);
+    RUN_TEST(test_the_name_field_filters_what_it_accepts);
+    RUN_TEST(test_the_attract_screen_prints_the_scores_and_the_keys);
+    RUN_TEST(test_the_attract_screen_says_so_with_no_scores);
+    RUN_TEST(test_h_shows_the_instructions_and_comes_back);
+    RUN_TEST(test_escape_leaves_the_attract_screen_and_the_session);
+    RUN_TEST(test_game_over_prints_the_final_score);
+    RUN_TEST(test_a_name_is_typed_filtered_and_ended);
+    RUN_TEST(test_a_ranking_score_is_filed_and_saved);
+    RUN_TEST(test_a_frame_with_each_kind_runs);
 
+    RUN_TEST(test_the_game_fits_the_global_table_with_room_to_spare);
     RUN_TEST(test_every_hot_path_temporary_is_prefixed);
-
     return UNITY_END();
 }
