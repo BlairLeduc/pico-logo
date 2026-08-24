@@ -64,7 +64,7 @@ extern "C" {
 // fattest game before it, is ~119.
 //
 // MEASURED, AND THE PEAK IS NOT THE LOAD-TIME COUNT: battlezone is 186
-// entries after `load` and 233 once a game has been played, because
+// entries after `load` and 229 once a game has been played, because
 // fifty of its names are minted the first time a procedure that uses
 // them runs rather than by a top-level `make`. A board reported exactly
 // that gap -- on firmware built at 192 the file loads and the attract

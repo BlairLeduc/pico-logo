@@ -1833,9 +1833,11 @@ void test_the_radar_is_drawn_and_the_blip_is_inside_it(void)
 void test_the_game_asks_for_the_fast_clock_and_reads_it_back(void)
 {
     set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
-    run("clock");
+    run("ignore clock");
     TEST_ASSERT_EQUAL_STRING("fast", value_to_string(eval_string(":cpu.at").value));
-    TEST_ASSERT_EQUAL_FLOAT(num(":fast.obstacles"), num(":max.obstacles"));
+    // Asked for on the HARDWARE and not just recorded: `hw.cpu` reads the board
+    // back, so a `cpu.at` of "fast without the clock having moved would mean the
+    // read was answering from memory.
     TEST_ASSERT_EQUAL_UINT32(LOGO_CPU_KHZ_FAST, mock_cpu_khz);
 }
 
@@ -1900,17 +1902,72 @@ void test_the_exit_path_restores_the_clock(void)
     TEST_ASSERT_TRUE_MESSAGE(restores, "battlezone exits without giving the clock back");
 }
 
-// A board with no settable clock has no `hw.cpu` either, so `cpu.at` stays
-// `unknown` and the readout says so beside the milliseconds it explains.  What
-// matters is that the density follows the answer and not the request.
-void test_a_board_that_refuses_the_clock_gets_the_smaller_field(void)
+// THE FAST CLOCK IS A PRECONDITION AND NOT A PREFERENCE, which is M3's decision
+// and it reverses M2's.  There was a fallback -- three obstacles to two -- and
+// M2 measured it: the peak frame goes 84.8 to 77.0 against a 66.7 ms budget,
+// still over by 10.3.  Getting the peak inside at 150 MHz needs the obstacle
+// field gone, which is not a game.  So `clock` now answers a question instead
+// of cutting the scene, and a board that says no gets a message.
+//
+// Both halves, because they are different failures: a board that HAS a settable
+// clock and refuses the value, and a board with no `hw.cpu` at all.  They
+// answer the same way here, which is the point -- the difference does not
+// matter to a game that cannot run either way.
+void test_the_fast_clock_is_a_precondition(void)
+{
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+    TEST_ASSERT_TRUE_MESSAGE(truth("clock"), "a board that takes the clock was refused a game");
+    TEST_ASSERT_EQUAL_STRING("fast", value_to_string(eval_string(":cpu.at").value));
+
+    set_mock_cpu_khz(false, LOGO_CPU_KHZ_NORMAL);
+    TEST_ASSERT_FALSE_MESSAGE(truth("clock"), "a board that refused the clock was given a game");
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+}
+
+// `fps` and `max.obstacles` are tuning numbers again, and nothing decides them
+// at startup.  While the fallback existed they were things `clock` WROTE, which
+// is what stopped either being readable as a constant -- every per-frame number
+// in the file had to be argued against a rate that might move underneath it.
+void test_the_clock_does_not_write_the_tuning(void)
+{
+    const float fps = num(":fps");
+    const float objects = num(":max.obstacles");
+
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+    run("ignore clock");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(fps, num(":fps"), "`clock` wrote the frame rate");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(objects, num(":max.obstacles"),
+                                    "`clock` wrote the object cap");
+
+    set_mock_cpu_khz(false, LOGO_CPU_KHZ_NORMAL);
+    run("ignore clock");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(fps, num(":fps"), "a refused clock cut the frame rate");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(objects, num(":max.obstacles"),
+                                    "a refused clock cut the object cap");
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+}
+
+// A refused board gets the reason and no game, and the reason has a NUMBER in
+// it: this refuses because 84.8 ms was measured against 66.7, and somebody
+// reading the message should be able to tell it was measured rather than
+// assumed.  The message also has to survive the tail's `textscreen ct`, which
+// is why `no.clock` runs after the clear rather than instead of the game --
+// a `ct` inside it would wipe what it had just printed.
+void test_a_refused_board_is_told_why_and_gets_no_game(void)
 {
     set_mock_cpu_khz(false, LOGO_CPU_KHZ_NORMAL);
-    run("clock");
-    TEST_ASSERT_EQUAL_STRING("unknown", value_to_string(eval_string(":cpu.at").value));
-    TEST_ASSERT_EQUAL_FLOAT(num(":slow.obstacles"), num(":max.obstacles"));
-    TEST_ASSERT_TRUE_MESSAGE(num(":slow.obstacles") < num(":fast.obstacles"),
-                             "the refusal cut nothing");
+    proc_define_from_text("to one.game\nmake \"played true\nend");
+    run("make \"played false");
+
+    mock_device_clear_output();
+    run("battlezone");
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_FALSE_MESSAGE(truth(":played"), "a board that cannot run the frame was given a game");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "300 MHz"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "84.8"), screen);
+    TEST_ASSERT_NULL_MESSAGE(strstr(screen, "Battlezone M3"), screen);
+
     set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
 }
 
@@ -2076,7 +2133,7 @@ void test_the_session_asks_for_the_clock_before_any_game(void)
         ran++;
     }
     fclose(f);
-    TEST_ASSERT_TRUE_MESSAGE(ran >= 3, "the session's body was not found");
+    TEST_ASSERT_TRUE_MESSAGE(ran >= 2, "the session's body was not found");
 
     TEST_ASSERT_EQUAL_STRING_MESSAGE("fast", value_to_string(eval_string(":cpu.at").value),
                                      "the session did not ask for the clock");
@@ -2913,44 +2970,6 @@ void test_the_cannon_and_the_explosions_are_noise_and_differ_in_pitch(void)
 }
 
 //--------------------------------------------------------------------------
-// The refused clock, and the rate
-//--------------------------------------------------------------------------
-
-// M2 measured the fallback and found two obstacles at 150 MHz still over by
-// 10.3 ms on the peak frame; design section 16.6 left the rate cut to M3 and it
-// is taken.  What this pins is that NOTHING ELSE MOVES with it.  Every constant
-// in the file spelled "a frame" is per frame, so moving only `fps` runs the
-// whole game at 0.8x uniformly and a player cannot see a proportion that has
-// not changed -- while re-cutting the two the player's hands touch would give a
-// tank that turns at full speed with shells that fly a fifth slower, which is
-// section 16.6.2's complaint backwards.
-void test_a_refused_clock_cuts_the_rate_and_nothing_else(void)
-{
-    run("clock");
-    TEST_ASSERT_EQUAL_STRING("fast", value_to_string(eval_string(":cpu.at").value));
-    const float fast_fps = num(":fps");
-    const float turn = num(":turn.rate"), step = num(":tread.step");
-    const float sh_step = num(":sh.step"), sh_frames = num(":sh.frames");
-    const float spin = num(":rd.spin"), boom = num(":boom.frames");
-
-    set_mock_cpu_khz(false, LOGO_CPU_KHZ_NORMAL);
-    run("clock");
-    TEST_ASSERT_TRUE_MESSAGE(num(":fps") < fast_fps, "a refused clock did not cut the rate");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":slow.fps"), num(":fps"), "the cut rate is not `slow.fps`");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":slow.obstacles"), num(":max.obstacles"),
-                                    "a refused clock did not cut the field");
-
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(turn, num(":turn.rate"), "the turn rate moved with `fps`");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(step, num(":tread.step"), "the tread step moved with `fps`");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(sh_step, num(":sh.step"), "the shell speed moved with `fps`");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(sh_frames, num(":sh.frames"), "the shell life moved with `fps`");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(spin, num(":rd.spin"), "the radar spin moved with `fps`");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(boom, num(":boom.frames"), "the explosion moved with `fps`");
-
-    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
-}
-
-//--------------------------------------------------------------------------
 // The high score table
 //--------------------------------------------------------------------------
 
@@ -3454,7 +3473,9 @@ int main(void)
     RUN_TEST(test_the_game_asks_for_the_fast_clock_and_reads_it_back);
     RUN_TEST(test_the_game_gives_the_clock_back_when_it_exits);
     RUN_TEST(test_the_exit_path_restores_the_clock);
-    RUN_TEST(test_a_board_that_refuses_the_clock_gets_the_smaller_field);
+    RUN_TEST(test_the_fast_clock_is_a_precondition);
+    RUN_TEST(test_the_clock_does_not_write_the_tuning);
+    RUN_TEST(test_a_refused_board_is_told_why_and_gets_no_game);
     RUN_TEST(test_the_hoisted_field_is_wrapped_about_the_camera);
     RUN_TEST(test_the_frame_moves_everything_before_it_draws_anything);
     RUN_TEST(test_the_tank_rescans_the_field_when_it_moves);
@@ -3495,7 +3516,6 @@ int main(void)
     RUN_TEST(test_the_alarm_closes_its_gap_as_the_enemy_closes);
     RUN_TEST(test_the_alarm_is_silent_for_what_is_behind_you);
     RUN_TEST(test_the_cannon_and_the_explosions_are_noise_and_differ_in_pitch);
-    RUN_TEST(test_a_refused_clock_cuts_the_rate_and_nothing_else);
     RUN_TEST(test_the_score_lists_are_as_long_as_the_table);
     RUN_TEST(test_the_table_ranks_a_score_against_what_is_already_there);
     RUN_TEST(test_inserting_a_score_slides_the_rest_down);

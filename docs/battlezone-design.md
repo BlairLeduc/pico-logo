@@ -1125,6 +1125,12 @@ Cut from the arcade, with the reason:
 Two gameplay levers held in reserve for M0, priced at §12's rates: **visible
 obstacles 3 → 2** (−2.2 ms) and **horizon points 32 → 20** (−1.5 ms).
 
+**Neither is a stock-clock fallback any more (§16.7.3).** M2 measured the first
+one in that role and it does not close the gap — two obstacles at 150 MHz is a
+peak frame of 77.0 against 66.7 — so M3 removed the fallback and made the fast
+clock a precondition instead. Both levers survive as what they were priced as:
+things **M4** may spend, on a board that has already taken the clock.
+
 ## 15. Memory
 
 The rule P11 §14 established holds: **a frame allocates**, and the contract is
@@ -1650,10 +1656,13 @@ frame:
 **Which is why M2 asks for the clock.** 69.4 is over 66.7 and 43.0 is under it
 with 24 ms to spare, so the overclock is this milestone's enabling condition and
 not a luxury — exactly as §12.3.1b predicted it would be for *something*, and
-this is the something. `battlezone` now calls `hw.setcpu "fast`, reads `hw.cpu`
-**back**, and cuts `max.obstacles` from three to two if the board refused, which
-is §14's held-in-reserve lever and is worth 7.3 ms at stock. The readout carries
-the answer next to the milliseconds it explains.
+this is the something. `battlezone` calls `hw.setcpu "fast` and reads `hw.cpu`
+**back**, and at M2 it cut `max.obstacles` from three to two if the board
+refused — §14's held-in-reserve lever, worth 7.3 ms at stock. The readout
+carries the answer next to the milliseconds it explains.
+
+*(The cut is gone. M2's own measurement below showed it does not close the gap,
+and M3 removed the fallback and made the clock a precondition — §16.7.3.)*
 
 **Five things M2 settled that this document had left open, guessed at, or got
 wrong.**
@@ -1825,7 +1834,10 @@ without re-cutting them.
 over 66.7. Getting the *peak* inside 66.7 at 150 MHz needs the obstacle field
 gone entirely, which is not a game. What does fit is a **rate** cut on that path
 — two obstacles at 12 fps is 77.0 against 83.3, in hand by 6.3 — and that is a
-decision rather than a measurement, so it is recorded here and left to M3. It is
+decision rather than a measurement, so it is recorded here and left to M3.
+**M3's answer was to delete the path rather than tune it (§16.7.3)**: a game on a
+board that cannot draw its frame is not a goal, and a 12 fps variant is a
+different game kept alive for a board nobody has. It is
 a contingency and not the main path: every board this game has run on has taken
 the clock.
 
@@ -1901,7 +1913,7 @@ table, sound.
 `logo/games/battlezone` is the game now rather than the engine: three tanks, the
 arcade's score table, the four enemies on a ring, the shattered periscope, an
 attract screen with ten high scores kept in `/games/battlezone.scores`, and the
-four sounds §11 asked for. **124 host tests, 84/84 ctest green**, and all three
+four sounds §11 asked for. **125 host tests, 84/84 ctest green**, and all three
 presets link.
 
 **What M3 costs the frame is almost nothing, and that is the point of having
@@ -1980,24 +1992,38 @@ puts 297 · tan 7° = 36.5 steps against a 30 box. The test drives all four kind
 and requires at least two guns, so a third gun kind cannot be added without
 meeting it.
 
-#### 16.7.3 The refused-clock rate cut is taken, and nothing else moves with it
+#### 16.7.3 The fallback is gone: the fast clock is a precondition
 
-§16.6 measured the fallback and found it does not work — two obstacles at 150 MHz
-is a peak frame of 77.0 against 66.7, still over by 10.3 — and left the rate cut
-to M3 as "a decision rather than a measurement". **Taken: `slow.fps` is 12, and
-two obstacles at 12 fps is 77.0 against 83.3, in hand by 6.3.**
+§16.6 measured the refused-clock fallback and found it does not work — two
+obstacles at 150 MHz is a peak frame of 77.0 against 66.7, still over by 10.3 —
+and left "a rate cut to 12 fps would fit it" to M3 as a decision rather than a
+measurement. M3 first took it, then **removed the whole path**, which is the
+better reading of the same measurement: *getting a game onto a board that cannot
+draw its frame is not a goal.*
 
-The interesting half is what *did not* move. §16.6.2 says `turn.rate` and
-`tread.step` are per frame and cannot be read without `fps`, which reads like an
-instruction to re-cut them at 12. It is the opposite. **Every** constant in the
-file spelled "a frame" is per frame — the treads, the turn, both shells' speed
-and life, the enemy's step and its reload, the radar's spin, the explosion — so
-moving only `fps` runs the whole game at **0.8×, uniformly**, and a player
-cannot see a proportion that has not changed. Re-cutting the two the player's
-hands touch is what would break it: a tank turning and driving at full speed
-while every shell in the air flies a fifth slower is §16.6.2's complaint
-backwards. The fallback is two numbers and the rest of the file does not know
-about it, and the test names every constant that must not have moved.
+**Only one thing ever runs this game, and it is 300 MHz.** At 150 the worst frame
+is 84.8 ms against 66.7 — P11 M2's failure with a different name on it — and no
+arrangement of the two levers rescues it. Two obstacles is still over by 10.3.
+Getting the *peak* inside at stock needs the obstacle field gone entirely, which
+is not a game. And 12 fps with two obstacles, which does fit, is a different and
+slower game maintained for a board nobody has: every board this has run on took
+the clock.
+
+So `clock` **answers a question instead of cutting the scene**. It asks, reads
+`hw.cpu` back — the hardware and not the request, so a refusal cannot report an
+overclock that bought nothing — and outputs whether this board can play. A board
+that says no gets a message with the measurement in it rather than a game.
+
+**What the fallback cost while it existed was not its four constants.** It was
+that `fps` and `max.obstacles` became things `clock` *wrote*, so neither could be
+read as a tuning number, and every per-frame constant in the file had to be
+argued against a rate that might move underneath it at startup. §16.6.2's caution
+— that `turn.rate` and `tread.step` are per frame and cannot be read without
+`fps` — was true and unusable while `fps` was decided by the board. Both are
+plain constants again, `test_the_clock_does_not_write_the_tuning` pins that, and
+**M4 is the only thing that turns either**.
+
+It is also 4 globals back, which against §16.7.4's 25-slot margin is not nothing.
 
 #### 16.7.4 The interpreter ran out of globals, and this game is why
 
@@ -2019,7 +2045,7 @@ slot + 1 in a `uint8_t`, and a static assert pins it.
 
 **The number that matters is the peak and not the load-time count**, and the
 difference between them is what a board reported. Battlezone is **186 entries
-after `load` and 233 once a game has been played**: fifty of its names — every
+after `load` and 229 once a game has been played**: fifty of its names — every
 `p.` temporary in the three projections, the `mt.` ones in the horizon,
 `tk.dx`/`tk.dz`/`tk.guard` in the collisions, `e.b` and `e.d` in the hunt,
 `e.left` in `set.kind` — are minted the first time a procedure that uses them
@@ -2033,7 +2059,7 @@ Reproduced on the host by building the suite at 192: load 186, attract 186,
 
 `test_the_game_fits_the_global_table_with_room_to_spare` therefore **plays a
 game** rather than reading the source, and asserts the peak against a stated
-budget of 16 free slots. 233 of 254 leaves 21, so it passes by 5 — and that
+budget of 16 free slots. 229 of 254 leaves 25, so it passes by 9 — and that
 margin is a budget rather than slack: a player's own program, a startup file or
 a profiler loaded beside the game all come out of the same table.
 
@@ -2091,7 +2117,7 @@ material and none of them is a number.
 ## 17. Tests
 
 `tests/test_battlezone.c` on the mock device, mirroring `test_asteroids.c`'s
-shape. **38 at M1's close; 73 at M2's; 124 at M3's.** The ones that are specific
+shape. **38 at M1's close; 73 at M2's; 125 at M3's.** The ones that are specific
 to this game:
 
 - **The projection is right.** Known camera, known world point, known screen
@@ -2164,8 +2190,11 @@ M3's additions, and the failure each exists for:
 - **A bonus tank arrives on stepping over the boundary.** A 5,000-point saucer
   can carry a score from 14,000 to 19,000 without ever equalling 15,000, which
   is what a `remainder` would miss.
-- **A refused clock cuts the rate and nothing else.** §16.7.3's decision, with
-  every per-frame constant that must not have moved named in the test.
+- **The fast clock is a precondition, and a refused board is told why.** Three
+  tests: `clock` answers true and false for the two boards; it writes neither
+  `fps` nor `max.obstacles` on either path, which is what makes both readable as
+  tuning numbers again; and a refused board gets the message and **no game**,
+  checked by stubbing `one.game` and asserting it never ran.
 - **The session asks for the clock before any game.** M2 asked once per game;
   M3 asks once per session, because ESC now returns to an attract screen and a
   fourth game should not pay for a wireless bus teardown again.
