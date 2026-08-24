@@ -4,9 +4,14 @@
 ;   load "battlezone
 ;   battlezone
 ;
-; 1/Q drive the left tread, 0/P the
-; right, ] fires, space pauses, ESC
-; quits to the attract screen.
+; ARROWS drive and steer, or 1/Q and
+; 0/P drive one tread each -- `C` on the
+; attract screen picks which. SPACE
+; fires, Z pauses and ESC quits to the
+; attract screen, in both schemes,
+; because a control you press without
+; thinking should not depend on a menu
+; you set once.
 ;
 ; The attract screen carries the top ten
 ; scores, kept beside this file in
@@ -1009,6 +1014,12 @@ make "p.ty 0
 
 make "left.tread 0
 make "right.tread 0
+; Which steering scheme is live. Chosen
+; on the attract screen and kept for the
+; session; the arrows are the default
+; because they are the ones a player
+; asked for.
+make "arrows true
 make "bumped false
 make "paused false
 make "quit false
@@ -1907,13 +1918,75 @@ end
 ; last. Nothing has to clamp, because no
 ; tread is ever the sum of two keys --
 ; `clamp1` went with the arrows.
+; TWO SCHEMES, AND THE PLAYER PICKS.
+; M2 replaced the arrows with one key
+; per tread and said that retired the
+; question of which feels better. It
+; did not: it answered it for one
+; player. A tank's controls are the
+; thing people disagree about hardest,
+; so both ship and `C` on the attract
+; screen chooses.
+;
+; The keys that are not steering do NOT
+; move with the scheme -- SPACE fires, Z
+; pauses, ESC quits, in both. A control
+; you press without thinking should not
+; depend on a menu you set once.
 to treads
+  if :arrows [arrow.treads stop]
   make "left.tread 0
   if keydown? 49 [make "left.tread 1]
   if keydown? 113 [make "left.tread -1]
   make "right.tread 0
   if keydown? 48 [make "right.tread 1]
   if keydown? 112 [make "right.tread -1]
+end
+
+; A forward intent and a turn intent
+; summed into the pair, which is a
+; steering wheel wearing a tank's
+; controls -- and that is exactly what
+; some hands want. Up and down drive,
+; left and right turn, and holding one
+; of each is a one-tread arc because the
+; sum clamps.
+;
+; THE CLAMP IS THE WHOLE OF IT. Forward
+; and right is left 2, right 0, and a
+; tread only has three states; without
+; the clamp the tank would drive at
+; double speed whenever it turned.
+;
+; `tk.r` AND `tk.s` ARE BORROWED, not
+; new. `step.tank` writes both the
+; moment this returns -- `tk.r` from the
+; tread difference and `tk.s` from the
+; sum -- so their values here cannot
+; outlive the call, and this file is
+; seventeen global slots from its
+; ceiling (design section 16.7.4).
+to arrow.treads
+  make "tk.r 0
+  if keydown? 181 [make "tk.r 1]
+  if keydown? 182 [make "tk.r -1]
+  make "tk.s 0
+  if keydown? 180 [make "tk.s -1]
+  if keydown? 183 [make "tk.s 1]
+  make "left.tread :tk.r + :tk.s
+  if :left.tread > 1 [
+    make "left.tread 1
+  ]
+  if -1 > :left.tread [
+    make "left.tread -1
+  ]
+  make "right.tread :tk.r - :tk.s
+  if :right.tread > 1 [
+    make "right.tread 1
+  ]
+  if -1 > :right.tread [
+    make "right.tread -1
+  ]
 end
 
 ; The collision radius follows the near
@@ -3548,7 +3621,7 @@ end
 ; the defect both shipped shooters had.
 to poll.input
   pollkeys
-  if keyhit? 32 [
+  if keyhit? 122 [
     make "paused not :paused
     stop
   ]
@@ -3557,6 +3630,7 @@ to poll.input
     make "quit true
     make "playing false
   ]
+  if keyhit? 32 [fire]
   if keyhit? 93 [fire]
 end
 
@@ -4151,6 +4225,12 @@ to attract.screen
     make "k wait.for.key
     if 72 = :k [show.instructions]
     if 104 = :k [show.instructions]
+    if 67 = :k [
+      make "arrows not :arrows
+    ]
+    if 99 = :k [
+      make "arrows not :arrows
+    ]
     if 27 = :k [
       make "leaving true
       stop
@@ -4178,10 +4258,16 @@ to draw.attract
       show.entry repcount (7 + repcount)
     ]
   ]
-  setcursor [10 28]
+  setcursor [10 27]
   print "|Press Space to play|
-  setcursor [9 29]
+  setcursor [9 28]
   print "|or H for instructions|
+  setcursor [7 30]
+  ifelse :arrows [
+    print "|C  steering: ARROWS|
+  ] [
+    print "|C  steering: TREADS|
+  ]
 end
 
 ; One line of the table in three
@@ -4233,12 +4319,14 @@ to show.instructions
   print "|Hide behind the obstacles|
   setcursor [3 22]
   print "|An extra tank every 15000|
-  setcursor [2 25]
-  print "|1 Q  left tread fwd / back|
-  setcursor [2 26]
-  print "|0 P  right tread fwd / back|
+  setcursor [2 24]
+  print "|ARROWS  drive and steer|
+  setcursor [5 25]
+  print "|or one key a tread:|
+  setcursor [5 26]
+  print "|1 Q left, 0 P right|
   setcursor [2 27]
-  print "|]  Fire   SPACE  Pause|
+  print "|SPACE Fire   Z Pause|
   setcursor [2 28]
   print "|ESC  Quit to this screen|
   setcursor [13 30]

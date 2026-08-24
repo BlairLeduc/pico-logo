@@ -2349,6 +2349,41 @@ of the *bottom* of the turret, level with the hull top, because `e.bt`/`e.bb`
 were cut from `e.te`. They now straddle the turret's mid-height, which is where a
 gun comes out of a tank.
 
+#### 16.8.2 Two steering schemes, and the keys that do not move with them
+
+*"I need a better control scheme."* M2 replaced the arrows with one key per
+tread and wrote that it **retired** the M4 question of whether a direct key pair
+feels better. It did not retire it — it answered it for one player. A tank's
+controls are the thing people disagree about hardest, so both ship and **`C` on
+the attract screen chooses**.
+
+| | | |
+|---|---|---|
+| **arrows** (default) | ↑↓ drive, ←→ turn | a forward intent and a turn intent summed into the pair |
+| **treads** | 1/Q left, 0/P right | one key per tread per direction, M2's |
+
+**The clamp is the whole of the arrow scheme.** Forward *and* right sums to left
+2, right 0, and a tread has three states — without it the tank would drive at
+double speed whenever it turned. `clamp1` existed for exactly this, went with the
+arrows at M2, and comes back inline (six statements, no call, no local).
+
+**It costs one global, not three.** `tk.r` and `tk.s` are *borrowed* for the two
+intents: `step.tank` writes both the moment `treads` returns — `tk.r` from the
+tread difference and `tk.s` from the sum — so their values here cannot outlive
+the call. Only `arrows` is new, which matters at 237 of 254 (§16.7.4).
+
+**And the keys that are not steering no longer move with the scheme.** SPACE
+fires, **Z** pauses, ESC quits, in both. Space was the pause key and `]` the fire
+key, which is a fine layout for hands already on 1/Q and 0/P and a strange one
+for hands on the arrows. *A control you press without thinking should not depend
+on a menu you set once.* `]` is kept as a second fire key because it is where a
+right hand on 0/P already is.
+
+`test_fire_pause_and_quit_are_the_same_in_both_schemes` drives all three under
+both settings rather than under the default, which is the only way that claim is
+worth making. The steering is **session state** — `init.game` does not touch it,
+so a new game keeps it, and a test says so.
+
 **M4 — tuning.** Played, then cut.
 
 ## 17. Tests

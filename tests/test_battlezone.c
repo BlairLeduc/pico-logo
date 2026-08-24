@@ -92,9 +92,15 @@
 #define KEY_LBACK  113 // 'q'
 #define KEY_RFWD    48 // '0'
 #define KEY_RBACK  112 // 'p'
-#define KEY_FIRE    93 // ']'
-#define KEY_PAUSE   32 // space
+#define KEY_FIRE    32 // space -- fires in BOTH schemes
+#define KEY_FIRE2   93 // ']'   -- the tread scheme's right-hand alternative
+#define KEY_PAUSE  122 // 'z'
 #define KEY_QUIT   177 // escape
+// The arrow scheme, which `C` on the attract screen selects.
+#define KEY_UP     181
+#define KEY_DOWN   182
+#define KEY_LEFT   180
+#define KEY_RIGHT  183
 
 // Load a whole Logo file, defining its procedures and running its top-level
 // tuning `make`s.  Procedure definitions are not handled by the bare evaluator,
@@ -167,6 +173,12 @@ void setUp(void)
     // pieces directly, so they need it too or the default `wrap` folds every
     // off-screen point back onto the far side.
     run_string("window");
+    // Two steering schemes ship and the player picks (`C` on the attract
+    // screen).  The arrows are the default; the suite below drives the tread
+    // keys, so it selects that scheme here and the arrow tests turn it back on
+    // for themselves.  `init.game` does not touch it -- it is session state
+    // rather than per-game state, which is what makes pinning it here sound.
+    run_string("make \"arrows false");
 }
 
 void tearDown(void)
@@ -1075,6 +1087,167 @@ void test_driving_forward_moves_along_the_heading(void)
 // other way round, so the two can never disagree.  The near cull drops an
 // object when any column comes inside `near`, and the nearest column of an
 // axis-aligned cube is at most half*sqrt2 in front of its centre.
+// TWO STEERING SCHEMES, AND THE PLAYER PICKS.  M2 replaced the arrows with one
+// key per tread and said that retired the question of which feels better.  It
+// did not -- it answered it for one player, and a board asked for the choice
+// back.  So both ship.
+//
+// The arrows are a forward intent and a turn intent summed into the pair, which
+// is a steering wheel wearing a tank's controls.  What this checks is the sum,
+// because the sum is the whole of the scheme.
+void test_the_arrows_drive_and_steer(void)
+{
+    run("make \"arrows true");
+
+    press(KEY_UP);
+    run("pollkeys  treads");
+    release(KEY_UP);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":left.tread"), "up did not drive");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":right.tread"), "up did not drive");
+
+    press(KEY_DOWN);
+    run("pollkeys  treads");
+    release(KEY_DOWN);
+    TEST_ASSERT_EQUAL_FLOAT(-1, num(":left.tread"));
+    TEST_ASSERT_EQUAL_FLOAT(-1, num(":right.tread"));
+
+    // Turning right is a pivot: the left tread forward and the right one back.
+    // The sign is the physical one -- a tank whose RIGHT tread runs forward
+    // pivots LEFT -- so a clockwise turn needs left > right.
+    press(KEY_RIGHT);
+    run("pollkeys  treads");
+    release(KEY_RIGHT);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":left.tread"), "right did not pivot right");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-1, num(":right.tread"), "right did not pivot right");
+
+    press(KEY_LEFT);
+    run("pollkeys  treads");
+    release(KEY_LEFT);
+    TEST_ASSERT_EQUAL_FLOAT(-1, num(":left.tread"));
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":right.tread"));
+}
+
+// THE CLAMP IS THE WHOLE OF THE SCHEME.  Forward and right sums to left 2,
+// right 0, and a tread has three states; without the clamp the tank would drive
+// at DOUBLE SPEED whenever it turned.  `clamp1` existed for this, went with the
+// arrows at M2, and comes back inline.
+void test_the_arrow_sum_clamps_to_one_tread(void)
+{
+    run("make \"arrows true");
+
+    press(KEY_UP);
+    press(KEY_RIGHT);
+    run("pollkeys  treads");
+    release(KEY_UP);
+    release(KEY_RIGHT);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":left.tread"),
+                                    "forward and right drove the left tread past its stop");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":right.tread"),
+                                    "forward and right is a one-tread arc");
+
+    // And the same going backwards, which is the half a one-sided clamp misses.
+    press(KEY_DOWN);
+    press(KEY_LEFT);
+    run("pollkeys  treads");
+    release(KEY_DOWN);
+    release(KEY_LEFT);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-1, num(":left.tread"), "the clamp is one-sided");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":right.tread"), "the clamp is one-sided");
+}
+
+// Each scheme answers only its own keys, or a player would be driving with both
+// at once and the tread keys would fight the arrows.
+void test_each_scheme_ignores_the_other_scheme_s_keys(void)
+{
+    run("make \"arrows true");
+    press(KEY_LFWD);
+    press(KEY_RFWD);
+    run("pollkeys  treads");
+    release(KEY_LFWD);
+    release(KEY_RFWD);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":left.tread"), "a tread key drove the arrow scheme");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":right.tread"), "a tread key drove the arrow scheme");
+
+    run("make \"arrows false");
+    press(KEY_UP);
+    run("pollkeys  treads");
+    release(KEY_UP);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":left.tread"), "an arrow drove the tread scheme");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":right.tread"), "an arrow drove the tread scheme");
+}
+
+// SPACE, Z AND ESC DO NOT MOVE WITH THE SCHEME.  A control you press without
+// thinking should not depend on a menu you set once, so all three are checked
+// under both schemes rather than under the default one.
+void test_fire_pause_and_quit_are_the_same_in_both_schemes(void)
+{
+    for (int arrows = 0; arrows <= 1; arrows++)
+    {
+        char msg[80];
+        run(arrows ? "make \"arrows true" : "make \"arrows false");
+        new_game();
+        run("make \"paused false  make \"quit false  make \"sh.on false  pollkeys");
+
+        press(KEY_FIRE);
+        run("play.frame");
+        release(KEY_FIRE);
+        snprintf(msg, sizeof(msg), "space did not fire with arrows %d", arrows);
+        TEST_ASSERT_TRUE_MESSAGE(truth(":sh.on"), msg);
+
+        press(KEY_PAUSE);
+        run("play.frame");
+        release(KEY_PAUSE);
+        snprintf(msg, sizeof(msg), "z did not pause with arrows %d", arrows);
+        TEST_ASSERT_TRUE_MESSAGE(truth(":paused"), msg);
+
+        press(KEY_PAUSE);
+        run("play.frame");
+        release(KEY_PAUSE);
+        TEST_ASSERT_FALSE_MESSAGE(truth(":paused"), "z did not unpause");
+
+        press(KEY_QUIT);
+        run("play.frame");
+        release(KEY_QUIT);
+        snprintf(msg, sizeof(msg), "escape did not quit with arrows %d", arrows);
+        TEST_ASSERT_TRUE_MESSAGE(truth(":quit"), msg);
+        TEST_ASSERT_FALSE_MESSAGE(truth(":playing"), msg);
+    }
+
+    // `]` still fires as well, which is the key a right hand on 0/P can reach.
+    run("make \"arrows false");
+    new_game();
+    run("make \"sh.on false  pollkeys");
+    press(KEY_FIRE2);
+    run("play.frame");
+    release(KEY_FIRE2);
+    TEST_ASSERT_TRUE_MESSAGE(truth(":sh.on"), "] no longer fires");
+}
+
+// The choice is made on the attract screen and it is SESSION state: `init.game`
+// must not reset it, or every new game would throw the setting away.
+void test_the_attract_screen_picks_the_steering(void)
+{
+    run("make \"arrows false");
+    mock_device_clear_output();
+    set_mock_input("c ");                 // toggle, then space to play
+    run("make \"leaving false  attract.screen");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":arrows"), "C did not change the steering");
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "TREADS"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "ARROWS"), screen);
+
+    // Upper case too, and it toggles back.
+    set_mock_input("C ");
+    run("attract.screen");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":arrows"), "shifted C did not change the steering");
+
+    // And a new game keeps it.
+    run("make \"arrows true");
+    new_game();
+    TEST_ASSERT_TRUE_MESSAGE(truth(":arrows"), "starting a game threw the steering away");
+}
+
 void test_the_collision_radius_covers_the_near_plane(void)
 {
     const float near = num(":near");
@@ -3248,7 +3421,9 @@ void test_h_shows_the_instructions_and_comes_back(void)
     const char *screen = mock_device_get_output();
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Tank       1000"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Saucer     5000"), screen);
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "left tread"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "ARROWS"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "1 Q left, 0 P right"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "SPACE Fire   Z Pause"), screen);
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "Press any key"), screen);
     // and it came back: the prompt is redrawn after the instructions.
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(strstr(screen, "Press any key"),
@@ -3456,7 +3631,7 @@ void test_every_hot_path_temporary_is_prefixed(void)
         // M3's: what a player wins and loses, the two flags the loops read,
         // and the two `clock` sets from the board's answer.
         "score", "lives", "extra.due", "cracked", "playing", "leaving",
-        "fps", NULL};
+        "fps", "arrows", NULL};
 
     // A name DECLARED LOCAL is exempt, and that is a strengthening of this
     // test rather than a hole in it: the rule it enforces is "a temporary is
@@ -3562,6 +3737,12 @@ int main(void)
     RUN_TEST(test_each_key_drives_its_own_tread);
     RUN_TEST(test_one_key_arcs_and_two_keys_pivot);
     RUN_TEST(test_driving_forward_moves_along_the_heading);
+    RUN_TEST(test_the_arrows_drive_and_steer);
+    RUN_TEST(test_the_arrow_sum_clamps_to_one_tread);
+    RUN_TEST(test_each_scheme_ignores_the_other_scheme_s_keys);
+    RUN_TEST(test_fire_pause_and_quit_are_the_same_in_both_schemes);
+    RUN_TEST(test_the_attract_screen_picks_the_steering);
+
     RUN_TEST(test_the_collision_radius_covers_the_near_plane);
     RUN_TEST(test_you_cannot_drive_close_enough_for_an_obstacle_to_vanish);
     RUN_TEST(test_a_blocked_tank_can_still_turn);
