@@ -757,11 +757,17 @@ make "tk.hit 30
 ; Half-width of the shell cube, and the
 ; height its axis flies at -- written by
 ; whichever of the two is being drawn.
-; 5 is small enough that the cube reads
-; as a round rather than a crate, and
-; big enough to grow visibly as it
-; closes.
-make "sh.r 5
+;
+; It was 5 and a board said halve it: a
+; 10-step round is a crate next to a
+; 28-step tank, and the thing a shell
+; has to do is grow as it closes rather
+; than be big. 2.5 still reads at the
+; far plane -- 260 * 2.5 / 700 is about
+; two pixels -- and at 100 steps it is
+; thirteen, which is the range where
+; reading it matters.
+make "sh.r 2.5
 make "sh.y 0
 
 ;--------------------------------------

@@ -2271,7 +2271,11 @@ whose ring is wider than its body has them by construction, and separate fin
 spikes would have wanted four more divides and four more `cx` slots than exist.
 
 **A shell is a cube**, which is the largest single item here: two in the air is
-24 edges where it was 2. The dash was defended on the grounds that a shell has no
+24 edges where it was 2. Its half-width is **2.5** — it was 5 and a board said
+halve it, because a 10-step round is a crate next to a 28-step tank. What a shell
+has to do is *grow* as it closes rather than be big: 2.5 is about two pixels at
+the far plane and thirteen at 100 steps, which is the range where reading it
+matters. The dash was defended on the grounds that a shell has no
 size worth transforming; it has, up close, and **a round coming at you is the one
 object in this game whose range you most need to read**. A dash gives you nothing
 to judge it by and a cube grows. It is axis-aligned to the *world* rather than to
