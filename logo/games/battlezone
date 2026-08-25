@@ -241,25 +241,37 @@
 ;   the camera constant of that name on
 ;   a board.
 ;
-; * `near` IS CUT FOR EDGE LENGTH, NOT
-;   FOR THE SINGULARITY (design section
-;   9). An edge costs 0.35 us a step on
-;   a Plus 2 W and 0.98 on a Pico 2 W,
-;   so drawing cost is proportional to
-;   how much screen the edges cover, and
-;   what governs that is the near plane:
-;   projected size goes as k*h/z, so
-;   `near` 8 would put a 40-step cube
-;   1,300 steps tall -- four screens --
-;   and a dozen of its edges would be
-;   most of a frame. At `near` 60 a cube
-;   tops out at 173 steps, which is one
-;   screen. THE COLLISION RADIUS THEN
-;   FOLLOWS THE NEAR PLANE rather than
-;   the other way round, so the two can
-;   never disagree and you can never get
-;   close enough to an obstacle for it
-;   to fill the view.
+; * NOTHING IS CULLED FOR BEING CLOSE
+;   (B59, design section 9). An object
+;   goes only when its bounding circle
+;   is outside the VIEW CONE -- one
+;   comparison that covers left, right
+;   and behind at once -- and a vertex
+;   that arrives inside the near plane
+;   is FLOORED at `zmin` rather than
+;   taken as a reason to drop the object
+;   it belongs to. A straight line in
+;   the world is straight on the screen,
+;   so an edge with one vertex off the
+;   glass is already right and `window`
+;   clips it; the only thing the
+;   projection cannot survive is a z at
+;   or behind the eye, and the floor is
+;   what makes one unreachable.
+;
+; * WHAT THAT COSTS IS EDGE LENGTH, and
+;   it is the number to watch. An edge
+;   costs 0.35 us a step on a Plus 2 W
+;   and 0.98 on a Pico 2 W, so drawing
+;   cost is proportional to how much
+;   screen the edges cover and projected
+;   size goes as k*h/z. The old cull
+;   bounded that at `near`, one screen
+;   for a cube; the floor bounds it at
+;   `zmin`, three. What keeps the frame
+;   honest is that only ONE object can
+;   be that close, and that most of what
+;   it draws is off the glass.
 ;
 ; * THERE IS NO OBJECT CAP, and the
 ;   clock is why. Overclocking (design
@@ -290,7 +302,11 @@
 ; out-of-bounds pixels one at a time, so
 ; a line from x = -209 to x = 40 draws
 ; its visible half and costs the rest
-; only in loop iterations.
+; only in loop iterations. THAT IS WHAT
+; B59 IS BUILT ON -- an edge with one
+; end off the glass needs no clipper and
+; no cull, only a projection that stays
+; finite at both ends.
 ;
 ; `splitscreen`, AND IT IS WORTH 8.05
 ; ms. `screen_gfx_blit_dirty` stops at
@@ -374,9 +390,13 @@ make "k 260
 make "eye 12
 make "hz 40
 
-; Nearer than `near` and the object is
-; culled WHOLE; further than `far` and
-; it is not drawn at all.
+; `near` NO LONGER CULLS ANYTHING (B59,
+; section 9). What is left of it is the
+; distance inside which a projection
+; needs a floor under it, so it is the
+; gate on `floor.cols` and nothing else.
+; `far` is the radar's face and nothing
+; else: `rd.sc` is `rd.r` / `far`.
 make "near 60
 make "far 700
 
@@ -430,6 +450,48 @@ make "boxh 40
 make "pyrh 56
 make "boxe :boxh - :eye
 make "pyre :pyrh - :eye
+
+; THE VIEW CONE, AND IT IS THE ONLY
+; THING THAT CULLS AN OBJECT (section
+; 9). A point is off the glass when abs
+; x exceeds `vw` * z, so a whole object
+; goes only when its BOUNDING CIRCLE is
+; past that -- and a z behind the eye
+; fails the same comparison, which is
+; why ONE test covers left, right and
+; behind.
+;
+; `vw` is the screen half-width over
+; `k`, so it moves when the field of
+; view does. THE MARGIN IS WRITTEN 48
+; AND NOT NAMED, and that is the global
+; table rather than taste: this file
+; peaks 16 slots from the ceiling and a
+; third name would spend the last one.
+; 48 is the widest object in the game --
+; a supertank measured to the end of its
+; barrel, 40.3 steps -- times root one
+; plus vw squared, because the test
+; measures across the cone's face and
+; not across x. Every other object is
+; smaller, so 48 draws a few of them a
+; little further off the glass than it
+; had to, and `window` throws those
+; away.
+make "vw 160 / :k
+
+; THE PROJECTION'S FLOOR, and it is what
+; took over the near cull's other job.
+; Nothing is dropped for being close any
+; more, so a vertex CAN arrive inside
+; the near plane -- and one behind the
+; eye would swing through infinity and
+; come back on the wrong side of the
+; screen. 20 steps is inside the tank
+; you are sitting in: k / 20 is 13, so a
+; vertex floored there is already
+; hundreds of pixels off the glass.
+make "zmin 20
 
 ; Degrees a frame per unit of tread
 ; difference, and turtle steps a frame
@@ -1605,27 +1667,96 @@ end
 ; touches the frame walk.
 ;
 ; Outputs `true` if the object is
-; drawable and `false` if ANY column is
-; inside the near plane -- any, not all:
-; one corner behind you swings the
-; projection through infinity and throws
-; a line across the whole screen
-; (section 9). It is wrong in exactly
-; one visible way, that an obstacle you
-; are pressed against vanishes rather
-; than filling the view, and `blocked?`
-; is what makes that unreachable.
+; drawable and `false` ONLY IF NOTHING
+; OF IT CAN REACH THE GLASS -- its
+; bounding circle outside the view cone,
+; or the whole of it nearer than the
+; floor. THAT IS B59 AND IT IS THE WHOLE
+; OF THE FIX (2026-08-25). This used to
+; drop the object when ANY column came
+; inside the near plane, and defended it
+; with `coll.r`: the guard is `near`
+; plus half*root two, so no corner could
+; reach the plane. THE GUARD BOUNDS A
+; DISTANCE AND THE CULL COMPARED A
+; CAMERA-FRAME z, and d * cos(bearing)
+; is not d. Fifteen degrees off the nose
+; was enough: a cube you were scraping
+; past went whole with half of it still
+; on the screen, and an enemy went at
+; about 80 steps when `e.range` drives
+; it to 38.
+;
+; WHAT MAKES DROPPING THE CULL SAFE is
+; that a straight line in the world is a
+; straight line on the screen, so an
+; edge with one vertex off the glass is
+; already right: `window` clips it per
+; pixel and the off-screen half costs
+; loop iterations and nothing else
+; (section 9). The only thing a
+; projection cannot survive is a z at or
+; behind the eye, and `near.floor` is
+; what makes one unreachable.
+
+; THE RARE PATH, and it is a procedure
+; rather than six statements in each
+; projection because it runs for the one
+; object a frame you are close enough to
+; touch. Every column that has come
+; inside `zmin` is pushed out to it, so
+; the divides below stay finite and stay
+; on the right side of the screen.
+;
+; THE CENTRE IS THE ONE THING IT WILL
+; NOT FLOOR: outputs `true` -- reject --
+; when `p.zc` itself has come inside,
+; which is an object inside the tank you
+; are sitting in and the only thing left
+; that nearness can cull. That is also
+; what leaves `p.zc` safe to divide by
+; below, which the pyramid's apex and
+; both spindles do.
+;
+; THE GATE IS `near` AND NOT `zmin`,
+; because this has to run whenever a
+; COLUMN could be inside the floor and a
+; column sits at most half*root two --
+; or a hull's diagonal, or a fin -- in
+; front of the centre. 60 clears all of
+; them with room, and the two statements
+; it saves on every other object are the
+; whole reason it is a gate.
+;
+; A FLOORED COLUMN IS IN THE WRONG PLACE
+; AND THAT IS THE TRADE. It lands nearer
+; the middle of the screen than it
+; should, so an obstacle you are inside
+; is drawn slightly narrower than it is.
+; With `coll.r` 90 and the view cone
+; above, an obstacle's columns never get
+; below 29 steps and this never fires
+; for one at all -- it is the enemy
+; driving into your face (`e.range` 38)
+; that reaches it.
+to near.floor
+  if :zmin > :p.zc [output "true]
+  if :zmin > :p.z1 [make "p.z1 :zmin]
+  if :zmin > :p.z2 [make "p.z2 :zmin]
+  if :zmin > :p.z3 [make "p.z3 :zmin]
+  if :zmin > :p.z4 [make "p.z4 :zmin]
+  output "false
+end
+
 to project.box
-  make "p.xc :p.dx * :cs - :p.dz * :sn
   make "p.zc :p.dz * :cs + :p.dx * :sn
+  make "p.xc :p.dx * :cs - :p.dz * :sn
+  if (abs :p.xc) > :vw * :p.zc + 48 [output "false]
   make "p.z1 :p.zc + :a + :b
   make "p.z2 :p.zc - :a + :b
   make "p.z3 :p.zc - :a - :b
   make "p.z4 :p.zc + :a - :b
-  if :near > :p.z1 [output "false]
-  if :near > :p.z2 [output "false]
-  if :near > :p.z3 [output "false]
-  if :near > :p.z4 [output "false]
+  if :near > :p.zc [if near.floor [output "false]]
   make "p.xa :p.xc + :a
   make "p.xb :p.xc - :a
   make "p.iz :k / :p.z1
@@ -1664,16 +1795,14 @@ end
 ; projections-agree test is what keeps
 ; the copy honest.
 to project.pyr
-  make "p.xc :p.dx * :cs - :p.dz * :sn
   make "p.zc :p.dz * :cs + :p.dx * :sn
+  make "p.xc :p.dx * :cs - :p.dz * :sn
+  if (abs :p.xc) > :vw * :p.zc + 48 [output "false]
   make "p.z1 :p.zc + :a + :b
   make "p.z2 :p.zc - :a + :b
   make "p.z3 :p.zc - :a - :b
   make "p.z4 :p.zc + :a - :b
-  if :near > :p.z1 [output "false]
-  if :near > :p.z2 [output "false]
-  if :near > :p.z3 [output "false]
-  if :near > :p.z4 [output "false]
+  if :near > :p.zc [if near.floor [output "false]]
   make "p.xa :p.xc + :a
   make "p.xb :p.xc - :a
   make "p.iz :k / :p.z1
@@ -1787,12 +1916,14 @@ end
 ; change here and the only one.
 ;
 ; THERE IS NO FAR CULL AND NO CAP, and
-; M6 is where both went. Everything in
-; the view is drawn; the only rejection
-; left is `project.box`'s near one,
-; which exists because this file has no
-; clipper (design section 9) rather than
-; because of a budget.
+; M6 is where both went. THERE IS NO
+; NEAR CULL EITHER since B59. Everything
+; in the view is drawn, and the only
+; rejection left is `project.box`'s view
+; cone, which exists because a line off
+; the glass still costs its length in
+; loop iterations (design section 9)
+; rather than because of a budget.
 ;
 ; WHAT PAID FOR IT WAS THE CLOCK. Design
 ; section 12.3.1b measured the closed
@@ -1830,7 +1961,8 @@ end
 ;
 ; The rejected projection is still paid
 ; for and that is still fine: it
-; early-outs after six statements and
+; early-outs after THREE statements --
+; two rotations and the cone test -- and
 ; the table is eight entries long, so
 ; the work is bounded by `ob.count`.
 to draw.field
@@ -2308,19 +2440,26 @@ to arrow.treads
   ]
 end
 
-; The collision radius follows the near
-; plane (section 9) rather than the
-; other way round: the near cull drops
-; an object when ANY of its columns
-; comes inside `near`, and the nearest
-; column of an axis-aligned cube sits at
-; most half*sqrt2 = 28.3 steps in front
-; of its centre, so a centre-distance
-; guard of near + 28.3 fires before the
-; cull ever can. `coll.r` 90 is that
-; number rounded up. The
-; collision-radius test is what stops
-; the two drifting apart.
+; `coll.r` 90 IS NEAR + HALF*ROOT TWO
+; AND THAT ARGUMENT IS RETIRED. It was
+; cut so that a centre-distance guard of
+; `near` + 28.3 would fire before the
+; near cull could drop a cube you were
+; driving at -- and it does not, because
+; the guard bounds a DISTANCE and the
+; cull compared a camera-frame z. Off
+; the nose the two are d and d *
+; cos(bearing), and no radius closes
+; that gap. B59 is what it cost and
+; section 9 is where the cull went.
+;
+; The number stays where it is because
+; it is the right SIZE for a tank beside
+; a cube -- 90 steps between centres of
+; a 40-step box and a 28-step tank
+; leaves about 20 steps of daylight --
+; and nothing downstream depends on it
+; any more.
 ;
 ; A square test rather than a round one,
 ; because it is one comparison an axis
@@ -2475,20 +2614,19 @@ end
 ; never zero, and never negative.
 
 to project.enemy
+  make "p.zc :e.zc
+  if (abs :e.xc) > :vw * :p.zc + 48 [output "false]
   make "p.fx :e.hw * :e.es
   make "p.fz :e.hw * :e.ec
   make "p.px :p.fx * :cs - :p.fz * :sn
   make "p.pz :p.fz * :cs + :p.fx * :sn
-  make "p.za :e.zc + :p.pz
-  make "p.zb :e.zc - :p.pz
+  make "p.za :p.zc + :p.pz
+  make "p.zb :p.zc - :p.pz
   make "p.z1 :p.za - :p.px
   make "p.z2 :p.za + :p.px
   make "p.z3 :p.zb + :p.px
   make "p.z4 :p.zb - :p.px
-  if :near > :p.z1 [output "false]
-  if :near > :p.z2 [output "false]
-  if :near > :p.z3 [output "false]
-  if :near > :p.z4 [output "false]
+  if :near > :p.zc [if near.floor [output "false]]
   make "p.xa :e.xc + :p.px
   make "p.xb :e.xc - :p.px
   make "p.iz :k / :p.z1
@@ -2553,8 +2691,10 @@ to turret.columns
   make "p.fz :e.tw * :e.ec
   make "p.px :p.fx * :cs - :p.fz * :sn
   make "p.pz :p.fz * :cs + :p.fx * :sn
-  make "p.za :e.zc + :p.pz
-  make "p.zb :e.zc - :p.pz
+  make "p.za :p.zc + :p.pz
+  make "p.zb :p.zc - :p.pz
+  if :zmin > :p.za [make "p.za :zmin]
+  if :zmin > :p.zb [make "p.zb :zmin]
   make "p.xa :e.xc + :p.px
   make "p.xb :e.xc - :p.px
   make "p.iz :k / (:p.za - :p.px)
@@ -2600,12 +2740,13 @@ to barrel.columns
   make "p.qx :p.fx * :cs - :p.fz * :sn
   make "p.qz :p.fz * :cs + :p.fx * :sn
   make "p.xa :e.xc + :p.px
-  make "p.za :e.zc + :p.pz
-  make "p.iz :k / (:e.zc - :p.qx)
+  make "p.za :p.zc + :p.pz
+  if :zmin > :p.za [make "p.za :zmin]
+  make "p.iz :k / (:p.zc - :p.qx)
   .setitem 1 :cx (:e.xc + :p.qz) * :p.iz
   .setitem 1 :cy1 :hz + :e.bb * :p.iz
   .setitem 1 :cy2 :hz + :e.bt * :p.iz
-  make "p.iz :k / (:e.zc + :p.qx)
+  make "p.iz :k / (:p.zc + :p.qx)
   .setitem 2 :cx (:e.xc - :p.qz) * :p.iz
   .setitem 2 :cy1 :hz + :e.bb * :p.iz
   .setitem 2 :cy2 :hz + :e.bt * :p.iz
@@ -2714,6 +2855,8 @@ end
 ; gunsight. That is the shot you have to
 ; take or dodge.
 to project.missile
+  make "p.zc :e.zc
+  if (abs :e.xc) > :vw * :p.zc + 48 [output "false]
   make "p.fx :ms.ln * :e.es
   make "p.fz :ms.ln * :e.ec
   make "p.px :p.fx * :cs - :p.fz * :sn
@@ -2722,14 +2865,11 @@ to project.missile
   make "p.fz :ms.fin * :e.ec
   make "p.za :p.fx * :cs - :p.fz * :sn
   make "p.zb :p.fz * :cs + :p.fx * :sn
-  make "p.z1 :e.zc + :p.pz
-  make "p.z2 :e.zc - :p.pz
-  make "p.z3 :e.zc - :p.za
-  make "p.z4 :e.zc + :p.za
-  if :near > :p.z1 [output "false]
-  if :near > :p.z2 [output "false]
-  if :near > :p.z3 [output "false]
-  if :near > :p.z4 [output "false]
+  make "p.z1 :p.zc + :p.pz
+  make "p.z2 :p.zc - :p.pz
+  make "p.z3 :p.zc - :p.za
+  make "p.z4 :p.zc + :p.za
+  if :near > :p.zc [if near.floor [output "false]]
   make "p.iz :k / :p.z1
   make "apx (:e.xc + :p.px) * :p.iz
   make "apy :hz
@@ -2742,7 +2882,7 @@ to project.missile
   make "p.iz :k / :p.z4
   .setitem 3 :cx (:e.xc - :p.zb) * :p.iz
   .setitem 3 :cy1 :hz
-  make "p.iz :k / :e.zc
+  make "p.iz :k / :p.zc
   .setitem 2 :cx :e.xc * :p.iz
   .setitem 2 :cy1 :hz + :ms.fin * :p.iz
   .setitem 4 :cx :e.xc * :p.iz
@@ -2792,16 +2932,15 @@ end
 ; them: four cull tests cover all six
 ; vertices.
 to project.saucer
+  make "p.zc :e.zc
+  if (abs :e.xc) > :vw * :p.zc + 48 [output "false]
   make "p.px :sc.r * :cs
   make "p.pz :sc.r * :sn
-  make "p.z1 :e.zc + :p.pz
-  make "p.z2 :e.zc + :p.px
-  make "p.z3 :e.zc - :p.pz
-  make "p.z4 :e.zc - :p.px
-  if :near > :p.z1 [output "false]
-  if :near > :p.z2 [output "false]
-  if :near > :p.z3 [output "false]
-  if :near > :p.z4 [output "false]
+  make "p.z1 :p.zc + :p.pz
+  make "p.z2 :p.zc + :p.px
+  make "p.z3 :p.zc - :p.pz
+  make "p.z4 :p.zc - :p.px
+  if :near > :p.zc [if near.floor [output "false]]
   make "p.iz :k / :p.z1
   .setitem 1 :cx (:e.xc + :p.px) * :p.iz
   .setitem 1 :cy1 :hz + :sc.y * :p.iz
@@ -2814,7 +2953,7 @@ to project.saucer
   make "p.iz :k / :p.z4
   .setitem 4 :cx (:e.xc + :p.pz) * :p.iz
   .setitem 4 :cy1 :hz + :sc.y * :p.iz
-  make "p.iz :k / :e.zc
+  make "p.iz :k / :p.zc
   make "apx :e.xc * :p.iz
   make "apy :hz + :sc.a * :p.iz
   make "p.tx :apx
@@ -4109,7 +4248,7 @@ end
 
 to draw.shell
   make "p.zc :sh.dz * :cs + :sh.dx * :sn
-  if :near > :p.zc [stop]
+  if :zmin > :p.zc [stop]
   make "p.xc :sh.dx * :cs - :sh.dz * :sn
   make "sh.y 0
   make "p.px :sh.vx * :cs - :sh.vz * :sn
@@ -4120,7 +4259,7 @@ end
 
 to draw.eshell
   make "p.zc :es.dz * :cs + :es.dx * :sn
-  if :near > :p.zc [stop]
+  if :zmin > :p.zc [stop]
   make "p.xc :es.dx * :cs - :es.dz * :sn
   make "sh.y :es.y
   make "p.px :es.vx * :cs - :es.vz * :sn
@@ -4165,7 +4304,7 @@ to kill.enemy
   (sound [3 7] 3200 220 12)
   add.score :e.pts
   make "bm.n 0
-  if :near > :e.zc [stop]
+  if :zmin > :e.zc [stop]
   make "p.iz :k / :e.zc
   make "bm.x :e.xc * :p.iz
   make "bm.y :hz + :e.te * :p.iz

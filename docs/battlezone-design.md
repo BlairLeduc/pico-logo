@@ -572,34 +572,106 @@ that the table's density is bounded by this line item at about 40 points**, and
 a range that needs more detail than that wants §19.1's tilemap rather than more
 Logo statements.
 
-## 9. Near culling replaces clipping
+## 9. The view cone culls; a floor replaces clipping
 
-An object is drawn if **every** column has `zc > near`, and skipped otherwise.
-Not "any column" — one corner behind you is enough to swing the projection
-through infinity and throw a line across the whole screen.
+An object is drawn unless **nothing of it can reach the glass**: its bounding
+circle outside the view cone, or the whole of it nearer than `zmin`. A vertex
+that arrives inside the near plane is **floored**, not a reason to drop the
+object it belongs to.
 
-This is wrong in exactly one visible way: an obstacle you are pressed against
-vanishes rather than filling the view. The arcade prevents it with collision,
-this game prevents it the same way, and the near plane sits just outside the
-tank's own collision radius so the two can never disagree.
+**This section used to say the opposite, and B59 is what that cost.** The rule
+was "every column must have `zc > near`, not any" — one corner behind you swings
+the projection through infinity and throws a line across the screen, so drop the
+lot. The defence was the collision radius: `coll.r` 90 is `near` + half·√2, so no
+corner can reach the plane.
 
-**M0 gives the near plane a second job, and it is the binding one.** An edge
-costs 0.35 µs a step on a Plus 2 W and **0.98 on a Pico 2 W** (§10), so a
-frame's drawing cost is proportional to how much screen its edges cover — and
-what governs that is the near plane, because projected size goes as `k·h/z`. At
-`near` = 8 a 40-step box projects 1,300 steps tall, four screens, and a dozen of
-its edges at 0.98 µs a step is most of a frame.
+**The guard bounds a distance and the cull compared a camera-frame `z`.** Off the
+nose the two are `d` and `d·cos(bearing)`, and no radius closes that gap. Fifteen
+degrees off was enough — a cube 91 steps out on one axis and 30 on the other has
+its centre at `z` = 85.6 and its near column at 57.3, so it went whole with two
+of its four columns still on the glass. **The enemy had it worse:** `e.range` is
+38, the cabinet's tank drives into your face, and the cull dropped it at about
+80 steps — so the tank that killed you was not on the screen when it did. Same
+for a missile aimed at your eye, which `tk.hit` lets reach 30.
 
-So `near` is cut for **edge length**, not for the singularity: at `near` = 60 a
-box tops out at 173 steps, which is one screen and about 170 µs an edge on the
-slower board. The collision radius then follows the near plane rather than the
-other way round, which is the same relationship the arcade had — you cannot get
-close enough to an obstacle for it to fill the view.
+**What makes dropping the cull safe is that perspective maps a straight line to
+a straight line.** An edge whose far end is off the glass is *already correct*:
+its two projected endpoints are right, the segment between them is right, and
+`window` clips the rest per pixel (§9 below). No clipper is needed and no cull
+is needed. The only thing the projection cannot survive is a `z` at or behind
+the eye, and that wants a floor, not a cull.
+
+**So `near` 60 keeps one job and loses the other.** It is now purely the gate on
+the rare path — `if :near > :p.zc [if near.floor [output "false]]` — because a
+centre further out than 60 cannot have a column inside 20. `near.floor` pushes
+every column that came inside `zmin` = 20 out to it and rejects only when the
+*centre* is inside, which is an object inside the tank you are sitting in.
+
+**`zmin` = 20 is cut so that it never fires for an obstacle at all.** With
+`coll.r` 90 and the cone test, an obstacle's nearest column cannot get below
+about 29 steps; the floor is there for the enemy driving into your face and for
+a saucer you flew under. A floored column lands nearer the middle of the screen
+than it should, so an object you are inside is drawn slightly narrow — the trade
+is that it is drawn at all.
+
+### 9.1 The cone test
+
+One comparison per object:
+
+```
+if (abs :p.xc) > :vw * :p.zc + 48 [output "false]
+```
+
+`vw` is the screen half-width over `k`, so a point is off the glass when
+`|x| > vw·z`. The margin is the object's bounding radius times √(1 + vw²),
+because the test measures across the cone's face rather than across `x`. **A `z`
+behind the eye fails the same comparison**, which is why one test covers left,
+right and behind — and why there is no separate "behind the camera" cull any
+more.
+
+**48 is written and not named**, which is the global table and not taste: the
+file peaks 16 slots from the ceiling of 254 and a third new name would spend the
+last one. It is the widest object in the game — a supertank measured to the end
+of its barrel, 40.3 steps — so every other object is culled a little later than
+it strictly had to be, and `window` throws that away.
+
+**This is a cull for cost, not for correctness.** `screen_gfx_line` iterates the
+whole span and skips the out-of-bounds pixels, so an object 400 steps out to the
+side costs its full projected length in loop iterations while drawing nothing.
+Per-edge visibility tests would recover the rest of it and are not worth having:
+two statements an edge over twelve edges is ~1.3 ms an object at 53 µs a
+statement, against the ~4 ms a *whole* worst-case object costs to draw.
+
+### 9.2 What the floor costs in edge length
+
+**M0 gave the near plane a second job and it was the binding one.** An edge costs
+0.35 µs a step on a Plus 2 W and **0.98 on a Pico 2 W** (§10), so a frame's
+drawing cost is proportional to how much screen its edges cover — and what
+governed that was the near plane, because projected size goes as `k·h/z`. At
+`near` = 60 a 40-step box topped out at 173 steps, one screen, about 170 µs an
+edge on the slower board.
+
+**The floor takes that job over at a third of the leverage.** A column can now
+reach `zmin` = 20, so the same box tops out at 520 steps — three screens — and
+its verticals cost about 500 µs each on a Pico 2 W. What keeps the frame honest
+is that only *one* object can be that close, that `coll.r` keeps an obstacle's
+columns above about 29 in practice, and that most of what a close object draws is
+off the glass and skipped per pixel.
+
+**Worst case measured off the geometry rather than a board:** an obstacle scraped
+at the edge of the view (centre `z` = 58, `x` = 69) draws about 4,200 pixels of
+edge, ~4 ms on a Pico 2 W against ~1.9 ms for the same cube at the old near
+plane. §12's `25.32 + 3.223 n` has about 12 ms of headroom at nine objects, so
+the spike fits; it wants confirming on a board, and §19 carries it.
+
+### 9.3 `window`, which is what the whole of §9 rests on
 
 Lateral clipping needs nothing: `window` lets the turtle leave the screen and
 `screen_gfx_line` skips out-of-bounds pixels per pixel
 ([screen.c:759](../devices/picocalc/screen.c#L759)), so a line from `x = -209`
 to `x = 40` draws its visible half and costs the rest only in loop iterations.
+**That is what B59 is built on** — an edge with one end off the glass needs no
+clipper and no cull, only a projection that stays finite at both ends.
 **`wrap` would be a disaster here** — a wireframe that wrapped would smear
 across the screen — so the game sets `window` at startup and never changes it.
 

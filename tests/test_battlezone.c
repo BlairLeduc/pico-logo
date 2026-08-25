@@ -20,9 +20,11 @@
 //      invisible until you turn, and it survives every test that only drives
 //      forward.  So the projection is checked against coordinates computed by
 //      hand, at a heading that is not zero.
-//    * Culling is conservative -- ANY column inside the near plane, not all.
-//      The "any" version is the one that swings the projection through infinity
-//      and throws a line across the whole screen.
+//    * Nothing is culled for being CLOSE (B59).  An object goes only when its
+//      bounding circle is outside the view cone, and a vertex that arrives
+//      inside the near plane is floored rather than dropped -- because the
+//      thing that swings a projection through infinity is a z at or behind the
+//      eye, and a floor is enough to stop that.
 //    * The plain wraps in the ARITHMETIC and not only in the drawing.  B19 is
 //      the precedent: Asteroids got the picture right and the comparison wrong
 //      and shipped it that way.
@@ -435,21 +437,161 @@ void test_an_object_behind_the_camera_is_culled(void)
     TEST_ASSERT_FALSE(project("project.box", 0, -400));
 }
 
-// Design section 17: culling is conservative.  ANY column inside the near plane
-// and the object goes, because one corner behind you swings the projection
-// through infinity and throws a line across the whole screen.  Both halves,
-// because it is the "any" version that is load-bearing.
-void test_culling_is_conservative_at_the_near_plane(void)
+// Design section 9: NOTHING IS CULLED FOR BEING CLOSE any more.  The near plane
+// dropped an object the moment a column crossed it; what replaces it is a floor
+// under the projection, so a column that crosses is projected from `zmin`
+// instead of being a reason to throw the object away.
+void test_nothing_is_culled_for_being_close(void)
 {
     camera_at(0, 0, 0);
     const float near = num(":near");
     const float half = num(":half");
+    const float zmin = num(":zmin");
 
-    // Entirely in front: the nearest column is `half` beyond the near plane.
-    TEST_ASSERT_TRUE(project("project.box", 0, near + half + 1.0f));
+    // Straddling the plane: the centre in front of it, the near face behind.
+    // This is the case the old cull dropped and the one B59 was reported for.
+    TEST_ASSERT_TRUE(project("project.box", 0, near + half - 1.0f));
 
-    // Straddling it: the centre is in front but the near face is not.
-    TEST_ASSERT_FALSE(project("project.box", 0, near + half - 1.0f));
+    // And wholly inside it.  A cube 30 steps away fills the view, which is what
+    // a cube 30 steps away should do; `coll.r` is what stops you getting there.
+    TEST_ASSERT_TRUE(project("project.box", 0, near * 0.5f));
+
+    // The floor is the only thing left, and it is inside your own tank.
+    TEST_ASSERT_FALSE(project("project.box", 0, zmin - 1.0f));
+    TEST_ASSERT_FALSE(project("project.box", 0, -400));
+}
+
+// The other half of it: a column that came inside the plane is projected from
+// `zmin`, so every screen coordinate stays finite and stays on the side of the
+// screen the column is really on.  A negative z is what throws a line across
+// the whole view, and this is what makes one unreachable.
+void test_a_column_inside_the_near_plane_is_floored(void)
+{
+    camera_at(0, 0, 0);
+    const float zmin = num(":zmin");
+    const float k = num(":k");
+    const float half = num(":half");
+
+    // Centre at 30, so the near pair of columns sits at 10 -- inside the floor.
+    TEST_ASSERT_TRUE(project("project.box", 0, 30.0f));
+
+    // Nothing is projected from nearer than the floor, so nothing is further
+    // out than `k` * half / zmin, and the two columns on each side keep their
+    // signs.  Without the floor the near pair would divide by 10 and land at
+    // twice this.
+    const float bound = k * half / zmin;
+    for (int i = 1; i <= 4; i++)
+    {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "column %d projected from inside the floor", i);
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(item_of("cx", i)) <= bound + 0.5f, msg);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(item_of("cx", 1) > 0 && item_of("cx", 4) < 0,
+                             "a floored column changed sides");
+}
+
+// The cone test's margin is WRITTEN 48 AND NOT NAMED, because the file peaks 16
+// slots from the global ceiling and a third name would spend the last one
+// (design section 9.1).  So this is what stops it drifting away from the object
+// it was cut for: it has to cover the widest thing in the game -- a supertank
+// measured to the end of its barrel -- times root one plus vw squared, because
+// the test measures across the cone's face and not across x.  Under that and
+// the cone culls something with a vertex still on the glass, which is B59
+// coming back in a shape no cull test would name.
+void test_the_view_cone_margin_covers_every_object(void)
+{
+    const float vw = num(":vw");
+    const float face = sqrtf(1.0f + vw * vw);
+    camera_at(800, 800, 0);
+
+    // An obstacle is the corner of a `half` square, at any camera heading.
+    TEST_ASSERT_TRUE_MESSAGE(48.0f >= num(":half") * sqrtf(2.0f) * face,
+                             "the view cone can cull a visible obstacle");
+
+    // A tank and a supertank reach to the end of the barrel, which is `e.bl`
+    // 2.2 hulls out and so is over the hull's own diagonal.  These are the two
+    // that 48 was cut for.
+    for (int kind = 1; kind <= 3; kind += 2)
+    {
+        foe_at(kind, 800, 1150, 0);
+        char msg[96];
+        snprintf(msg, sizeof(msg), "the view cone can cull a visible enemy of kind %d", kind);
+        TEST_ASSERT_TRUE_MESSAGE(48.0f >= (num(":e.bl") + num(":e.bw")) * face, msg);
+        TEST_ASSERT_TRUE_MESSAGE(num(":e.bl") + num(":e.bw") >= num(":e.hw") * sqrtf(2.0f), msg);
+    }
+
+    // The other two have no barrel and `project.missile` and `project.saucer`
+    // never read one: a dart reaches its nose and a saucer reaches its rim.
+    TEST_ASSERT_TRUE_MESSAGE(48.0f >= num(":ms.ln") * face,
+                             "the view cone can cull a visible missile");
+    TEST_ASSERT_TRUE_MESSAGE(num(":ms.ln") >= num(":ms.fin"),
+                             "a missile is wider than it is long: its reach is not `ms.ln`");
+    TEST_ASSERT_TRUE_MESSAGE(48.0f >= num(":sc.r") * face,
+                             "the view cone can cull a visible saucer");
+}
+
+// The cull that is left, and the only one: an object goes when its bounding
+// circle is outside the view cone.  `vw` is the cone's half-slope, so a centre
+// at x = vw * z sits on the edge of the glass with half the object inside it.
+void test_only_the_view_cone_culls(void)
+{
+    camera_at(0, 0, 0);
+    const float vw = num(":vw");
+
+    // On the edge of the view at 300 steps: half of it is on the screen.
+    TEST_ASSERT_TRUE_MESSAGE(project("project.box", vw * 300.0f, 300.0f),
+                             "an obstacle on the edge of the view was culled");
+    TEST_ASSERT_TRUE_MESSAGE(project("project.box", 0 - vw * 300.0f, 300.0f),
+                             "an obstacle on the other edge of the view was culled");
+
+    // Out at right angles to it, where nothing of it can reach the glass.
+    TEST_ASSERT_FALSE(project("project.box", 900.0f, 300.0f));
+    TEST_ASSERT_FALSE(project("project.box", -900.0f, 300.0f));
+}
+
+// B59, and it is what the driving seat sees: a cube you are scraping past
+// vanishes whole while two of its columns are still on the glass.
+//
+// The old cull dropped an object when ANY of its four columns came inside the
+// plane, and section 9 defended that with the collision radius: `coll.r` 90 is
+// `near` + half*sqrt2, so no corner could reach the plane.  THAT ARGUMENT ONLY
+// HOLDS DEAD AHEAD.  The guard bounds the obstacle's DISTANCE; the cull
+// compares its camera-frame z, which is d*cos(bearing), and the cosine is what
+// the two arguments do not share.  At 45 degrees of heading a cube 91 steps out
+// on one axis and 30 on the other has its centre at z = 85.6 and its near
+// column at 57.3 -- inside the plane, with the cube a third of the way across
+// the view.
+void test_a_cube_beside_the_tank_is_still_drawn(void)
+{
+    camera_at(800, 800, 45);
+    TEST_ASSERT_TRUE_MESSAGE(project("project.box", 91, 30),
+                             "a cube in the middle of the view was culled by one corner");
+
+    // Two of the four columns are inside the viewport, which is the half of the
+    // claim a boolean cannot make.
+    int on_screen = 0;
+    for (int i = 1; i <= 4; i++)
+    {
+        if (fabsf(item_of("cx", i)) <= 160.0f)
+        {
+            on_screen++;
+        }
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, on_screen,
+                                  "the placement stopped straddling the edge of the view");
+
+    // And the tank is allowed to be there: 91 steps clears the 90-step guard on
+    // the x axis, so this is a position a player drives into rather than a
+    // geometry the collision test already forbids.
+    TEST_ASSERT_TRUE(91.0f > num(":coll.r"));
+
+    // All twelve edges, not the two the on-screen columns share.  `window` is
+    // what makes that the cheap answer: a line that leaves the glass is clipped
+    // per pixel, so the off-screen columns cost iterations and nothing else.
+    mock_device_clear_graphics();
+    run("draw.box");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(EDGES_CUBE, mock_device_line_count(),
+                                  "an edge with a vertex off the glass was dropped");
 }
 
 // A pyramid is the same four ground columns with the top ring collapsed to a
@@ -487,22 +629,33 @@ void test_the_two_projections_agree_on_their_columns(void)
     TEST_ASSERT_FLOAT_WITHIN(0.02f, 40.0f + (num(":pyrh") - 12.0f) * iz, num(":apy"));
 }
 
-// Design section 9 gives the near plane a second job and it is the binding one:
-// projected size goes as k*h/z, so `near` is what bounds how much screen an
-// edge covers, and an edge costs 0.35-0.98 us a step.  At `near` 60 a cube tops
-// out at about one screen; at `near` 8 it would be four screens tall and a
-// dozen of its edges would be most of a frame.
-void test_the_near_plane_bounds_a_cube_to_about_one_screen(void)
+// Design section 9.2: what used to bound edge length was the near plane, and
+// since B59 it is the floor.  An edge costs 0.35-0.98 us a step and projected
+// size goes as k*h/z, so this is the number that decides what a close object
+// costs to draw.  `zmin` 20 puts a cube at three screens where `near` 60 put it
+// at one -- affordable because only one object can be that close, and because
+// most of what it draws is off the glass.
+void test_the_floor_bounds_how_big_a_cube_can_get(void)
 {
     camera_at(0, 0, 0);
     const float near = num(":near");
     const float half = num(":half");
+    const float zmin = num(":zmin");
+    const float k = num(":k");
+    const float boxh = num(":boxh");
 
-    // The closest a cube can legally get: every column just outside the plane.
+    // Where the old near cull put the closest legal cube: still about a screen.
     TEST_ASSERT_TRUE(project("project.box", 0, near + half + 0.5f));
     const float tall = item_of("cy2", 1) - item_of("cy1", 1);
     TEST_ASSERT_TRUE_MESSAGE(tall < 240.0f, "a cube at the near plane is taller than the viewport");
     TEST_ASSERT_TRUE_MESSAGE(tall > 100.0f, "a cube at the near plane is too small to read");
+
+    // And the floor is the ceiling on it now: nothing is ever projected from
+    // nearer than `zmin`, whatever the cull does or does not drop.
+    TEST_ASSERT_TRUE(project("project.box", 0, 30.0f));
+    const float worst = item_of("cy2", 3) - item_of("cy1", 3);
+    TEST_ASSERT_TRUE_MESSAGE(worst <= k * boxh / zmin + 0.5f,
+                             "a column was projected from inside the floor");
 }
 
 //==========================================================================
@@ -690,12 +843,21 @@ void test_nothing_in_view_is_culled_by_distance(void)
     TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0,
                              "an obstacle 750 steps out -- past the old far plane -- was culled");
 
-    // The near cull still bites, and it is what keeps a projection off zero.
+    // And nothing culls by nearness either (B59): an obstacle 20 steps ahead is
+    // filling the view, not missing from it.
     camera_at(800, 830, 0);
     mock_device_clear_graphics();
     run("draw.field");
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0,
+                             "an obstacle 20 steps ahead was culled for being close");
+
+    // The view cone is what bites.  The same eight obstacles with the camera
+    // turned to put them all out at right angles draw nothing at all.
+    camera_at(800, 100, 90);
+    mock_device_clear_graphics();
+    run("draw.field");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_line_count(),
-                                  "an obstacle inside the near plane was drawn");
+                                  "an obstacle square out to the side was drawn");
 }
 
 // The far cull is a DISTANCE test, so an obstacle behind you survives it and
@@ -1117,10 +1279,10 @@ void test_driving_forward_moves_along_the_heading(void)
 // Collision
 //==========================================================================
 
-// Design section 9: the collision radius follows the near plane rather than the
-// other way round, so the two can never disagree.  The near cull drops an
-// object when any column comes inside `near`, and the nearest column of an
-// axis-aligned cube is at most half*sqrt2 in front of its centre.
+// (The paragraph that stood here argued `coll.r` out of the near plane, and B59
+// retired the argument along with the cull -- see design section 9.  The test it
+// belonged to went before that; the comment is gone with it.)
+
 // TWO STEERING SCHEMES, AND THE PLAYER PICKS.  M2 replaced the arrows with one
 // key per tread and said that retired the question of which feels better.  It
 // did not -- it answered it for one player, and a board asked for the choice
@@ -1828,7 +1990,12 @@ void test_a_shell_draws_eight_edges(void)
     TEST_ASSERT_TRUE_MESSAGE(num(":apy") > num(":hz"), "the enemy's shell flies at the eye");
 }
 
-void test_the_enemy_is_culled_at_the_near_plane(void)
+// B59 costs the enemy more than it costs an obstacle, and `e.range` is why:
+// the cabinet's tank does not stand off, it drives into your face and stops at
+// 38 steps.  The near cull dropped it at about 80 -- so the tank that killed
+// you was not on the screen when it did -- and this is the half of the bug a
+// board would have found before an obstacle's.
+void test_the_enemy_is_drawn_right_into_your_face(void)
 {
     const float near = num(":near");
     camera_at(800, 800, 0);
@@ -1836,11 +2003,16 @@ void test_the_enemy_is_culled_at_the_near_plane(void)
     enemy_at(800, 800 + near + 40.0f, 0);
     TEST_ASSERT_TRUE_MESSAGE(truth("project.enemy"), "an enemy in clear view was culled");
 
-    enemy_at(800, 800 + near - 1.0f, 0);
-    TEST_ASSERT_FALSE_MESSAGE(truth("project.enemy"), "an enemy inside the near plane was drawn");
+    enemy_at(800, 800 + num(":e.range"), 0);
+    TEST_ASSERT_TRUE_MESSAGE(truth("project.enemy"),
+                             "an enemy at its own stand-off was culled");
 
     enemy_at(800, 700, 0);
     TEST_ASSERT_FALSE_MESSAGE(truth("project.enemy"), "an enemy behind the camera was drawn");
+
+    // And out at right angles, where the view cone is the thing that drops it.
+    enemy_at(800 + 900.0f, 800 + 300.0f, 0);
+    TEST_ASSERT_FALSE_MESSAGE(truth("project.enemy"), "an enemy off the glass was drawn");
 }
 
 // The hunt turns towards the player and stops turning when it is looking at
@@ -3643,24 +3815,29 @@ void test_a_saucer_stays_where_the_gunsight_can_reach_it(void)
 // The models, together
 //--------------------------------------------------------------------------
 
-// Culling is conservative for the two new shapes exactly as it is for the tank:
-// anything with a vertex inside the near plane goes whole, because the "some of
-// it" version is what swings a projection through infinity and throws a line
-// across the screen.
-void test_the_new_models_are_culled_at_the_near_plane(void)
+// The two new shapes cull the way everything else does: the view cone and
+// nothing else.  The missile matters most of the three -- it is aimed at your
+// eye and `tk.hit` is 30, so under the old rule it vanished at about 75 steps
+// and killed you off the screen.
+void test_the_new_models_are_culled_by_the_view_cone(void)
 {
     const float near = num(":near");
 
     camera_at(800, 800, 0);
     foe_at(2, 800, 800 + near * 0.5f, 180);
-    TEST_ASSERT_FALSE_MESSAGE(truth("project.missile"), "a missile inside the near plane was drawn");
+    TEST_ASSERT_TRUE_MESSAGE(truth("project.missile"),
+                             "a missile about to hit you was not drawn");
     foe_at(2, 800, 800 + near * 4.0f, 180);
     TEST_ASSERT_TRUE_MESSAGE(truth("project.missile"), "a missile in clear view was culled");
+    foe_at(2, 800 + 900.0f, 800 + 300.0f, 180);
+    TEST_ASSERT_FALSE_MESSAGE(truth("project.missile"), "a missile off the glass was drawn");
 
     foe_at(4, 800, 800 + near * 0.5f, 0);
-    TEST_ASSERT_FALSE_MESSAGE(truth("project.saucer"), "a saucer inside the near plane was drawn");
+    TEST_ASSERT_TRUE_MESSAGE(truth("project.saucer"), "a saucer overhead was not drawn");
     foe_at(4, 800, 800 + near * 4.0f, 0);
     TEST_ASSERT_TRUE_MESSAGE(truth("project.saucer"), "a saucer in clear view was culled");
+    foe_at(4, 800 + 900.0f, 800 + 300.0f, 0);
+    TEST_ASSERT_FALSE_MESSAGE(truth("project.saucer"), "a saucer off the glass was drawn");
 }
 
 // The frame asks two booleans and never a kind.  What this pins is that the
@@ -4769,9 +4946,13 @@ int main(void)
     RUN_TEST(test_the_projection_is_right_at_a_heading_that_is_not_zero);
     RUN_TEST(test_turning_right_sweeps_the_world_to_the_left);
     RUN_TEST(test_an_object_behind_the_camera_is_culled);
-    RUN_TEST(test_culling_is_conservative_at_the_near_plane);
+    RUN_TEST(test_nothing_is_culled_for_being_close);
+    RUN_TEST(test_a_column_inside_the_near_plane_is_floored);
+    RUN_TEST(test_the_view_cone_margin_covers_every_object);
+    RUN_TEST(test_only_the_view_cone_culls);
+    RUN_TEST(test_a_cube_beside_the_tank_is_still_drawn);
     RUN_TEST(test_the_two_projections_agree_on_their_columns);
-    RUN_TEST(test_the_near_plane_bounds_a_cube_to_about_one_screen);
+    RUN_TEST(test_the_floor_bounds_how_big_a_cube_can_get);
     RUN_TEST(test_the_plain_wraps_in_the_arithmetic);
     RUN_TEST(test_the_far_plane_is_inside_the_wrap);
     RUN_TEST(test_driving_across_the_seam_keeps_the_camera_on_the_plain);
@@ -4819,7 +5000,7 @@ int main(void)
     RUN_TEST(test_a_shell_is_a_dart_pointing_where_it_flies);
     RUN_TEST(test_ZZDIAG);
     RUN_TEST(test_a_shell_draws_eight_edges);
-    RUN_TEST(test_the_enemy_is_culled_at_the_near_plane);
+    RUN_TEST(test_the_enemy_is_drawn_right_into_your_face);
     RUN_TEST(test_the_enemy_turns_towards_the_player);
     RUN_TEST(test_the_enemy_acts_every_frame_and_decides_on_a_counter);
     RUN_TEST(test_the_enemy_closes_and_then_holds_its_range);
@@ -4886,7 +5067,7 @@ int main(void)
     RUN_TEST(test_a_saucers_outline_does_not_turn_with_its_heading);
     RUN_TEST(test_a_saucer_floats_above_the_horizon);
     RUN_TEST(test_a_saucer_stays_where_the_gunsight_can_reach_it);
-    RUN_TEST(test_the_new_models_are_culled_at_the_near_plane);
+    RUN_TEST(test_the_new_models_are_culled_by_the_view_cone);
     RUN_TEST(test_the_frame_draws_the_model_that_matches_the_kind);
     RUN_TEST(test_a_kill_scores_what_the_enemy_is_worth);
     RUN_TEST(test_two_bonus_tanks_a_game_and_never_a_third);
