@@ -349,9 +349,14 @@ constant should be.
 
 ## 7. The world and the camera
 
-- The plain is 4,000 × 4,000 turtle steps, and it **wraps** — drive far enough
+- The plain is 1,600 × 1,600 turtle steps, and it **wraps** — drive far enough
   in one direction and the obstacle field repeats, which is how the arcade's
   unbounded plain was faked and is one modulo a frame rather than a boundary.
+  **1,600 is not an arbitrary number**: the cabinet's plain is a 16-bit torus
+  that wraps at 65,536 units, and at M6's measured scale of 40.96 units to the
+  turtle step (§16.10) that is 1,600 exactly. The two plains are the same size.
+  This line said 4,000 until M6; the code has said 1,600 since M1, and so have
+  §16.4 and §16.9.
 - The camera is `(px, pz, ph)` with the eye 12 steps above the plain. There is
   no pitch and no roll: a tank stays flat, which removes an entire axis from
   every transform and is not a simplification of the original.
@@ -1134,13 +1139,14 @@ Cut from the arcade, with the reason:
 | Cut | Reason |
 |---|---|
 | Multiple simultaneous enemies | The frame is linear in visible vertices. **The second half of that reason was wrong and §16.9.3 corrects it**: the cabinet sends one tank *or* missile — and *possibly a saucer as well*. Here the saucer takes the slot. The frame could afford its twelve edges; the global table cannot afford a second object's state |
-| The obstacle field's true density | Eight in the table, three visible. §12's largest single lever if it misses |
+| ~~The obstacle field's true density~~ | ~~Eight in the table, three visible.~~ **Spent by M6 (§16.10.6): there is no cap and no far cull, and all eight draw.** The clock is what paid for it — §12.3.1b holds twelve objects at 15 fps and the table plus the enemy is nine |
 | Ground texture / detail below the horizon | The cabinet has none — the plain is empty black. Free authenticity, again |
 | Pitch and roll | A tank stays flat. Removes an axis from every transform |
 | The Math Box's smooth object rotation at range | Objects pop in at the far cull distance rather than fading |
 
-Two gameplay levers held in reserve for M0, priced at §12's rates: **visible
-obstacles 3 → 2** (−2.2 ms) and **horizon points 32 → 20** (−1.5 ms).
+One gameplay lever left, priced at §12's rates: **horizon points 32 → 20**
+(−1.5 ms). The other — visible obstacles — went the other way in M6 and is
+gone as a lever: there is no cap to turn.
 
 **Neither is a stock-clock fallback any more (§16.7.3).** M2 measured the first
 one in that role and it does not close the gap — two obstacles at 150 MHz is a
@@ -2432,7 +2438,7 @@ does not move.
 | It gets aggressive ~17 s after spawning whatever the score says | `e.rage` 255 frames → `rage` re-reads the row at `e.agg` 1 |
 | Missiles from a score threshold (5K on the default DIP) | `pick.kind`, one spawn in three above 5,000 |
 | Saucers from 2,000, at random intervals | `pick.kind`, one spawn in five above 2,000 |
-| Evade a tank 48–64 s and a missile is sent instead | `e.tmr` wound at the spawn; expiry is `leave.enemy`, and `next.kind` reads *tank + expired clock* as "was driven away from" |
+| Evade a tank 32.8–49.2 s and a missile is sent instead | `e.tmr` wound at the spawn; expiry is `leave.enemy`, and `next.kind` reads *tank + expired clock* as "was driven away from". **This row said 48–64 s until M6 and the ROM says otherwise**: `CreateTank` sets `frame_count_256x` to 1 and the missile is thrown once it reaches 4, which is three wraps of a 256-frame counter entered at an arbitrary phase — 513 to 768 frames. M5 waited about 45 % longer than the cabinet's worst case; M6 winds 513 + `random 256` |
 | Evade a missile and another comes, until a 16–32 s cycle clock expires | the same name, wound once by the missile that *starts* the cycle |
 | The 6th missile promotes tanks to supertanks; the 129th demotes them | `ms.n`, counted in `next.kind` |
 | Missiles delay their final turn as the score nears threshold + 25K | `e.range` for a missile is its **homing distance**: 700 at 5,000 points, 60 at 30,000, and outside it the missile weaves |
@@ -2643,6 +2649,193 @@ The peak is still **238 of 254**. And `sh.nose`, the number that turns a velocit
 into a nose offset, is **derived at load** from `sh.r` and `sh.step` rather than
 typed, for §16.6.1's reason: it means nothing except against those two, and a
 shell whose speed changed would otherwise silently stop being the right shape.
+
+### 16.10 M6: measured against the cabinet, and the ruler that made it possible
+
+*"Compare the gameplay mechanics in battlezone with the mechanics implemented in
+the arcade version."* — and then, having seen the comparison, *"correct all the
+divergences"*. M5 read the disassembly's **prose notes**; M6 read the
+**instructions**, and the two do not say the same thing.
+
+#### 16.10.1 One conversion makes every number comparable
+
+The cabinet's plain is a 16-bit torus that wraps at **65,536** units; this one
+wraps at **1,600** turtle steps. That single correspondence fixes the scale at
+**40.96 arcade units to the step**, and five independent constants confirm it:
+
+| | arcade | ÷ 40.96 | here |
+|---|---:|---:|---:|
+| far plane | 31,487 (`$7aff`) | 769 | 700 |
+| obstacle collision radius | 832 (`$0340`) | 20.3 | `half` 20 |
+| spawn distance, far | ~24,576 (`$6000`) | 600 | `e.spawn` 620 |
+| spawn distance, near | ~12,288 | 300 | 310 |
+| shell range | 32,512 | 794 | 704 |
+
+Frame rates need no conversion: the NMI fires at 250 Hz and the game updates
+every sixteenth interrupt — **15.625 fps** against this file's 15 — so frame
+counts compare one for one. Angles need one: the ROM's facing is a **9-bit**
+value, so a rotate unit is **0.703°**.
+
+**The two plains are the same size**, which is the fact §7 had wrong.
+
+#### 16.10.2 What was already exact
+
+Checked instruction by instruction rather than from the prose: all four score
+values and the enemy's +1,000; the tread control topology (both forward = two
+steps, one forward = one step and one turn, opposed = two turns and no step);
+the supertank window, off-by-one exact from the 6th missile to the 129th; the
+two-second no-fire; the seventeen-second override; the missile cycle clock; the
+saucer's 2,000-point floor; the spawn distance rule; and that the radar shows
+tanks and missiles and nothing else. **M5's sequence logic was right.** What was
+wrong was the physics.
+
+#### 16.10.3 The six that changed the game
+
+| | cabinet | M5 | M6 |
+|---|---:|---:|---:|
+| player pivot | 1.41°/frame | 4.00 | **1.41** |
+| player drive | 4.64 steps/frame | 8.00 | **4.64** |
+| tank stand-off | 31 steps | 400 | **38** |
+| tank speed, as a fraction of the player's | 100 % | 45–75 % | **100 %** |
+| supertank speed | 200 % | 68–112 % | **200 %** |
+| missile speed | 2.70× player | 1.13× | **2.70×** |
+| missile turn | 2.81°/frame | 2.00 | **2.81** |
+
+**Seventeen seconds to turn round is the game.** A full pivot in the cabinet
+takes 16.4 s and took 6 here. Battlezone's whole tension is the interval between
+seeing something and being able to shoot it, and at 60°/s there is no such
+interval.
+
+**The stand-off was the largest single gap.** `:SlowTank cmp #$05` stops the tank
+closing at `$0500` — 31 steps, against a hit box of 19. It is a brawler. M5's
+400 is over half the far plane, so it parked at the edge of sight and traded
+shots, and §16.9.5's open question — *is the mild enemy too mild?* — was really
+this.
+
+**Aggression is a ladder with a coin flip, not a ramp.** `SetTankTurnTo` runs a
+ternary on the *sign* of the score difference — ahead at all and it charges,
+level and it drives 90° off for four seconds, behind and it wanders ±45° — and
+**before any of that it flips a coin**, so half of even a mild tank's decisions
+are a straight attack. The 7,000 is real but governs only the spawn cone, as a
+four-rung ladder at 2K/4K/6K. `e.agg` is retired; nothing scales a row on the
+way in any more. **Difficulty is a change of intent, not of capability.**
+
+**The missile's weave never ran.** `e.range` opened at 700 against an `e.spawn`
+of 620, so `e.d > e.range` was false from the moment one appeared and the swerve
+could not begin below **8,125 points**. Every missile M5 fired flew straight in.
+The ROM's threshold is 231 steps at 5,000 falling to 50 at 30,000.
+
+#### 16.10.4 What only reading the instructions could have found
+
+**B57, and it is the one that matters beyond this game.** `modulo` is an
+**integer** operation and truncates. It was the one place the plain wrapped, so
+every position and heading was quantised to whole units — invisible for five
+milestones because every number that fed it was an integer, and fatal the moment
+M6 asked for 0.703. It had already bitten: M5's mild enemy was written to move
+3.6 steps and moved 3.
+
+**B53's comment was wrong, and confidently.** *"An enemy stuck behind an obstacle
+is the cabinet's behaviour."* It is not: `:HitSomething` backs up while rotating
+for 48 frames with collision detection switched off. And the tactic the comment
+credited to the collision belongs to the aiming code — the disassembly says so
+in as many words at `$6531`.
+
+**B52's mechanism was invented here.** There is no deliberate miss and no reload
+in the ROM. A shell takes frames to arrive and **nothing in Battlezone leads its
+target**: drive and it misses, stop to aim and you die. Accuracy stopped being a
+tuned number.
+
+**Two more the ROM contradicted outright**: the tank tenure is 513–768 frames
+(32.8–49.2 s), not 48–64 — M5 waited 45 % too long; and a missile is written off
+as dodged by **distance** (past 800 steps, `$6ba0`), not by a 255-frame clock,
+which at 12.5 steps a frame is eleven seconds of a missile flying away.
+
+#### 16.10.5 The spawn cone, where fidelity met a hardware-backed test
+
+The cabinet's field of view is **45°** and its mildest spawn cone is `and #$0f`
+— **±22.5°, exactly one screen width**. So the rule is *"somewhere in view"*,
+and the faithful translation against this file's 63° view is 63, with every rung
+carrying the same 1.4: **63 / 126 / 252 / 360**.
+
+That sits exactly on §16.9.6's boundary. `test_two_spawns_running_are_not_the_same_place`
+exists because a board found a 40° cone unplayable, and it asserts that thirty
+spawns cover *more* bearing than the view — which a cone equal to the view
+cannot, by construction. The test now asks that question one rung up, at 2,000
+points clear, which is where a player spends almost all of a real game; the
+bottom rung keeps the weaker half of the claim, which is the half the board was
+really complaining about: consecutive spawns must land somewhere else.
+
+#### 16.10.6 The one thing that moved away from the cabinet
+
+**There is no far cull and no object cap.** The ROM culls at `$7aff`, 769 steps;
+this was asked for directly — *"we don't need to cull objects by distance, the
+player should see everything that is in view"* — and it is affordable because
+§12.3.1b measured the closed frame at 300 MHz as `25.32 + 3.223 n` and put
+**twelve** objects inside 15 fps. The whole table plus the enemy is nine:
+**54.3 ms against 66.7**. `max.obstacles` was cut against the *stock* slope of
+7.26–8.11 ms an object, where three was the honest number, and it outlived that
+measurement by two milestones. §14's density row and §12.3.1b's open choice —
+three obstacles at 24 fps or twelve at 15 — are both spent, on density.
+
+It also removes a defect the old comment described and accepted: the cap was
+spent on the far side of the near cull, so obstacles *behind* the camera
+consumed it and a cube dead ahead simply never appeared.
+
+#### 16.10.7 The ledger, and what it cost
+
+**236 of 254 globals**, against M5's 238 — M6 *gained* two slots while adding
+four names. Retired: `e.wide`, `e.reload`, `e.agg`, `max.obstacles`, `ob.n`.
+Added: `e.aimh`, `e.rev`, `e.diff`, `rd.bi`. Renamed: `e.think` → `e.mvc`,
+`e.aim` → `e.band`.
+
+**158 battlezone tests, 84/84 ctest green.** Four are new: the wrap keeps its
+fraction, a blocked enemy backs out of a cube it spawned in, a missile hops
+obstacles and a tank does not, and the blip pings on the sweep and then goes
+dark.
+
+#### 16.10.7a The first board run found what the host could not: B58
+
+*"This plays much better!"* — and then: *"a tank was close, almost on top of me,
+and it kept firing in fast repetition, screen cracked, but I did not die."*
+
+**The player was never dead long enough to die.** `hit.player` re-arms `tk.boom`
+on every hit and `respawn` only runs when that counter reaches zero, so a tank
+firing faster than ten frames refreshes the pause before it can expire. On the
+host: 200 frames at point-blank, **lives −195**, game still running.
+
+**And the cause is a misreading in §16.10.3's own table.** M6 retired `e.reload`
+because `TryShootPlayer` tests `projectile_state_1` and nothing else — true, and
+the byte is not a boolean. A projectile that *strikes* something is set to `$80`
+or `$a0` and `VLAddProjectiles` advances it by 15 a frame until it wraps: **six
+frames after a unit, four after an obstacle**, and the gun is shut for all of
+them. The cabinet's rate limiter at point-blank range is **the shell still being
+on the screen**, and M6 removed the timer without seeing what was under it.
+
+Two more gates read the same `unit_state` byte and were missing with it: `$65cd`
+will not fire at a dying player, and `$5f6f` will not let a shell already in the
+air land on one. Three gates, one mechanism, and none of them survived the pass
+that was supposed to be porting it.
+
+**This is §16.9.5's pattern for the fourth time**: every arithmetic claim M6 made
+about the enemy's gun was true, and none of them asked what happens when the
+range gets short enough that the shell arrives the same frame it is fired.
+
+#### 16.10.8 What only a board can answer
+
+Every number above is now the cabinet's, which settles what it *is* and not
+whether it *plays*. The questions a board has to answer:
+
+- **Is a 17-second pivot playable at 15 fps on a 40-column screen?** It is the
+  cabinet's, and the cabinet ran at 15.6 fps on a much larger vector display.
+  This is the single largest change in M6 and the most likely to come back.
+- **With no deliberate miss and a stand-off of 38 steps, is a stationary player
+  simply dead?** That is the intended answer. Whether it reads as *fair* is the
+  question.
+- **Does the 1-in-2 charge override read as aggression or as randomness?**
+- **Does the frame hold eight obstacles** at the measured slope, and does a
+  plain with 2.6× the density read as the arcade's or as clutter?
+- **Does a blip that goes dark between sweeps make the radar useful or useless**
+  at this screen size?
 
 ## 17. Tests
 

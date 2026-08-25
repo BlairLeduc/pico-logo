@@ -346,20 +346,26 @@ void test_file_loads_and_sets_its_tuning(void)
     TEST_ASSERT_EQUAL_FLOAT(8, num(":ob.count"));
 }
 
-// The rate-versus-density choice design section 12.3.1b opens -- three
-// obstacles at 24 fps or twelve at 15 -- belongs to M4, so M1 has to have
-// written the cap as something M4 can turn.  If this is ever inlined into
-// `draw.field` as a literal, this test is what says so.
-void test_max_obstacles_is_a_constant_the_frame_reads(void)
+// THERE IS NO CAP FROM M6 ON.  `max.obstacles` held the drawn-object count at
+// three, which was the honest number against the STOCK frame slope of 7.26-8.11
+// ms an object.  This game requires 300 MHz, where design section 12.3.1b
+// measured `25.32 + 3.223 n` and put twelve objects inside 15 fps -- and the
+// whole table plus the enemy is nine.  The cap outlived its measurement by two
+// milestones.
+void test_the_whole_field_is_drawable_with_no_cap(void)
 {
-    TEST_ASSERT_EQUAL_FLOAT(3, num(":max.obstacles"));
+    TEST_ASSERT_EQUAL_FLOAT(8, num(":ob.count"));
 
-    camera_at(800, 800, 0);
-    run("make \"max.obstacles 0");
+    // Eight cubes in a ring dead ahead, all of them in view and none of them
+    // inside the near plane: every one draws its twelve edges.
+    run("make \"ox [800 800 800 800]  make \"ox se :ox [800 800 800 800]");
+    run("make \"oz [1000 1100 1200 1300]  make \"oz se :oz [1400 1500 1550 1580]");
+    run("make \"okind [1 1 1 1]  make \"okind se :okind [1 1 1 1]");
+    camera_at(800, 900, 0);
     mock_device_clear_graphics();
     run("draw.field");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_line_count(),
-                                  "the object cap is not read from :max.obstacles");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(8 * 12, mock_device_line_count(),
+                                  "something is still capping the field");
 }
 
 //==========================================================================
@@ -665,21 +671,31 @@ void test_the_field_is_on_the_plain_and_clear_of_the_start(void)
     }
 }
 
-// The cap is a WORK budget: it counts objects that survived the far cull,
-// whether or not the near cull then dropped them, because what it protects is
-// the frame and not the picture.
-void test_the_frame_draws_no_more_than_max_obstacles(void)
+// AND NO FAR CULL EITHER, which is the one place M6 moves AWAY from the cabinet
+// rather than toward it: the ROM culls at $7aff, 769 steps.  It was asked for,
+// and the two plains are the same size, so a far plane at 769 was hiding the
+// back quarter of a world that fits.  What survives is the NEAR cull, which is
+// not a budget at all -- design section 9, this file has no clipper.
+//
+// 750 steps rather than anything grander because the plain wraps at 1,600: the
+// furthest anything can BE is 800 on an axis, and asking for 1,400 puts the
+// obstacle 200 steps behind you the short way round.
+void test_nothing_in_view_is_culled_by_distance(void)
 {
-    // Put all eight in a tight cluster straight ahead, so nothing is culled.
-    run("make \"ox [800 810 790 805]  make \"ox se :ox [795 815 785 820]");
-    run("make \"oz [400 460 520 580]  make \"oz se :oz [640 700 340 280]");
-    run("make \"okind [1 1 1 1]  make \"okind se :okind [1 1 1 1]");
-    camera_at(800, 0, 0);
-
+    run("make \"ox [800 800 800 800]  make \"ox se :ox [800 800 800 800]");
+    run("make \"oz [850 850 850 850]  make \"oz se :oz [850 850 850 850]");
+    camera_at(800, 100, 0);
     mock_device_clear_graphics();
     run("draw.field");
-    const int cap = (int)num(":max.obstacles");
-    TEST_ASSERT_EQUAL_INT(cap * EDGES_CUBE, mock_device_line_count());
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0,
+                             "an obstacle 750 steps out -- past the old far plane -- was culled");
+
+    // The near cull still bites, and it is what keeps a projection off zero.
+    camera_at(800, 830, 0);
+    mock_device_clear_graphics();
+    run("draw.field");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_line_count(),
+                                  "an obstacle inside the near plane was drawn");
 }
 
 // The far cull is a DISTANCE test, so an obstacle behind you survives it and
@@ -1833,48 +1849,52 @@ void test_the_enemy_turns_towards_the_player(void)
 {
     camera_at(800, 800, 0);
 
+    // `hunt` turns toward the heading it DECIDED on, and it only decides when
+    // `e.mvc` runs out -- so a single call has to be given an expired counter
+    // or it is still steering toward last decision's heading.  `e.rage` 0 is
+    // the seventeen-second override, which takes the coin flip out of it and
+    // makes the choice "head at the player" every time.
+    //
     // Ahead and to the player's right, facing back down -z at the player: it
     // has to turn clockwise to look at them.
     enemy_at(900, 1100, 180);
-    run("make \"e.cool 99  hunt");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.t"), "the enemy turned away from the player");
+    run("make \"e.cool 99  make \"e.rage 0  make \"e.mvc 1  hunt");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.t") > 0, "the enemy turned away from the player");
 
     enemy_at(700, 1100, 180);
-    run("make \"e.cool 99  hunt");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-1, num(":e.t"), "the enemy turned away from the player");
+    run("make \"e.cool 99  make \"e.rage 0  make \"e.mvc 1  hunt");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.t") < 0, "the enemy turned away from the player");
 
     enemy_at(800, 1100, 180);
-    run("make \"e.cool 99  hunt");
+    run("make \"e.cool 99  make \"e.rage 0  make \"e.mvc 1  hunt");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":e.t"), "the enemy kept turning past the player");
 }
 
-// Design section 19.3: at 15 fps a decision every third frame is invisible and
-// costs a third as much.  The two frames in between act on the intents the
-// third left behind, so this checks that the decision is on a period and that
-// the acting is not.
-void test_the_enemy_thinks_on_one_frame_in_three(void)
+// IT ACTS EVERY FRAME AND DECIDES ON A COUNTER, which is the ROM's shape and
+// the reverse of M5's.  `UpdateTank` turns, drives and tries to shoot on every
+// single frame; what it does on `move_counter` is choose a new DESIRED heading.
+// M5 ran the whole hunt on one frame in three, which confused a decision with
+// an action -- design section 19.3's argument was about the decision.
+void test_the_enemy_acts_every_frame_and_decides_on_a_counter(void)
 {
     camera_at(800, 800, 0);
-    enemy_at(900, 1100, 180);
-    const int think = (int)num(":e.think");
-    TEST_ASSERT_TRUE_MESSAGE(think > 1, "the enemy thinks every frame");
+    foe_at(1, 800, 1100, 180);
+    run("make \"e.rage 0  make \"e.cool 99  make \"e.mvc 4");
 
-    // A frame that is not a thinking frame leaves the intent alone.
-    run("make \"e.t 0  make \"e.f 0  make \"e.fire false");
-    run("make \"frame.count 1  step.enemy");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":e.t"), "a non-thinking frame decided");
+    // Four frames of hunting spend the counter and only the fourth re-aims.
+    const float aim0 = num(":e.aimh");
+    run("hunt  hunt  hunt");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(aim0, num(":e.aimh"),
+                                    "the enemy re-decided before its counter ran out");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.mvc"), "the counter did not run down");
 
-    // The thinking frame finds the player.
-    char expr[64];
-    snprintf(expr, sizeof(expr), "make \"frame.count %d  step.enemy", think);
-    run(expr);
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.t"), "the thinking frame did not decide");
+    run("make \"e.aimh 0  hunt");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.aimh") != 0.0f, "the counter ran out and nothing was decided");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":e.mvc"), "the counter was not rewound");
 
-    // And the frame after it acts on what the thinking frame left behind.
-    const float before = num(":e.h");
-    run("make \"frame.count 1  step.enemy");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(before + num(":e.turn"), num(":e.h"),
-                                    "a non-thinking frame did not act on the intent");
+    // And the acting half is unconditional: a turn intent every frame.
+    run("make \"e.aimh 90  make \"e.h 0  hunt");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.t") != 0.0f, "the enemy did not turn on a non-deciding frame");
 }
 
 // It closes to `e.range` and then holds, or it drives into your face and the
@@ -1885,11 +1905,11 @@ void test_the_enemy_closes_and_then_holds_its_range(void)
     const float range = num(":e.range");
 
     enemy_at(800, 800 + range + 200.0f, 180);
-    run("make \"e.cool 99  hunt");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.f"), "the enemy would not close");
+    run("make \"e.cool 99  make \"e.rage 0  make \"e.mvc 1  hunt");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.f") > 0, "the enemy would not close");
 
-    enemy_at(800, 800 + range - 60.0f, 180);
-    run("make \"e.cool 99  hunt");
+    enemy_at(800, 800 + range - 20.0f, 180);
+    run("make \"e.cool 99  make \"e.rage 0  make \"e.mvc 1  hunt");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":e.f"), "the enemy drove past its stand-off");
 }
 
@@ -2073,30 +2093,15 @@ void test_a_shell_that_hits_nothing_expires(void)
     TEST_ASSERT_FALSE_MESSAGE(truth(":sh.on"), "a shell flew for ever");
 }
 
-// THE AIM ERROR IS A DISTANCE AND NOT AN ANGLE, and this is the invariant that
-// took three attempts to state.
-//
-// M2 found the enemy came straight at you with perfect aim, diagnosed it as
-// `e.range` against `tk.hit`, and fixed it by moving the stand-off out to 400
-// and adding a per-shot angular wobble.  It then validated that fix at exactly
-// one distance -- the stand-off -- where the tank does miss 55 % of the time.
-//
-// A BOARD FOUND THE REST OF THE CURVE.  An angular error is thrown
-// `d * tan(wob)` sideways, so it shrinks to nothing as the range does -- and
-// the range is not the enemy's to choose, because the player can always drive
-// closer.  Measured against a stationary player, the old model hit 19 of 40 at
-// 400 steps, 33 at 200, and 40 of 40 everywhere inside 150.  No value of an
-// angular wobble fixes that: the shrinking is the SHAPE of the error, not its
-// size.
-//
-// So `e.wide` is now a lateral offset AT THE TARGET, in steps, turned into an
-// angle for the range it is fired over.  The invariant collapses to one
-// comparison in one unit -- a shot thrown fewer steps sideways than the
-// half-width of the box it is aimed at cannot miss -- where §16.6.1's version
-// joined three numbers in two units with a tangent and was wrong twice.
-void test_the_aim_error_is_wider_than_the_box_it_is_aimed_at(void)
+// IT FIRES ALONG ITS OWN HEADING AND NOTHING ELSE.  There was a deliberate
+// lateral miss here -- a random offset in steps at the target, converted to an
+// angle for the range -- which was M3's answer to a tank that stood where it
+// could not miss.  The cabinet has no such thing: `TryShootPlayer` builds the
+// velocity straight from `enemy_facing`, and the miss comes from somewhere
+// else entirely (see the test below).
+void test_the_enemy_fires_exactly_along_its_heading(void)
 {
-    int guns = 0;
+    run("rerandom");
     for (int k = 1; k <= 4; k++)
     {
         char expr[64], msg[128];
@@ -2104,86 +2109,62 @@ void test_the_aim_error_is_wider_than_the_box_it_is_aimed_at(void)
         run(expr);
         if (!truth(":e.gun"))
             continue;
-        guns++;
 
-        snprintf(msg, sizeof(msg),
-                 "kind %d throws its shot %g steps against a %g box -- it cannot miss",
-                 k, (double)num(":e.wide"), (double)num(":tk.hit"));
-        TEST_ASSERT_TRUE_MESSAGE(num(":e.wide") > num(":tk.hit"), msg);
-
-        // The span `random` draws from has to cover both sides of it, or the
-        // error is one-sided and the enemy leads every shot the same way.  It
-        // is derived at the shot rather than carried in the row (M5 spent the
-        // slot on the campaign), so the test drives the shot: forty of them,
-        // from a tank pointed straight up the z axis at a player straight
-        // ahead, and the thrown heading has to fall on both sides of it.
-        // The mock's hardware source is a constant, so a test that wants a
-        // spread has to ask for the seeded sequence.
-        run("rerandom");
-        run("make \"e.h 0  make \"e.x 800  make \"e.z 200  make \"e.dx 0  make \"e.dz -600");
-        int port = 0, starboard = 0;
+        // Forty shots from a tank pointed 30 degrees off the z axis: every one
+        // of them leaves on exactly that heading, with no spread at all.
+        run("make \"e.h 30  make \"e.ec cos 30  make \"e.es sin 30");
+        run("make \"e.x 800  make \"e.z 200  make \"e.dx 0  make \"e.dz -600");
         for (int shot = 0; shot < 40; shot++)
         {
             run("make \"es.on false  make \"e.cool 0  enemy.fires");
             const float bearing = atan2f(num(":es.vx"), num(":es.vz")) * 57.2958f;
-            if (bearing > 0.01f) starboard++;
-            if (bearing < -0.01f) port++;
+            snprintf(msg, sizeof(msg), "kind %d threw a shot %g degrees off its heading",
+                     k, (double)(bearing - 30.0));
+            TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 30.0f, bearing, msg);
         }
-        snprintf(msg, sizeof(msg), "kind %d threw %d shots left and %d right of forty", k, port, starboard);
-        TEST_ASSERT_TRUE_MESSAGE(port > 5 && starboard > 5, msg);
     }
-    TEST_ASSERT_TRUE_MESSAGE(guns >= 2, "the invariant was checked against fewer than two guns");
 }
 
-// And the same thing measured rather than argued: drive forty shots at each of
-// six ranges, from point blank to beyond the stand-off, and require BOTH
-// outcomes at every one of them.  This is the test M2 needed and did not have
-// -- its version fired only from the stand-off, which is the one distance the
-// old model was safe at.
-//
-// It asserts both and never a ratio: the ratio is exactly what M4 tunes, and a
-// test that pinned it would fight the tuning.
-void test_no_range_is_a_range_the_enemy_cannot_miss_from(void)
+// AND THE MISS IS LEAD, NOT SPREAD.  This is the cabinet's whole gunnery model
+// and it is better than the random offset it replaces: a shell takes frames to
+// arrive and NOTHING IN BATTLEZONE LEADS ITS TARGET, so a player who is driving
+// is missed and a player who has stopped to aim is hit.  M2's and M3's versions
+// of this test asked for both outcomes from a stationary player, which the
+// cabinet will not give -- it hits that player every time, at every range, and
+// that is the point.
+void test_a_still_player_is_hit_and_a_moving_one_is_missed(void)
 {
-    // The obstacles out of the way, so what stops a shell is the player or the
-    // end of its life and never a cube.
     run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
     run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
-    // The mock's hardware random source is a CONSTANT 42, so without this every
-    // shot draws the same wobble and the test would be measuring nothing.
-    run("rerandom");
 
     const int ranges[] = {60, 100, 150, 200, 283, 400};
-    for (int k = 1; k <= 4; k++)
+    for (int r = 0; r < 6; r++)
     {
-        char expr[64];
-        snprintf(expr, sizeof(expr), "make \"e.kind %d  set.kind", k);
-        run(expr);
-        if (!truth(":e.gun"))
-            continue;
+        // Standing still, dead ahead, and lined up: it cannot miss.
+        camera_at(800, 800, 0);
+        foe_at(1, 800, (float)(800 + ranges[r]), 180);
+        // `lives` is reset every round: `hit.player` refuses to spend a life
+        // the player does not have (B58), and this loop kills them six times.
+        run("make \"hits 0  make \"lives 3  make \"tk.boom 0  make \"es.on false  enemy.fires");
+        for (int i = 0; i < 40 && truth(":es.on"); i++)
+            run("step.eshell");
 
-        for (int r = 0; r < 6; r++)
-        {
-            int hits = 0, misses = 0;
-            for (int shot = 0; shot < 40; shot++)
-            {
-                camera_at(800, 800, 0);
-                // Dead ahead and facing straight back down the line, so the
-                // bearing error is zero and what is left is the wobble alone.
-                foe_at(k, 800, (float)(800 + ranges[r]), 180);
-                run("make \"hits 0  make \"tk.boom 0  make \"es.on false  enemy.fires");
-                for (int i = 0; i < 40 && truth(":es.on"); i++)
-                    run("step.eshell");
-                if (num(":hits") > 0) hits++; else misses++;
-            }
-
-            char msg[160];
-            snprintf(msg, sizeof(msg),
-                     "kind %d at %d steps: %d hit, %d missed of 40", k, ranges[r], hits, misses);
-            TEST_ASSERT_TRUE_MESSAGE(hits > 0, msg);
-            TEST_ASSERT_TRUE_MESSAGE(misses > 0, msg);
-        }
+        char msg[160];
+        snprintf(msg, sizeof(msg), "a still player at %d steps was missed", ranges[r]);
+        TEST_ASSERT_TRUE_MESSAGE(num(":hits") > 0, msg);
     }
+
+    // Driving across the shot at a range that gives it time to arrive: the
+    // shell goes where the player was.
+    camera_at(800, 800, 90);
+    foe_at(1, 800, 1200, 180);
+    run("make \"hits 0  make \"lives 3  make \"tk.boom 0  make \"es.on false  enemy.fires");
+    press_forward();
+    for (int i = 0; i < 40 && truth(":es.on"); i++)
+        run("pollkeys  step.tank  cam.offsets  ob.scan  step.eshell");
+    release_forward();
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":hits"),
+                                    "a moving player was hit by a shot that never led them");
 }
 
 // The cheapest collision in the game: the player is at the origin of the frame
@@ -2192,6 +2173,11 @@ void test_the_enemys_shell_hits_the_player_and_pauses_the_tank(void)
 {
     run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
     run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    // `respawn` re-rolls the player's position from M6 on, and the mock's
+    // hardware random source is the CONSTANT 42 -- so without this the four
+    // re-rolls in `place.player` are four identical rolls, and against this
+    // fixture's eight stacked cubes they can all land inside one.
+    run("rerandom");
     camera_at(800, 800, 0);
     enemy_at(800, 900, 180);
     run("make \"hits 0  make \"tk.boom 0  make \"es.on false  enemy.fires");
@@ -2210,14 +2196,20 @@ void test_the_enemys_shell_hits_the_player_and_pauses_the_tank(void)
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(800, num(":pz"), "a burning tank drove off");
     TEST_ASSERT_TRUE_MESSAGE(num(":tk.boom") > 0, "the pause ended in one frame");
 
-    // It runs down and the tank drives again.
+    // It runs down and the tank drives again -- SOMEWHERE ELSE, because
+    // `respawn` re-rolls the player's position and facing as `:PlacePlayer`
+    // does.  So "it came back" is measured against where it came back TO.
     for (int i = 0; i < (int)num(":boom.frames") + 1; i++)
         run("step.tank");
     TEST_ASSERT_EQUAL_FLOAT(0, num(":tk.boom"));
+    const float rx = num(":px"), rz = num(":pz");
     press_forward();
     run("pollkeys  step.tank");
     release_forward();
-    TEST_ASSERT_TRUE_MESSAGE(num(":pz") > 800.0f, "the tank never came back");
+    const float moved = sqrtf((num(":px") - rx) * (num(":px") - rx) +
+                              (num(":pz") - rz) * (num(":pz") - rz));
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 2.0f * num(":tread.step"), moved,
+                                     "the tank never came back");
 }
 
 //==========================================================================
@@ -2250,13 +2242,15 @@ void test_the_blip_is_the_enemy_in_the_camera_frame(void)
     const float cx = num(":rd.x"), cy = num(":rd.y");
     camera_at(800, 800, 0);
 
+    // The blip is a PING now: it exists only for the thirty frames after the
+    // sweep crosses the enemy, so a test about WHERE it draws has to arm it.
     enemy_at(1000, 1000, 0);          // ahead and to the right
-    run("blip");
+    run("make \"rd.bi 30  blip");
     TEST_ASSERT_TRUE_MESSAGE(num(":rd.bx") > cx, "a blip to the right drew to the left");
     TEST_ASSERT_TRUE_MESSAGE(num(":rd.by") > cy, "a blip ahead drew behind");
 
     enemy_at(600, 600, 0);            // behind and to the left
-    run("blip");
+    run("make \"rd.bi 30  blip");
     TEST_ASSERT_TRUE_MESSAGE(num(":rd.bx") < cx, "a blip to the left drew to the right");
     TEST_ASSERT_TRUE_MESSAGE(num(":rd.by") < cy, "a blip behind drew ahead");
 
@@ -2264,7 +2258,7 @@ void test_the_blip_is_the_enemy_in_the_camera_frame(void)
     // camera's and not the world's.
     camera_at(800, 800, 90);
     enemy_at(1000, 800, 0);           // now dead ahead
-    run("blip");
+    run("make \"rd.bi 30  blip");
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, cx, num(":rd.bx"), "the radar did not turn with the tank");
 }
 
@@ -2273,7 +2267,7 @@ void test_the_radar_is_drawn_and_the_blip_is_inside_it(void)
     camera_at(800, 800, 0);
     enemy_at(800, 1000, 180);
     mock_device_clear_graphics();
-    run("radar");
+    run("make \"rd.bi 30  radar");
     const int with_blip = mock_device_line_count();
 
     run("make \"e.alive false");
@@ -2291,7 +2285,7 @@ void test_the_radar_is_drawn_and_the_blip_is_inside_it(void)
                                      "the radar's face is not the far plane");
     enemy_at(800, 800 + far - 10.0f, 180);
     mock_device_clear_graphics();
-    run("radar");
+    run("make \"rd.bi 30  radar");
     TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > without,
                              "an enemy just inside the far plane fell off the radar");
 
@@ -2412,18 +2406,18 @@ void test_the_fast_clock_is_a_precondition(void)
 void test_the_clock_does_not_write_the_tuning(void)
 {
     const float fps = num(":fps");
-    const float objects = num(":max.obstacles");
+    const float objects = num(":ob.count");
 
     set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
     run("ignore clock");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(fps, num(":fps"), "`clock` wrote the frame rate");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(objects, num(":max.obstacles"),
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(objects, num(":ob.count"),
                                     "`clock` wrote the object cap");
 
     set_mock_cpu_khz(false, LOGO_CPU_KHZ_NORMAL);
     run("ignore clock");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(fps, num(":fps"), "a refused clock cut the frame rate");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(objects, num(":max.obstacles"),
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(objects, num(":ob.count"),
                                     "a refused clock cut the object cap");
     set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
 }
@@ -2738,8 +2732,13 @@ void test_a_saucer_waits_for_two_thousand_and_a_missile_for_five(void)
         if (k == 2) missiles++;
         if (k == 1) tanks++;
     }
+    // ONE SPAWN IN TWO, not one in three: `:MaybeMissile` is a straight coin
+    // flip once the score clears the threshold, so above it a missile is as
+    // likely as everything else put together and the tank stops being the
+    // staple.  M5 read the cabinet's 50/50 as a third.
     TEST_ASSERT_TRUE_MESSAGE(missiles > 0, "no missile flew above 5,000 points");
-    TEST_ASSERT_TRUE_MESSAGE(tanks > missiles, "the tank stopped being the staple");
+    TEST_ASSERT_TRUE_MESSAGE(tanks > 0, "the tank vanished above 5,000 points");
+    TEST_ASSERT_TRUE_MESSAGE(missiles > 15, "missiles are rarer than the cabinet's coin flip");
 }
 
 // The cabinet's counter: the 6th missile promotes the tanks and the 129th
@@ -2819,112 +2818,169 @@ void test_a_dodged_missile_is_followed_by_another_until_the_cycle_ends(void)
     run("make \"score 1000  make \"e.ram true  make \"e.tmr 0");
     run("next.kind");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.kind"), "the missile cycle never ended");
-    TEST_ASSERT_TRUE_MESSAGE(num(":e.tmr") > 700, "the tank that ended the cycle got no clock");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.tmr") > 500, "the tank that ended the cycle got no clock");
 }
 
 // THE ENEMY KEEPS SCORE TOO, and the difference between the two scores is the
-// only difficulty knob in the game.  It is the cabinet's: 1,000 to the enemy
-// every time you die, full aggression at 7,000 points of daylight.
+// only difficulty knob in the game.
+//
+// IT IS A DIFFERENCE AND NOT A RAMP.  M5 divided it by 7,000 and clamped it to
+// 0..1, then spent that smoothly on four numbers.  The ROM reads the SIGN of it
+// to pick a behaviour and four BUCKETS of it to pick a spawn cone, and the
+// 7,000 belongs only to the top of that ladder.
 void test_the_enemy_keeps_score_and_the_difference_is_the_difficulty(void)
 {
     new_game();
-    run("make \"score 0  make \"e.score 0  aggress");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":e.agg"), "an even game is not an even game");
+    run("make \"score 0  make \"e.score 0  spawn.cone");
+    const float even = num(":e.b");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":e.diff"), "an even game is not an even game");
 
-    run("make \"score 7000  aggress");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.agg"), "7,000 clear is not full aggression");
+    // The ladder: 2,000, 4,000 and 6,000 points of daylight are the rungs, and
+    // it clamps at the top.
+    run("make \"score 2000  spawn.cone");
+    const float rung1 = num(":e.b");
+    run("make \"score 4000  spawn.cone");
+    const float rung2 = num(":e.b");
+    run("make \"score 6000  spawn.cone");
+    const float rung3 = num(":e.b");
+    TEST_ASSERT_TRUE_MESSAGE(rung1 > even && rung2 > rung1 && rung3 > rung2,
+                             "the spawn cone does not widen as the player pulls ahead");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(360, rung3, "the top rung is not the whole plain");
 
-    run("make \"score 99000  aggress");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.agg"), "the aggression is not clamped above");
-
-    run("make \"score 3500  aggress");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.5f, num(":e.agg"), "half the daylight is not half the aggression");
+    run("make \"score 99000  spawn.cone");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(360, num(":e.b"), "the ladder is not clamped above");
 
     // Dying pays the enemy, and the next enemy is easier for it.
-    run("make \"tk.boom 0  make \"lives 3");
+    run("make \"score 3000  make \"tk.boom 0  make \"lives 3");
     run("hit.player");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1000, num(":e.score"), "the enemy scored nothing for killing you");
-    run("aggress");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.357f, num(":e.agg"), "a death did not cost you daylight");
+    run("spawn.cone");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2000, num(":e.diff"), "a death did not cost you daylight");
 }
 
-// "Moves uncertainly and takes bad shots" is three of the row's numbers, and
-// this is what they are worth.  The row is READ rather than edited, so a mild
-// enemy is the same enemy with a worse hand -- and the invariant that survives
-// it is the one that matters: a shot thrown fewer steps sideways than the half
-// width of the box it is aimed at cannot miss, at any aggression.
-void test_a_mild_enemy_shoots_wide_thinks_slowly_and_drives_slowly(void)
+// A MILD ENEMY DRIVES SOMEWHERE ELSE.  It does not drive slower, aim worse or
+// think less often -- M5 softened all three by `e.agg` and the ROM softens none
+// of them.  `SetTankTurnTo` picks a HEADING: level on score it drives 90
+// degrees off you and holds that for four seconds, behind on score it wanders,
+// and ahead on score it charges.  Difficulty is a change of intent.
+void test_a_mild_enemy_drives_somewhere_else_at_full_speed(void)
 {
-    for (int k = 1; k <= 3; k += 2)
+    new_game();
+    camera_at(800, 800, 0);
+    run("rerandom");
+
+    // The row is the row, whatever the score: nothing is scaled on the way in.
+    run("make \"score 0  make \"e.score 0  make \"e.kind 1  set.kind");
+    const float mild_step = num(":e.step"), mild_turn = num(":e.turn");
+    run("make \"score 9000  make \"e.kind 1  set.kind");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(mild_step, num(":e.step"), "a mild enemy was slowed down");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(mild_turn, num(":e.turn"), "a mild enemy was made to turn slower");
+
+    // Level on score, thirty decisions: the ones that are not the coin flip
+    // head about 90 degrees away from the player rather than at them.
+    foe_at(1, 800, 1100, 180);
+    run("make \"score 3000  make \"e.score 3000  make \"e.rage 200");
+    int away = 0, at = 0;
+    for (int i = 0; i < 60; i++)
     {
-        char expr[64], msg[128];
-        snprintf(expr, sizeof(expr), "make \"e.kind %d", k);
+        run("make \"e.mvc 1  make \"e.rev 0  hunt");
+        const float off = num("abs wrap.diff :e.aimh - (arctan :e.dz :e.dx) - 180");
+        if (off > 45.0f) away++; else at++;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(away > 5, "a level enemy never drove anywhere but at the player");
 
-        run(expr); run("make \"e.agg 1  set.kind");
-        const float wide = num(":e.wide"), step = num(":e.step"), think = num(":e.think");
+    // AND THE COIN FLIP IS READ FIRST, so about half of even a mild enemy's
+    // decisions are a straight attack.  This is the piece M5 never had, and it
+    // is why the cabinet's easy tank reads as inconsistent rather than passive.
+    TEST_ASSERT_TRUE_MESSAGE(at > 15, "the coin flip never sent a mild enemy at the player");
+    TEST_ASSERT_TRUE_MESSAGE(away > 10, "the coin flip sent a mild enemy at the player every time");
+}
 
-        run(expr); run("make \"e.agg 0  set.kind");
-        snprintf(msg, sizeof(msg), "a mild kind %d shoots no wider than a full one", k);
-        TEST_ASSERT_TRUE_MESSAGE(num(":e.wide") > wide, msg);
-        snprintf(msg, sizeof(msg), "a mild kind %d drives no slower than a full one", k);
-        TEST_ASSERT_TRUE_MESSAGE(num(":e.step") < step, msg);
-        snprintf(msg, sizeof(msg), "a mild kind %d re-decides as often as a full one", k);
-        TEST_ASSERT_TRUE_MESSAGE(num(":e.think") > think, msg);
+// NOTHING IS SOFTENED BY THE SCORE any more -- not a missile, and not a tank
+// either.  M5 scaled speed, aim and think rate by `e.agg` for anything with a
+// gun and exempted the missile from it by name; the ROM scales none of the four
+// kinds, so the exemption has nothing left to be an exemption from.  What is
+// worth keeping is the assertion that a row survives `set.kind` unmodified.
+void test_no_row_is_rewritten_on_the_way_in(void)
+{
+    new_game();
+    for (int k = 1; k <= 4; k++)
+    {
+        char expr[80], msg[128];
+        snprintf(expr, sizeof(expr), "make \"score 0  make \"e.score 0  make \"e.kind %d  set.kind", k);
+        run(expr);
+        const float step = num(":e.step"), turn = num(":e.turn"), hit = num(":e.hit");
 
-        // The invariant, at the aggression that stretches it hardest.
-        snprintf(msg, sizeof(msg),
-                 "a mild kind %d throws its shot %g steps against a %g box -- it cannot miss",
-                 k, (double)num(":e.wide"), (double)num(":tk.hit"));
-        TEST_ASSERT_TRUE_MESSAGE(num(":e.wide") > num(":tk.hit"), msg);
+        snprintf(expr, sizeof(expr), "make \"score 40000  make \"e.score 0  make \"e.kind %d  set.kind", k);
+        run(expr);
+        snprintf(msg, sizeof(msg), "kind %d changed speed with the score", k);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(step, num(":e.step"), msg);
+        snprintf(msg, sizeof(msg), "kind %d changed turn rate with the score", k);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(turn, num(":e.turn"), msg);
+        snprintf(msg, sizeof(msg), "kind %d changed size with the score", k);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(hit, num(":e.hit"), msg);
     }
 }
 
-// A missile is NOT softened, and that is deliberate: design section 16.7.4b
-// bought the missile's whole mechanic with one number -- 9 steps a frame
-// against the treads' 8 -- and an aggression that scaled it would hand back a
-// missile you can outrun, which is not a missile.
-void test_a_missile_is_not_softened_by_the_score(void)
-{
-    run("make \"e.kind 2  make \"e.agg 1  set.kind");
-    const float step = num(":e.step"), turn = num(":e.turn"), think = num(":e.think");
-
-    run("make \"e.kind 2  make \"e.agg 0  set.kind");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(step, num(":e.step"), "a mild missile is slower");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(turn, num(":e.turn"), "a mild missile turns differently");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(think, num(":e.think"), "a mild missile thinks differently");
-    TEST_ASSERT_TRUE_MESSAGE(num(":e.step") > 2 * num(":tread.step"),
-                             "the missile can be outrun, which is the one thing it may not be");
-}
-
-// Seventeen seconds after it appears, the enemy stops being careful whatever
-// the score says.  The row is re-read at full aggression, which is why
-// `set.kind` reads a row rather than editing one.
+// Seventeen seconds are up, and the tank stops being careful whatever the score
+// says.  `rez_protect` counts to $ff and `TryShootPlayer` and `SetTankTurnTo`
+// both read it: at the top it charges, and it takes free shots.
+//
+// M5 re-read the row at full aggression here, which is gone with the scaling.
+// What is left is the rule itself, and it is now the FIRST rung of the ladder
+// in `aim.enemy` rather than a separate event.
 void test_seventeen_seconds_makes_a_mild_enemy_aggressive(void)
 {
     new_game();
     camera_at(800, 800, 0);
-    run("make \"e.agg 0");
-    foe_at(1, 800, 1400, 180);
-    const float mild = num(":e.wide");
-    run("make \"e.boom 0  make \"e.tmr 500  make \"e.rage 1  make \"frame.count 2");
+    run("rerandom");
+    foe_at(1, 800, 1100, 180);
+    // Behind on score, which is the mildest the enemy ever gets.
+    run("make \"score 0  make \"e.score 4000  make \"e.cool 99");
 
-    run("step.enemy");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":e.agg"), "the enemy never lost its patience");
-    TEST_ASSERT_TRUE_MESSAGE(num(":e.wide") < mild, "the row was not re-read at full aggression");
+    // While the clock runs it may wander: thirty decisions, and some of them
+    // point somewhere other than at the player.
+    run("make \"e.rage 200");
+    int wandered = 0;
+    for (int i = 0; i < 30; i++)
+    {
+        run("make \"e.mvc 1  make \"e.rev 0  hunt");
+        if (num("abs wrap.diff :e.aimh - (arctan :e.dz :e.dx) - 180") > 5.0f)
+            wandered++;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(wandered > 0, "a losing enemy never wandered at all");
+
+    // Once it has run out, every decision is the player's bearing.
+    run("make \"e.rage 0");
+    for (int i = 0; i < 30; i++)
+    {
+        run("make \"e.mvc 1  make \"e.rev 0  hunt");
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.0f,
+            num("wrap.diff :e.aimh - (arctan :e.dz :e.dx) - 180"),
+            "the enemy never lost its patience");
+    }
 }
 
-// The same clock on a missile means something else: seventeen seconds of
-// missile is a missile that has been DODGED.  It goes, and the cycle decides
-// whether another comes -- and a dodge is not a kill, so there are no points
-// in it.
-void test_a_missile_that_flies_its_time_out_has_been_dodged(void)
+// A MISSILE THAT GETS PAST YOU IS GONE, and the test is a DISTANCE and not a
+// clock.  The ROM checks it in the radar pass at $6ba0: once the enemy's
+// distance high byte reaches $80 -- 800 steps -- a missile is written off as
+// missed.  M5 used `e.rage`, 255 frames, so a missile that shot past at 12.5
+// steps a frame kept flying for another eleven seconds.
+void test_a_missile_that_gets_past_you_has_been_dodged(void)
 {
     new_game();
     camera_at(800, 800, 0);
     run("make \"score 9000");
+
+    // Still inside 800 steps: it is very much alive.
     foe_at(2, 800, 1400, 180);
     run("make \"e.boom 0  make \"e.tmr 500  make \"e.rage 1  make \"bm.n 0  make \"frame.count 2");
+    run("step.enemy");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":e.alive"), "a missile 600 steps out was written off");
 
+    // Past it, on the diagonal where `e.d` is furthest from a real distance.
+    foe_at(2, 1300, 1300, 180);
+    run("make \"e.boom 0  make \"e.tmr 500  make \"e.rage 1  make \"bm.n 0  make \"frame.count 2");
     run("step.enemy");
     TEST_ASSERT_FALSE_MESSAGE(truth(":e.alive"), "the missile flew on for ever");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(9000, num(":score"), "dodging a missile scored points");
@@ -2964,30 +3020,32 @@ void test_a_spawn_is_at_one_of_two_distances(void)
     TEST_ASSERT_TRUE_MESSAGE(fars > 5 && nears > 5, "the two distances are not evenly drawn");
 }
 
-// While the enemy is winning it appears IN FRONT of you, and the cone opens
-// with the aggression until it is the whole plain.  An enemy you cannot see is
-// an enemy you have to find, so being ahead is the kindness, and that is why it
-// goes with the score.
+// The spawn cone, and the rung it starts on.
+//
+// THE RUNGS ARE THE CABINET'S, SCALED BY FIELD OF VIEW.  The ROM masks a random
+// bearing with $0f, $1f, $3f or $7f -- 45, 90, 180 or 360 degrees -- and its
+// bottom rung of 45 is EXACTLY its own field of view.  So the rule it encodes
+// is "somewhere in view", and with a 63-degree view here that is 63.  Every
+// rung carries the same 1.4.
 void test_a_losing_player_gets_the_enemy_in_front_of_them(void)
 {
     new_game();
     camera_at(800, 800, 0);
     run("rerandom");
 
-    run("make \"e.agg 0  make \"e.kind 1  set.kind");
+    // Behind on score: the forward ARC, which is the rule the cabinet has.
+    run("make \"score 0  make \"e.score 4000  make \"e.kind 1  set.kind");
     for (int i = 0; i < 40; i++)
     {
         run("place.enemy");
         char msg[96];
         snprintf(msg, sizeof(msg), "a mild spawn arrived at (%g, %g), which is behind you",
                  (double)num(":e.dx"), (double)num(":e.dz"));
-        // The forward ARC, which is the rule the cabinet has -- not the forward
-        // third of the screen, which is what a cone narrower than the field of
-        // view amounts to and is the defect below.
         TEST_ASSERT_TRUE_MESSAGE(num(":e.dz") > 0, msg);
     }
 
-    run("make \"e.agg 1  make \"e.kind 1  set.kind");
+    // Six thousand clear: anywhere at all, including behind you.
+    run("make \"score 9000  make \"e.score 0  make \"e.kind 1  set.kind");
     int behind = 0;
     for (int i = 0; i < 40; i++)
     {
@@ -2995,32 +3053,36 @@ void test_a_losing_player_gets_the_enemy_in_front_of_them(void)
         if (num(":e.dz") < 0)
             behind++;
     }
-    TEST_ASSERT_TRUE_MESSAGE(behind > 5, "at full aggression the enemy still only comes from in front");
+    TEST_ASSERT_TRUE_MESSAGE(behind > 5, "at the top rung the enemy still only comes from in front");
 }
 
-// THE DEFECT A BOARD FOUND, IN A TEST: "the tanks seem to spawn in the same or
-// similar place".  They did, and nothing on the host had a chance of saying so
-// -- every spawn was in front of the player, at one of two distances, out of an
-// obstacle, and each of those had a test that passed.
+// Design section 16.9.6's defect, and M6's re-cut of it.
 //
-// What none of them asked was whether two spawns in a row are DIFFERENT.  The
-// mild cone was 40 degrees, drawn about the heading a fight leaves you with --
-// pointed at the thing you have just killed -- and 40 degrees is narrower than
-// the 63-degree field of view, so the replacement appeared in the same third of
-// the screen against the same stretch of horizon, at one of two ranges.  Two
-// distances inside a cone that narrow is two places.
+// A board found a 40-degree cone unplayable: it is narrower than the 63-degree
+// field of view, so a replacement arrived in the same third of the screen, at
+// one of two ranges, against the same stretch of empty horizon.  Two discrete
+// distances inside a cone narrower than the view is TWO PLACES.  M5's fix was
+// a 150-degree floor.
 //
-// So the test is on the SPREAD, and it is deliberately about the picture rather
-// than about the arithmetic: the bearings a run of spawns takes have to cover
-// more than the view does, and one spawn has to land somewhere else than the
-// one before it.  It fails on the old cone with a span of 32 degrees.
+// The ROM's floor is its own field of view exactly -- $0f is 45 degrees and the
+// cabinet sees 45 -- so the rule is "somewhere in view", and here that is 63.
+// THAT SITS RIGHT ON THIS TEST'S OLD BOUNDARY, which asserted that thirty
+// spawns cover MORE bearing than the view.  A cone equal to the view cannot.
+//
+// So the question is asked where the cabinet actually opens up: 2,000 points
+// clear is one rung up and 126 degrees, which is the state a player is in for
+// almost all of a real game -- you are ahead by two kills within the first
+// minute.  The bottom rung keeps the weaker half of the claim, which is the
+// half the board's complaint was really about: consecutive spawns have to be
+// somewhere else, even when the cone is one screen wide.
 void test_two_spawns_running_are_not_the_same_place(void)
 {
     new_game();
     camera_at(800, 800, 0);
     run("rerandom");
-    run("make \"e.agg 0  make \"e.kind 1  set.kind");
 
+    // One rung up, which is where a game spends its time.
+    run("make \"score 3000  make \"e.score 0  make \"e.kind 1  set.kind");
     float lo = 999.0f, hi = -999.0f, last_x = 0.0f, last_z = 0.0f;
     int moved = 0;
     for (int i = 0; i < 30; i++)
@@ -3036,37 +3098,61 @@ void test_two_spawns_running_are_not_the_same_place(void)
         last_z = z;
     }
 
-    char msg[160];
+    char msg[192];
     snprintf(msg, sizeof(msg),
              "thirty spawns covered %g degrees, and the field of view is 63 -- they are all "
              "in the same place", (double)(hi - lo));
     TEST_ASSERT_TRUE_MESSAGE(hi - lo > 100.0f, msg);
-
     snprintf(msg, sizeof(msg),
              "only %d of 29 spawns landed more than 200 steps from the one before it", moved);
     TEST_ASSERT_TRUE_MESSAGE(moved >= 20, msg);
+
+    // And on the bottom rung -- level or behind on score, a cone one screen
+    // wide -- a spawn still has to land somewhere other than the last one.
+    run("make \"score 0  make \"e.score 0  make \"e.kind 1  set.kind");
+    moved = 0;
+    for (int i = 0; i < 30; i++)
+    {
+        run("place.enemy");
+        const float x = num(":e.dx"), z = num(":e.dz");
+        if (i > 0 && sqrtf((x - last_x) * (x - last_x) + (z - last_z) * (z - last_z)) > 200.0f)
+            moved++;
+        last_x = x;
+        last_z = z;
+    }
+    snprintf(msg, sizeof(msg),
+             "on the bottom rung only %d of 29 spawns moved -- the two-places defect is back", moved);
+    TEST_ASSERT_TRUE_MESSAGE(moved >= 15, msg);
 }
 
-// A missile is neither: it always comes from the far point and from within a
-// few degrees of where you are looking, because a missile is a dodge and not a
-// search.
+// A missile always comes from the far point, and from close to dead ahead.
+//
+// THE CONE IS 45 DEGREES AND NOT 10.  `CreateMissile` masks a random bearing
+// with $0f, which is +/- 22.5 degrees about the player's facing -- wider than
+// M5's 10, and it is the one spawn rule the ROM does NOT widen with the score.
 void test_a_missile_comes_from_the_far_point_and_from_in_front(void)
 {
     new_game();
     camera_at(800, 800, 0);
     run("rerandom");
-    run("make \"e.agg 0  make \"e.kind 2  set.kind");
+    run("make \"score 9000  make \"e.score 0  make \"e.kind 2  set.kind");
 
-    for (int i = 0; i < 20; i++)
+    float widest = 0.0f;
+    for (int i = 0; i < 30; i++)
     {
         run("place.enemy");
         const float d = sqrtf(num(":e.dx") * num(":e.dx") + num(":e.dz") * num(":e.dz"));
         TEST_ASSERT_FLOAT_WITHIN_MESSAGE(2.0f, num(":e.spawn"), d,
                                          "a missile appeared somewhere other than the far point");
-        // Ten degrees of cone is 0.09 of the range either side.
-        TEST_ASSERT_TRUE_MESSAGE(fabsf(num(":e.dx")) < 0.1f * d,
-                                 "a missile appeared off to one side");
+        const float off = fabsf(atan2f(num(":e.dx"), num(":e.dz")) * 57.2958f);
+        if (off > widest) widest = off;
+        char msg[128];
+        snprintf(msg, sizeof(msg), "a missile appeared %g degrees off, outside the cabinet's cone", (double)off);
+        TEST_ASSERT_TRUE_MESSAGE(off < 23.0f, msg);
     }
+    // And it really is the whole cone rather than a tighter one by accident:
+    // the score does not widen it, so this is all the spread there ever is.
+    TEST_ASSERT_TRUE_MESSAGE(widest > 12.0f, "the missile cone is much narrower than the cabinet's");
 }
 
 // A saucer's course has nothing to do with you, which is one line in
@@ -3149,19 +3235,24 @@ void test_the_enemy_is_confused_for_three_seconds_after_you_respawn(void)
 // M5 -- the missile's final turn
 //--------------------------------------------------------------------------
 
-// `e.range` is a STAND-OFF for anything with a gun and a FINAL TURN for a
-// missile, which is the one name in this file that means two things.  The
-// cabinet slides it from "homes the whole way" to "comes at you sideways until
-// the last few frames" over the 25,000 points above the threshold.
+// The ROM's threshold is (missile score + 25,000 - score), floored at $0800 --
+// 231 steps at 5,000 points down to 50 at 30,000.
+//
+// THE FIRST MISSILE HAS TO WEAVE, and this is the assertion M5 had backwards.
+// `e.range` opened at 700 against an `e.spawn` of 620, so `e.d > e.range` was
+// false from the moment a missile appeared and the swerve never ran -- at any
+// score below 8,125.  Every missile M5 ever fired flew straight in.  The test
+// that was here asserted exactly that as correct.
 void test_the_missiles_final_turn_comes_later_as_the_score_climbs(void)
 {
     run("make \"score 5000  make \"e.kind 2  set.kind");
     const float early = num(":e.range");
-    TEST_ASSERT_TRUE_MESSAGE(early > num(":e.spawn"),
-                             "the first missiles do not home from the moment they appear");
+    TEST_ASSERT_TRUE_MESSAGE(early < num(":e.spawn"),
+                             "the first missiles home from the moment they appear -- they cannot weave");
 
     run("make \"score 30000  make \"e.kind 2  set.kind");
     const float late = num(":e.range");
+    TEST_ASSERT_TRUE_MESSAGE(late < early, "the final turn does not come later as the score climbs");
     TEST_ASSERT_TRUE_MESSAGE(late < 100, "the last missiles still home from the far point");
 
     run("make \"score 99000  make \"e.kind 2  set.kind");
@@ -3169,31 +3260,38 @@ void test_the_missiles_final_turn_comes_later_as_the_score_climbs(void)
 }
 
 // Outside its final turn a missile swerves rather than homing, and the swerve
-// takes both sides -- it is a weave and not a drift.  Inside it, it turns onto
-// you like everything else.
+// takes both sides -- it is a weave and not a drift.
+//
+// IT IS IN THE FACING AND NOT IN A TURN RATE, which is the ROM's shape: the
+// small rotations track `enemy_turn_to` onto the player, and the big swerve is
+// applied as an OFFSET from that when the facing is set.  So the thing to
+// measure is how far `e.h` sits off the bearing, not the sign of `e.t`.
 void test_a_missile_swerves_until_its_final_turn(void)
 {
     new_game();
     camera_at(800, 800, 0);
     run("make \"score 30000  make \"e.kind 2  set.kind");
     enemy_at(800, 1400, 180);           // 600 steps out, well outside the turn
-    run("make \"e.rage 200");
+    run("make \"e.rage 200  make \"e.aimh 180");
 
     int left = 0, right = 0;
-    for (int i = 0; i < 60; i++)
+    for (int i = 0; i < 64; i++)
     {
         char expr[64];
         snprintf(expr, sizeof(expr), "make \"frame.count %d  hunt", i);
         run(expr);
-        if (num(":e.t") > 0) right++;
-        if (num(":e.t") < 0) left++;
+        const float off = num("wrap.diff :e.h - :e.aimh");
+        if (off > 1.0f) right++;
+        if (off < -1.0f) left++;
     }
     TEST_ASSERT_TRUE_MESSAGE(left > 10 && right > 10, "the missile does not weave, it drifts");
 
-    // And inside the final turn it homes: pointed 30 degrees off, it turns back.
+    // And inside the final turn the swerve stops: facing and desired heading
+    // become the same thing, which is what makes the last second readable.
     enemy_at(800, 830, 210);
-    run("hunt");
-    TEST_ASSERT_TRUE_MESSAGE(num(":e.t") != 0, "the missile never made its final turn");
+    run("make \"frame.count 7  hunt");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.0f, num("wrap.diff :e.h - :e.aimh"),
+                                     "the missile was still weaving inside its final turn");
 }
 
 //--------------------------------------------------------------------------
@@ -3208,19 +3306,19 @@ void test_the_radar_does_not_show_a_saucer(void)
     camera_at(800, 800, 0);
     foe_at(1, 800, 1000, 180);
     mock_device_clear_graphics();
-    run("radar");
+    run("make \"rd.bi 30  radar");
     const int with_tank = mock_device_line_count();
 
     foe_at(4, 800, 1000, 180);
     mock_device_clear_graphics();
-    run("radar");
+    run("make \"rd.bi 30  radar");
     const int with_saucer = mock_device_line_count();
 
     TEST_ASSERT_TRUE_MESSAGE(with_saucer < with_tank, "the radar drew a blip for a saucer");
 
     run("make \"e.alive false");
     mock_device_clear_graphics();
-    run("radar");
+    run("make \"rd.bi 30  radar");
     TEST_ASSERT_EQUAL_INT_MESSAGE(with_saucer, mock_device_line_count(),
                                   "a saucer is not exactly as invisible as nothing at all");
 }
@@ -3276,13 +3374,17 @@ void test_a_supertank_outclasses_a_tank(void)
 {
     run("make \"e.kind 1  set.kind");
     const float step = num(":e.step"), turn = num(":e.turn");
-    const float reload = num(":e.reload"), wide = num(":e.wide"), hw = num(":e.hw");
+    const float hw = num(":e.hw"), range = num(":e.range");
 
     run("make \"e.kind 3  set.kind");
-    TEST_ASSERT_TRUE_MESSAGE(num(":e.step") > step, "a supertank is no faster");
-    TEST_ASSERT_TRUE_MESSAGE(num(":e.turn") > turn, "a supertank turns no harder");
-    TEST_ASSERT_TRUE_MESSAGE(num(":e.reload") < reload, "a supertank reloads no faster");
-    TEST_ASSERT_TRUE_MESSAGE(num(":e.wide") < wide, "a supertank is no more accurate");
+    // The ROM shifts the supertank's move delta left one place and calls
+    // `RotateLeft` four times instead of two, so it is the slow tank doubled
+    // in both axes -- which is also the player doubled.
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 2.0f * step, num(":e.step"),
+                                     "a supertank is not twice a tank's speed");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 2.0f * turn, num(":e.turn"),
+                                     "a supertank does not turn at twice a tank's rate");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.range") > range, "a supertank holds no further off");
     TEST_ASSERT_TRUE_MESSAGE(num(":e.hw") > hw, "a supertank looks exactly like a tank");
 }
 
@@ -3413,14 +3515,17 @@ void test_a_saucer_flies_over_the_obstacles(void)
     camera_at(800, 800, 0);
     foe_at(4, 800, 880, 0);
 
+    // `e.f` is a STEP COUNT from M6 on rather than a flag, and `hunt` is what
+    // sets it -- so a test that calls `move.enemy` on its own has to state the
+    // intent first, exactly as the frame does.
     const float before = num(":e.z");
-    run("move.enemy");
+    run("make \"e.f 1  move.enemy");
     TEST_ASSERT_TRUE_MESSAGE(num(":e.z") > before, "the saucer was stopped by an obstacle");
 
     // And a tank in the same place is not.
     foe_at(1, 800, 880, 0);
     const float tank_before = num(":e.z");
-    run("move.enemy");
+    run("make \"e.f 1  move.enemy");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(tank_before, num(":e.z"),
                                     "a tank drove through the obstacle the saucer flew over");
 }
@@ -3603,7 +3708,13 @@ void test_a_kill_scores_what_the_enemy_is_worth(void)
 // The bonus tank arrives on STEPPING OVER the boundary and not on landing on
 // it, which a `remainder` would get wrong: a 5,000-point saucer can carry a
 // score from 14,000 to 19,000 without ever equalling 15,000.
-void test_a_bonus_tank_arrives_on_stepping_over_the_boundary(void)
+//
+// AND THERE ARE TWO OF THEM IN A GAME, NOT ONE EVERY 15,000.  `CheckAwardLife`
+// reads a single DIP threshold and fires only when the old score was below it
+// and the new one is not, so it can fire at most once; the second and last is a
+// separate rule at 100,000.  M5 rolled the threshold forward every time and
+// handed out a tank every 15,000 for ever.
+void test_two_bonus_tanks_a_game_and_never_a_third(void)
 {
     new_game();
     const float at = num(":extra.at");
@@ -3619,11 +3730,22 @@ void test_a_bonus_tank_arrives_on_stepping_over_the_boundary(void)
     // Over the line rather than onto it.
     run("add.score 5000");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":lives"), "stepping over the boundary won nothing");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(at + at, num(":extra.due"), "the next bonus is in the past");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(100000, num(":extra.due"),
+                                    "the second bonus is not the cabinet's 100,000");
 
-    // And it does not fire again on the next point scored.
+    // And it does not fire again on the next point scored, nor at 15,000 more.
     run("add.score 100");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":lives"), "the bonus repeated");
+    run("add.score 20000");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":lives"), "a third bonus arrived at 15,000 intervals");
+
+    // The second and last, at 100,000.
+    run("add.score 70000");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(5, num(":lives"), "no bonus tank at 100,000");
+
+    // And never again, however long the game runs.
+    run("add.score 500000");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(5, num(":lives"), "a third bonus tank arrived");
 }
 
 // Being hit costs a tank, cracks the glass and pauses you.  It does NOT end the
@@ -4393,11 +4515,257 @@ void test_every_hot_path_temporary_is_prefixed(void)
 
 
 
+// B57.  `modulo` is an INTEGER operation -- the reference's own heading line
+// says `modulo integer1 integer2` -- and it truncates, so every position and
+// heading in this game was quantised to whole units by the statement that
+// wrapped it.  Nothing noticed for five milestones because everything that fed
+// one was an integer; M6's tuning is fractional throughout, so the wrap had to
+// keep the fraction.
+//
+// It bit once before it was found: M5 scaled a mild enemy's speed to
+// `e.step * 0.6`, which is 3.6, and the enemy moved 3.
+void test_the_wrap_keeps_the_fraction(void)
+{
+    // A whole plain's worth of driving, one tread-step at a time, and the
+    // fraction has to survive every one of them.
+    camera_at(800, 800, 0);
+    press_forward();
+    run("pollkeys  step.tank");
+    release_forward();
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.001f, 800.0f + 2.0f * num(":tread.step"), num(":pz"),
+                                     "the plain's wrap threw away the fraction of a step");
+
+    // And across the seam, which is the only place the wrap actually fires.
+    camera_at(0.0f, num(":world") - 1.0f, 0.0f);
+    press_forward();
+    run("pollkeys  step.tank");
+    release_forward();
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.001f, 2.0f * num(":tread.step") - 1.0f, num(":pz"),
+                                     "the wrap truncated at the seam");
+
+    // The heading is the same story, and it is the one that showed: a one-tread
+    // arc turns 0.703 degrees, and an integer wrap makes that exactly nothing.
+    camera_at(800, 800, 0);
+    press(KEY_LFWD);
+    run("pollkeys  step.tank");
+    release(KEY_LFWD);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.001f, num(":turn.rate"), num(":ph"),
+                                     "the heading wrap threw away a sub-degree turn");
+}
+
+// `:HitSomething` at $651a: the tank sets a reverse flag with a random turn
+// direction and backs up for 48 frames, and the ROM runs that WITH NO COLLISION
+// TEST AT ALL -- which is not sloppiness, it is the only way a tank that
+// spawned inside a cube can ever get out of one.
+//
+// M5 refused the step and kept the turn, and the comment above `move.enemy`
+// claimed that was the cabinet's behaviour.  It is not, and an enemy that
+// ground against a cube for ever is what it bought.
+void test_a_blocked_enemy_backs_out_and_can_leave_a_cube_it_spawned_in(void)
+{
+    new_game();
+    run("rerandom");
+    run("make \"ox [800 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [1000 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+
+    // Driving straight into the cube.
+    foe_at(1, 800, 1000 - num(":e.coll") + 2.0f, 0);
+    run("make \"e.rev 0  make \"e.f 1  make \"e.t 0  move.enemy");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.rev") > 0, "a blocked enemy did not start backing out");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.mvc") > 40, "the reverse got no clock");
+
+    // And now it reverses -- turning, and without asking about obstacles.
+    const float before = num(":e.z");
+    run("make \"e.rage 200  hunt");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-1, num(":e.f"), "the enemy did not reverse");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.t") != 0.0f, "the enemy reversed without turning");
+    run("step.enemy");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.z") < before, "the enemy did not actually back up");
+
+    // The case the ROM disables collision for: dead inside the cube, which only
+    // a spawn can produce, and it still gets out.
+    foe_at(1, 800, 1000, 0);
+    run("make \"e.rev 1  make \"e.mvc 48  make \"e.rage 200  make \"e.alive true");
+    for (int i = 0; i < 40; i++)
+        run("step.enemy");
+    run("enemy.offsets");
+    run("make \"tk.dx :e.dx  make \"tk.dz :e.dz  make \"tk.guard :e.coll");
+    TEST_ASSERT_FALSE_MESSAGE(truth("blocked?"),
+                              "an enemy that spawned inside a cube never got out of it");
+}
+
+// The ROM's missile spawns at altitude $1800 and, on touching anything, is put
+// back where it was and climbs -- so it hops obstacles and you cannot hide from
+// one behind a cube.  A saucer flies over them for a different reason and both
+// end up in the same branch of `move.enemy`.
+void test_a_missile_hops_the_obstacles_and_a_tank_does_not(void)
+{
+    new_game();
+    run("make \"ox [800 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [900 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+
+    foe_at(2, 800, 880, 0);
+    const float before = num(":e.z");
+    run("make \"e.rev 0  make \"e.f 1  move.enemy");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.z") > before, "a missile was stopped by a cube");
+
+    foe_at(1, 800, 880, 0);
+    const float tank_before = num(":e.z");
+    run("make \"e.rev 0  make \"e.f 1  move.enemy");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(tank_before, num(":e.z"),
+                                    "a tank drove through the cube the missile hopped");
+}
+
+// The blip is refreshed to full only on the frame the sweep line crosses the
+// enemy's bearing ($6b5d) and decays from there, so it flares about once a
+// revolution and is dark in between.  That is a MECHANIC: between pings the
+// player has to carry the enemy's position themselves.  M5 drew a steady dot,
+// which is a tracking radar the cabinet never gave anybody.
+void test_the_blip_pings_on_the_sweep_and_then_goes_dark(void)
+{
+    camera_at(800, 800, 0);
+    enemy_at(800, 1000, 180);
+    run("make \"rd.bi 0  make \"rd.sw 0");
+
+    // The sweep is nowhere near it: nothing is drawn and nothing is armed.
+    run("make \"rd.sw 180  blip");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":rd.bi"), "the blip armed with the sweep elsewhere");
+    mock_device_clear_graphics();
+    run("make \"rd.sw 180  blip");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_line_count(), "a dark blip still drew");
+
+    // The sweep crosses it -- dead ahead is bearing zero -- and it lights up.
+    run("make \"rd.sw 0  blip");
+    TEST_ASSERT_TRUE_MESSAGE(num(":rd.bi") > 0, "the sweep crossed the enemy and nothing pinged");
+
+    // Then it fades, and is gone well before the sweep comes round again.
+    mock_device_clear_graphics();
+    run("make \"rd.sw 180  blip");
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0, "the blip went out immediately");
+    for (int i = 0; i < 40; i++)
+        run("make \"rd.sw 180  blip");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":rd.bi"), "the blip never faded");
+    mock_device_clear_graphics();
+    run("make \"rd.sw 180  blip");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_line_count(), "a faded blip still drew");
+}
+
+// B58, reported from a board: "a tank was close, almost on top of me, and it
+// kept firing in fast repetition, screen cracked, but I did not die."
+//
+// THE PLAYER IS NEVER DEAD LONG ENOUGH TO DIE.  `hit.player` re-arms
+// `tk.boom` to `boom.frames` on every hit, and `step.tank` only calls
+// `respawn` when that counter reaches zero -- so a tank at point-blank range,
+// firing faster than ten frames, refreshes the pause before it can expire.
+// The player sits in a permanent death animation with the glass cracked,
+// `lives` going arbitrarily negative, and the game unable to end.
+//
+// THE ROM HAS THREE GATES HERE AND M6 HAD NONE OF THEM:
+//
+//  * `TryShootPlayer` at $65cd reads `unit_state` and will not fire at a
+//    player who is already dying.
+//  * `TestProjCollU` at $5f6f reads the same byte and will not let a shell
+//    already in the air hit one either.
+//  * a projectile that strikes anything goes to $80 (a unit) or $a0 (an
+//    obstacle) and spends about six frames EXPLODING, during which $65c9
+//    refuses to fire again.  That is the cabinet's rate limiter at point-blank
+//    range, and it is not a reload -- it is the shell still being on screen.
+void test_a_point_blank_tank_cannot_hold_the_player_in_a_permanent_death(void)
+{
+    new_game();
+    run("rerandom");
+    // The obstacles well out of the way, so nothing but the tank is in play.
+    run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+
+    // Right on top of the player, aimed, loaded, and out of patience.
+    foe_at(1, 800, 845, 180);
+    run("make \"lives 1  make \"e.cool 0  make \"e.rage 0  make \"tk.boom 0");
+    run("make \"playing true  make \"paused false  make \"quit false  make \"e.boom 0");
+
+    for (int i = 0; i < 200 && truth(":playing"); i++)
+        run("play.frame");
+
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "200 frames at point-blank range and the game never ended -- lives %g, "
+             "tk.boom %g: the death pause is being re-armed faster than it runs down",
+             (double)num(":lives"), (double)num(":tk.boom"));
+    TEST_ASSERT_FALSE_MESSAGE(truth(":playing"), msg);
+
+    // And the last life is spent once, not many times over.
+    snprintf(msg, sizeof(msg), "the player lost %g lives from one death", (double)(1.0 - num(":lives")));
+    TEST_ASSERT_TRUE_MESSAGE(num(":lives") >= 0.0f, msg);
+}
+
+// The gate on its own: a dying player is not shot at, which is $65cd.
+void test_the_enemy_does_not_fire_at_a_dying_player(void)
+{
+    new_game();
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 845, 180);
+    run("make \"e.cool 0  make \"e.rage 0  make \"e.mvc 1  make \"tk.boom 0  hunt");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":e.fire"), "the enemy would not shoot a live player at point blank");
+
+    run("make \"e.cool 0  make \"e.mvc 1  make \"tk.boom 5  hunt");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":e.fire"), "the enemy shot at a player who was already dying");
+}
+
+// And a shell already in the air cannot land on one either, which is $5f6f.
+// Without this a single shot fired the frame before a death still re-arms the
+// pause after it.
+void test_a_shell_in_the_air_cannot_hit_a_dying_player(void)
+{
+    new_game();
+    run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 900, 180);
+    run("make \"hits 0  make \"tk.boom 0  make \"es.on false  enemy.fires");
+    TEST_ASSERT_TRUE(truth(":es.on"));
+
+    // The player dies to something else on the way.
+    run("make \"tk.boom 8  make \"lives 3");
+    for (int i = 0; i < 8 && truth(":es.on"); i++)
+        run("step.eshell");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":hits"), "a shell landed on a player who was already dying");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3, num(":lives"), "a dying player lost a second life to a shell in flight");
+}
+
+// The rate limiter, and it is the shell rather than a timer: a shot that
+// STRIKES something leaves an explosion behind, and the enemy cannot fire
+// through it.  A shot that simply runs out of life leaves nothing.
+void test_a_shell_that_strikes_something_holds_the_gun_shut(void)
+{
+    new_game();
+    run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 900, 180);
+
+    // Struck the player: the gun is shut for a few frames afterwards.
+    run("make \"hits 0  make \"tk.boom 0  make \"e.cool 0  make \"es.on false  enemy.fires");
+    for (int i = 0; i < 8 && truth(":es.on"); i++)
+        run("step.eshell");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":hits"), "the shell never arrived");
+    TEST_ASSERT_TRUE_MESSAGE(num(":e.cool") > 0, "a shell that hit the player left no explosion behind");
+
+    // Ran out of life instead: nothing is left and the gun is free.
+    run("make \"tk.boom 0  make \"e.cool 0  make \"es.on false  enemy.fires");
+    run("make \"es.life 1  step.eshell");
+    TEST_ASSERT_FALSE(truth(":es.on"));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":e.cool"),
+                                    "a shell that expired left an explosion behind it");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_file_loads_and_sets_its_tuning);
-    RUN_TEST(test_max_obstacles_is_a_constant_the_frame_reads);
+    RUN_TEST(test_the_whole_field_is_drawable_with_no_cap);
     RUN_TEST(test_the_projection_is_right_at_a_heading_that_is_not_zero);
     RUN_TEST(test_turning_right_sweeps_the_world_to_the_left);
     RUN_TEST(test_an_object_behind_the_camera_is_culled);
@@ -4413,7 +4781,7 @@ int main(void)
     RUN_TEST(test_no_part_of_the_gunsight_lies_along_the_horizon);
     RUN_TEST(test_the_sight_and_the_world_are_different_colours);
     RUN_TEST(test_the_field_is_on_the_plain_and_clear_of_the_start);
-    RUN_TEST(test_the_frame_draws_no_more_than_max_obstacles);
+    RUN_TEST(test_nothing_in_view_is_culled_by_distance);
     RUN_TEST(test_obstacles_behind_the_camera_do_not_crowd_out_the_one_in_front);
     RUN_TEST(test_an_obstacle_beyond_the_far_plane_is_not_drawn);
     RUN_TEST(test_the_ground_is_one_flat_line_at_the_horizon);
@@ -4453,7 +4821,7 @@ int main(void)
     RUN_TEST(test_a_shell_draws_eight_edges);
     RUN_TEST(test_the_enemy_is_culled_at_the_near_plane);
     RUN_TEST(test_the_enemy_turns_towards_the_player);
-    RUN_TEST(test_the_enemy_thinks_on_one_frame_in_three);
+    RUN_TEST(test_the_enemy_acts_every_frame_and_decides_on_a_counter);
     RUN_TEST(test_the_enemy_closes_and_then_holds_its_range);
     RUN_TEST(test_the_enemy_cannot_drive_through_an_obstacle);
     RUN_TEST(test_a_spawn_is_re_rolled_out_of_an_obstacle);
@@ -4464,8 +4832,8 @@ int main(void)
     RUN_TEST(test_an_obstacle_stops_a_shell);
     RUN_TEST(test_a_shell_hits_an_obstacle_across_the_seam);
     RUN_TEST(test_a_shell_that_hits_nothing_expires);
-    RUN_TEST(test_the_aim_error_is_wider_than_the_box_it_is_aimed_at);
-    RUN_TEST(test_no_range_is_a_range_the_enemy_cannot_miss_from);
+    RUN_TEST(test_the_enemy_fires_exactly_along_its_heading);
+    RUN_TEST(test_a_still_player_is_hit_and_a_moving_one_is_missed);
     RUN_TEST(test_the_enemys_shell_hits_the_player_and_pauses_the_tank);
     RUN_TEST(test_the_explosion_draws_its_fragments_and_runs_down);
     RUN_TEST(test_the_blip_is_the_enemy_in_the_camera_frame);
@@ -4489,10 +4857,10 @@ int main(void)
     RUN_TEST(test_a_tank_you_drive_away_from_is_replaced_by_a_missile);
     RUN_TEST(test_a_dodged_missile_is_followed_by_another_until_the_cycle_ends);
     RUN_TEST(test_the_enemy_keeps_score_and_the_difference_is_the_difficulty);
-    RUN_TEST(test_a_mild_enemy_shoots_wide_thinks_slowly_and_drives_slowly);
-    RUN_TEST(test_a_missile_is_not_softened_by_the_score);
+    RUN_TEST(test_a_mild_enemy_drives_somewhere_else_at_full_speed);
+    RUN_TEST(test_no_row_is_rewritten_on_the_way_in);
     RUN_TEST(test_seventeen_seconds_makes_a_mild_enemy_aggressive);
-    RUN_TEST(test_a_missile_that_flies_its_time_out_has_been_dodged);
+    RUN_TEST(test_a_missile_that_gets_past_you_has_been_dodged);
     RUN_TEST(test_a_spawn_is_at_one_of_two_distances);
     RUN_TEST(test_a_losing_player_gets_the_enemy_in_front_of_them);
     RUN_TEST(test_two_spawns_running_are_not_the_same_place);
@@ -4521,7 +4889,7 @@ int main(void)
     RUN_TEST(test_the_new_models_are_culled_at_the_near_plane);
     RUN_TEST(test_the_frame_draws_the_model_that_matches_the_kind);
     RUN_TEST(test_a_kill_scores_what_the_enemy_is_worth);
-    RUN_TEST(test_a_bonus_tank_arrives_on_stepping_over_the_boundary);
+    RUN_TEST(test_two_bonus_tanks_a_game_and_never_a_third);
     RUN_TEST(test_a_hit_costs_a_tank_and_cracks_the_glass);
     RUN_TEST(test_the_pause_runs_out_into_a_new_tank_and_a_new_enemy);
     RUN_TEST(test_a_ram_spawns_one_replacement_and_not_two);
@@ -4550,6 +4918,14 @@ int main(void)
     RUN_TEST(test_a_ranking_score_is_filed_and_saved);
     RUN_TEST(test_a_frame_with_each_kind_runs);
 
+    RUN_TEST(test_the_wrap_keeps_the_fraction);
+    RUN_TEST(test_a_blocked_enemy_backs_out_and_can_leave_a_cube_it_spawned_in);
+    RUN_TEST(test_a_missile_hops_the_obstacles_and_a_tank_does_not);
+    RUN_TEST(test_the_blip_pings_on_the_sweep_and_then_goes_dark);
+    RUN_TEST(test_a_point_blank_tank_cannot_hold_the_player_in_a_permanent_death);
+    RUN_TEST(test_the_enemy_does_not_fire_at_a_dying_player);
+    RUN_TEST(test_a_shell_in_the_air_cannot_hit_a_dying_player);
+    RUN_TEST(test_a_shell_that_strikes_something_holds_the_gun_shut);
     RUN_TEST(test_the_game_fits_the_global_table_with_room_to_spare);
     RUN_TEST(test_every_hot_path_temporary_is_prefixed);
     return UNITY_END();

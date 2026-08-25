@@ -152,7 +152,7 @@
 ;
 ; What the fallback cost while it
 ; existed was not its two constants. It
-; was that `fps` and `max.obstacles`
+; was that `fps` and the object cap
 ; became things `clock` WROTE, so
 ; neither could be read as a tuning
 ; number, and every per-frame constant
@@ -261,14 +261,16 @@
 ;   close enough to an obstacle for it
 ;   to fill the view.
 ;
-; * `max.obstacles` IS A CONSTANT, NOT
-;   AN ASSUMPTION. Overclocking (design
+; * THERE IS NO OBJECT CAP, and the
+;   clock is why. Overclocking (design
 ;   section 12.3) turns the frame into
 ;   25.32 + 3.223 n and holds twelve
 ;   objects at 15 fps where stock holds
-;   five, so "three obstacles at 24 fps
-;   or twelve at 15" is a real choice --
-;   and it is M4's, not this file's.
+;   five, so the whole eight-obstacle
+;   table plus the enemy fits with room.
+;   M6 spent section 12.3.1b's choice --
+;   "three obstacles at 24 fps or twelve
+;   at 15" -- on density.
 ;
 ; `window`, AND IT IS LOAD-BEARING
 ; RATHER THAN TIDINESS. The default is
@@ -397,35 +399,26 @@ make "half.world 800
 ; half*sqrt2 -- see `blocked?`.
 make "coll.r 90
 
-; How many objects a frame will DRAW,
-; and how many are in the table (design
-; section 14).
+; How many obstacles are in the table.
 ;
-; ONE CAP, AND M4 IS THE ONLY THING
-; THAT TURNS IT. `max.obstacles` is what
-; a frame draws. Three objects fit at
-; 300 MHz with the enemy and the radar
-; in the frame, which is the clock this
-; game requires, so there is no second
-; value and nothing decides between them
-; at startup.
+; THERE IS NO LONGER A SECOND NUMBER
+; HERE. `max.obstacles` capped what a
+; frame drew, at three, and M6 retired
+; it: design section 12.3.1b's `25.32 +
+; 3.223 n` holds twelve objects at 15
+; fps on the clock this game already
+; requires, and the whole table plus the
+; enemy is nine. The cap was cut against
+; the stock slope and outlived it. See
+; `draw.field`.
 ;
-; It WAS two -- a fallback to two
-; obstacles on a board that refused the
-; clock -- and M3 removed it, because M2
-; had already measured that it does not
-; work: peak frame 84.8 to 77.0 against
-; 66.7, still over by 10.3. See the
-; header, and `clock`.
-;
-; Overclocking (design section 12.3)
-; turns the frame into 25.32 + 3.223 n
-; and holds twelve objects at 15 fps, so
-; the 15 ms of peak headroom M2 left is
-; about four more objects at the rate
-; that already works. That is M4's call
-; and this is the number it moves.
-make "max.obstacles 3
+; Eight is the table and eight is now
+; also the most that can be drawn, so
+; design section 14's density row is
+; spent: the choice section 12.3.1b left
+; open -- three obstacles at 24 fps or
+; twelve at 15 -- is decided for density
+; at 15.
 make "ob.count 8
 
 ; Obstacle half-width, cube height,
@@ -444,18 +437,44 @@ make "pyre :pyrh - :eye
 ;
 ; BOTH ARE PER FRAME, so both are really
 ; per second times `fps` and neither can
-; be read on its own: at 15 fps a pivot
-; is two units of difference, so 2 gives
-; 60 degrees a second and a one-tread
-; arc turns at 30. It was 3 -- 90 a
-; second on the pivot -- and a board
-; said that is too fast to aim with.
-; CHANGE `fps` AND THESE TWO HAVE TO
-; MOVE THE OTHER WAY or the tank drives
-; and spins faster for no reason a
-; player can see.
-make "turn.rate 2
-make "tread.step 4
+; be read on its own. CHANGE `fps` AND
+; THESE TWO HAVE TO MOVE THE OTHER WAY
+; or the tank drives and spins faster
+; for no reason a player can see.
+;
+; BOTH ARE THE CABINET'S, AS OF M6, and
+; both were far too fast before it.
+;
+; `turn.rate` is 360/512. The ROM's
+; facing is a NINE-BIT value and
+; `RotateLeft` adds exactly one unit of
+; it -- 0.703 degrees -- so a pivot, two
+; units, is 1.41 degrees a frame and a
+; one-tread arc is 0.70. At 15 fps that
+; is 21.1 degrees a second and a full
+; turn takes 17 seconds. It was 2, which
+; is 60 a second and a six-second turn.
+;
+; SEVENTEEN SECONDS TO TURN ROUND SOUNDS
+; BROKEN AND IS THE GAME. Battlezone's
+; whole tension is the time it takes to
+; bring the gun onto something you can
+; already see; at 60 degrees a second
+; there is no such interval and the
+; periscope may as well be a mouse.
+;
+; `tread.step` is the same story in the
+; other axis. `CalcMoveDelta` builds a
+; step of 3/4 of a sine's high byte, at
+; most 95 units, and both-treads-forward
+; calls it twice: 190 units a frame,
+; which at M6's 40.96 units to the step
+; (design section 16.10) is 4.64 steps.
+; Halve it for the per-unit figure. It
+; was 4, which is 8 steps a frame -- 1.7
+; times the cabinet.
+make "turn.rate 0.703
+make "tread.step 2.32
 
 make "atom.floor 2000
 
@@ -497,126 +516,142 @@ make "ebodyh 16
 make "ebode :ebodyh - :eye
 
 ; Steps and degrees a frame, the
-; stand-off it tries to hold, and how
-; near straight-on it wants to be before
-; it fires.
+; stand-off it tries to hold, and the
+; band inside which it drives rather
+; than pivots.
 ;
-; THE STAND-OFF AND THE HIT BOX ARE ONE
-; NUMBER, NOT TWO, and the first board
-; play test is what said so: it read as
-; a tank that comes straight at you with
-; perfect aim. It was. `tk.hit` is a 30
-; box, the enemy fires along its own
-; heading within `e.aim` of you, so a
-; shot thrown sideways by d * tan e.aim
-; CANNOT MISS while d * tan 7 < 30 --
-; that is everything inside 244 steps,
-; and the stand-off was 240. The tank
-; drove into the one place from which it
-; could not miss and stopped there.
+; ALL FOUR ARE THE CABINET'S AS OF M6,
+; and the first three moved a long way.
 ;
-; So the stand-off is the number that
-; moved: 400, which is 283 even on the
-; diagonal where `e.d`'s Manhattan
-; distance is furthest from the real
-; one, and 283 * tan 10 is 50 against a
-; 30 box. `e.wide` below is the other
-; half of the same fix -- and M3 had to
-; correct it again, because an ANGULAR
-; error shrinks to nothing as the range
-; does and the range is the player's to
-; choose. See `e.wide`.
+; `e.step` 2.32 is ONE `MoveUnit`: the
+; ROM builds a 95-unit step and takes it
+; twice when it is already pointed where
+; it wants to go, once when it is still
+; turning onto it. So this is the
+; half-step and `e.f` is 1 or 2. Twice
+; 2.32 is 4.64, which is exactly the
+; player's speed -- THE SLOW TANK KEEPS
+; UP WITH YOU AND ALWAYS DID. It was 6,
+; scaled down again by aggression to as
+; little as 3.6, which is under half the
+; treads' 8 and is why nothing on the
+; plain could ever chase anybody.
 ;
-; THESE EIGHT ARE LIVE STATE FROM M3 ON,
-; not tuning. `set.kind` writes the row
-; of whichever of the four enemies has
-; just spawned into them, and everything
-; downstream -- `hunt`, `move.enemy`,
-; both projections, the collisions --
-; reads them without knowing which kind
-; it is looking at. What is written here
-; is the tank's row and the shape of the
+; `e.turn` 1.41 is two rotate units, the
+; same rate the player pivots at. The
+; small-angle branch spends half of it.
+;
+; `e.range` 38 IS THE NUMBER THAT WILL
+; LOOK WRONGEST AND IT IS RIGHT. The ROM
+; stops closing at $0500, which is 31
+; steps -- point blank, against a hit
+; box of 19. This was 400: over half the
+; far plane, so the tank parked at the
+; edge of sight and traded shots, and
+; the cabinet's tank does nothing of the
+; kind. It drives into your face.
+;
+; 38 rather than 31 because `hunt`
+; compares `abs dx + abs dz` where the
+; ROM compares a real hypotenuse; 31 on
+; the diagonal is 44, and 38 splits it.
+;
+; THE OLD COMMENT HERE ARGUED THE
+; STAND-OFF OUT TO 400 to stop a tank
+; that "could not miss" from parking
+; where it could not miss. That was a
+; real defect with the wrong fix: the
+; cabinet's answer is not to stand off,
+; it is that a shot fired along a
+; heading MISSES A MOVING TARGET because
+; nothing leads. `e.wide` went with it.
+;
+; THESE ARE LIVE STATE, not tuning.
+; `set.kind` writes the row of whichever
+; of the four enemies has just spawned
+; into them, and everything downstream
+; -- `hunt`, `move.enemy`, both
+; projections, the collisions -- reads
+; them without knowing which kind it is
+; looking at. What is written here is
+; the tank's row and the shape of the
 ; other three.
-make "e.step 6
-make "e.turn 4
-make "e.range 400
-make "e.aim 7
+make "e.step 2.32
+make "e.turn 1.41
+make "e.range 38
 make "e.hw :ehalf
 make "e.te :ebode
 
-; The aim error, IN STEPS either way at
-; the target, and the span `random`
-; needs to produce it.
+; THE DELIBERATE MISS IS GONE, AND SO IS
+; THE RELOAD. Both were M2 and M3
+; inventions and the cabinet has
+; neither.
 ;
-; THE STAND-OFF ALONE WOULD NOT HAVE
-; FIXED IT. `hunt` turns in `e.turn`
-; steps and stops the moment it is
-; inside `e.aim`, so the error it fires
-; with is whatever that last 4-degree
-; step left -- and against a player who
-; is holding still it is the SAME error
-; every shot. The tank does not miss
-; sometimes and hit sometimes; it hits
-; every time or misses every time, for
-; the whole approach. That is not an
-; aim, it is a coin flipped once.
+; `e.wide` threw every shot a random
+; lateral distance either side of the
+; player, because M2's tank stood at a
+; range from which its angular error
+; could not miss and M3 found that no
+; angular error fixes that -- an angle
+; shrinks to nothing as the range does
+; and the range is the player's to
+; choose. All true, and all downstream
+; of a stand-off (400) that should never
+; have been there. The ROM fires exactly
+; along its facing, within two rotate
+; units of your bearing, from 31 steps
+; away, and it misses ANYWAY -- because
+; a shell takes frames to arrive and
+; nothing in Battlezone leads its
+; target. Drive and it misses; hold
+; still and you die. That is the whole
+; mechanic and it is better than a
+; random offset.
 ;
-; A per-shot error is what the cabinet's
-; tank had and it costs two `sin`/`cos`
-; calls A SHOT rather than a frame,
-; which at the measured 20 ms body is
-; not a number worth thinking about.
+; `e.reload` gated the rate of fire at
+; 24 frames. The ROM's gate is that its
+; one shell is still in the air:
+; `TryShootPlayer` tests
+; `projectile_state_1` and nothing else.
+; `es.on` already says that, so the
+; reload was a second lock on a door
+; that had one.
 ;
-; AND IT IS A DISTANCE AND NOT AN ANGLE,
-; which is M3's correction and the third
-; time this pair has been wrong. An
-; angular error is thrown d * tan(wob)
-; sideways, so it SHRINKS TO NOTHING as
-; the range does -- and the range is not
-; the enemy's to choose, because the
-; player can always drive closer. M2
-; moved the stand-off out to 400 and
-; validated the fix at that one
-; distance, where the tank misses 55 %
-; of the time. Measured across the
-; ranges a player actually reaches, a
-; board found what the design could not:
-;
-;   stationary player, tank firing
-;    400 steps   19 of 40 hit
-;    283         27
-;    200         33
-;    150         40 -- every shot
-;    100         40
-;     60         40
-;
-; No value of an angular `e.wob` fixes
-; that, because the shrinking is the
-; SHAPE of the error and not its size.
-; So the error is now a lateral offset
-; AT THE TARGET, converted to an angle
-; for the range it is fired over --
-; which is what a gunner's error
-; actually is, and it makes accuracy
-; range-independent by construction.
-;
-; THE INVARIANT BECOMES ONE COMPARISON
-; IN ONE UNIT: `e.wide` must exceed
-; `tk.hit`, or the cone is narrower than
-; the box and the shot cannot miss. That
-; is the whole of section 16.6.1's
-; relation -- three numbers in two units
-; joined by a tangent -- reduced to two
-; numbers in steps.
-make "e.wide 60
+; What replaces them is the pair below.
 
-; Frames between hunt decisions (design
-; section 19.3: at 15 fps a decision
-; every third frame is invisible and
-; costs a third as much) and frames
-; between its shots.
-make "e.think 3
-make "e.reload 24
+; The two clocks the ROM steers with.
+;
+; `e.mvc` is `move_counter`: frames
+; until the enemy picks a new DESIRED
+; heading. Four while it is hunting, 64
+; while it is driving 90 degrees off,
+; 48 while it is reversing out of a
+; cube, 52 for the first stretch after
+; one. It replaces `e.think`, which
+; asked a different question -- how
+; often to run the hunt at all -- and
+; the answer to that is now every frame,
+; because the ROM turns and shoots every
+; frame and only DECIDES on the counter.
+;
+; `e.band` is `close_firing_angle?`, and
+; it is the strangest number in the ROM:
+; it alternates between 2 and 16 angle
+; units -- 2.8 and 22.5 degrees -- every
+; time a heading is chosen, and it is
+; the width of the cone inside which the
+; tank drives forward instead of
+; pivoting on the spot. Alternating it
+; is what produces the cabinet's
+; unmistakable jerky
+; drive-pivot-drive-pivot gait, which no
+; fixed value reproduces. The
+; disassembly's own note says "I'm not
+; sure what this code is trying to
+; accomplish"; what it accomplishes is
+; the walk.
+make "e.mvc 4
+make "e.band 2.8
 
 ; Where a new one appears, and the two
 ; collision half-widths: what a shell
@@ -627,9 +662,49 @@ make "e.reload 24
 ; because it guards against an obstacle
 ; and an obstacle is the same size
 ; whatever is driving at it.
+;
+; `e.hit` IS NOT THE ROM'S 19 AND MUST
+; NOT BE. The cabinet's unit radius is
+; $0300, 19 steps, but it advances a
+; projectile FOUR TIMES A FRAME and
+; tests after each step. This file
+; advances a shell once, 32 steps, so
+; the guard has to be the hull's
+; half-width plus half a step or the
+; shell steps clean over the tank
+; between two frames -- 14 + 16 for a
+; tank, 17 + 16 for a supertank. That is
+; the same half-a-step argument
+; `sh.guard` is built on.
+;
+; The ROM's 19 lives in `tk.hit`
+; instead, which is what a MISSILE has
+; to come within to kill you, and 30
+; there is the cabinet's $0500.
 make "e.spawn 620
 make "e.hit 34
 make "e.coll 60
+
+; The heading it WANTS, and whether it
+; is backing out of something.
+;
+; `e.aimh` is the ROM's `enemy_turn_to`,
+; and separating it from `e.h` is what
+; makes the cabinet's tank read as a
+; tank rather than as a homing missile
+; with treads. It picks a heading, holds
+; it for `e.mvc` frames, and turns onto
+; it -- so a tank that decided to drive
+; 90 degrees off KEEPS DOING THAT for
+; four seconds, even as you move. M5 had
+; no such name: `hunt` re-aimed at the
+; player every decision, so "evasive"
+; could only ever mean "slower".
+;
+; `e.rev` is 0, or 1 and 2 for backing
+; up while turning left and right.
+make "e.aimh 180
+make "e.rev 0
 
 ;--------------------------------------
 ; The four enemies
@@ -687,23 +762,39 @@ make "e.coll 60
 ; THE ENEMY KEEPS SCORE TOO, and it is
 ; the only difficulty knob in the game.
 ; `e.score` goes up 1,000 every time you
-; die, and `e.agg` is the difference
-; between the two scores over 7,000,
-; clamped to 0..1: at 0 the enemy is
-; winning, so it appears in front of
-; you, drives slowly, thinks slowly and
-; shoots wide; at 1 it comes from any
-; bearing with the numbers its row
-; actually says. Nothing else in this
-; file decides how hard the game is.
+; die, and `e.diff` is the plain
+; difference between the two scores in
+; POINTS, read at the two moments the
+; ROM reads it: when a heading is chosen
+; (`aim.enemy`) and when a spawn bearing
+; is drawn (`place.enemy`).
+;
+; IT IS A DIFFERENCE AND NOT A RAMP, and
+; that is M6's correction. `e.agg` was
+; this over 7,000, clamped to 0..1, and
+; then spent smoothly on four numbers at
+; once -- spawn cone, aim spread, speed
+; and think rate. The ROM does nothing
+; of the kind. It reads the SIGN of the
+; difference to pick a behaviour and
+; four BUCKETS of it to pick a spawn
+; cone, and before either it flips a
+; coin that sends the tank straight at
+; you regardless. See `aim.enemy`.
+;
+; The 7,000 was real but belonged to the
+; spawn cone alone, as the top rung of
+; the ladder rather than the end of a
+; slope.
 ;
 ; `e.rage` is the enemy's own clock,
-; seventeen seconds of it, and what
-; happens when it runs out depends on
-; what is out there -- see `rage`.
-; Above 255 it is the three seconds of
-; nothing the cabinet gives you after
-; you respawn.
+; seventeen seconds of it: while it is
+; running the tank may be evasive and
+; may not take a free shot, and when it
+; runs out the tank stops being careful
+; whatever the score says. Above 255 it
+; is the three seconds of nothing the
+; cabinet gives you after you respawn.
 ;
 ; `e.tmr` is the SEQUENCE's clock rather
 ; than the enemy's: how long this one's
@@ -725,9 +816,9 @@ make "e.coll 60
 ; supertank: the cabinet's counter runs
 ; from the 6th missile to the 129th.
 make "e.score 0
-make "e.agg 0
+make "e.diff 0
 make "e.rage 255
-make "e.tmr 720
+make "e.tmr 640
 make "ms.n 0
 
 
@@ -878,6 +969,37 @@ make "tk.hit 30
 ; two pixels -- and at 100 steps it is
 ; thirteen, which is the range where
 ; reading it matters.
+; A SHELL THAT STRIKES SOMETHING IS
+; STILL ON THE SCREEN, and its owner
+; cannot fire through it. That is the
+; cabinet's rate limiter and it is not a
+; reload: `projectile_state` goes to $80
+; on hitting a unit and $a0 on hitting
+; an obstacle, `VLAddProjectiles`
+; advances it by 15 a frame until it
+; wraps -- six frames and four -- and
+; both `TryShootPlayer` ($65c9) and the
+; player's own trigger ($629f) refuse to
+; fire while it is non-zero.
+;
+; B58 is what happens without it. At
+; point-blank range a shell arrives in
+; one or two frames, so an enemy with
+; nothing but `es.on` to stop it fires
+; about seven times a second -- and
+; since every hit re-arms `tk.boom`, the
+; player is held in a death pause that
+; can never run down. Reported from a
+; board as "it kept firing in fast
+; repetition, screen cracked, but I did
+; not die".
+;
+; The enemy spends `e.cool`, which
+; already means "cannot fire yet" and is
+; already counted down by `step.enemy`.
+; The player needs a name of its own.
+make "sh.cool 0
+
 make "sh.r 2.5
 make "sh.y 0
 
@@ -946,9 +1068,13 @@ make "rd.r 19
 ; could draw is an enemy you can see on
 ; the glass.
 make "rd.sc 0.027
-make "rd.spin 24
+make "rd.spin 15.5
 make "rd.fov 32
 make "rd.sw 0
+
+; Blip brightness, which here is LENGTH.
+; See `blip`.
+make "rd.bi 0
 
 ; Green as the cabinet's vectors were,
 ; red as its overlay band was.
@@ -1154,7 +1280,6 @@ make "bumped false
 make "paused false
 make "quit false
 make "frame.count 0
-make "ob.n 0
 
 ; The obstacle field, folded once a
 ; frame into camera-relative offsets.
@@ -1363,14 +1488,86 @@ end
 ; run before the move it is deciding --
 ; and that is why `blocked?` takes an
 ; offset rather than a position.
+; THE PLAIN WRAPS AND `modulo` CANNOT
+; DO IT. It is an INTEGER operation --
+; the reference's own heading line says
+; `modulo integer1 integer2` -- and it
+; truncates, so every position and every
+; heading in this game was quantised to
+; whole units by the very statement that
+; wrapped it.
+;
+; Nothing noticed for five milestones
+; because everything that fed one was an
+; integer: `tread.step` 4, `e.step` 6,
+; `turn.rate` 2. It had already bitten
+; once, unseen: M5 scaled a mild enemy's
+; speed to `e.step * 0.6`, which is 3.6,
+; and the enemy moved 3.
+;
+; M6 made every one of those numbers
+; fractional -- 2.32, 0.703, 1.41, 12.5
+; -- so a wrap that keeps the fraction
+; is now a precondition rather than a
+; tidy-up. B57.
+;
+; Two comparisons, no divide, and
+; CHEAPER than the `modulo` it replaces.
+; One wrap each way is enough because
+; nothing in this file moves a whole
+; world, or turns a whole circle, in one
+; frame.
+to wrap.world :v
+  if :v > :world [output :v - :world]
+  if 0 > :v [output :v + :world]
+  output :v
+end
+
+to wrap.deg :v
+  if 0 > :v [output :v + 360]
+  if :v > 360 [output :v - 360]
+  output :v
+end
+
+; A signed difference in [-180, 180)
+; from a raw one anywhere in (-360, 720)
+; -- which is every angle comparison in
+; the hunt.
+to wrap.diff :v
+  if 0 - 180 > :v [output :v + 360]
+  if :v > 180 [output :v - 360]
+  output :v
+end
+
+; `ob.scan` WRAPS INLINE, and both ways.
+; `ob.u` is `half.world - px`, so it is
+; negative on half the plain and the sum
+; runs (-800, 2400) against a world of
+; 1600 -- one comparison each way, and
+; the first draft of M6 got this wrong
+; in exactly the way B19 warns about.
+; Eight obstacles twice a frame is the
+; one place in this file where a
+; procedure call is worth avoiding;
+; everything else calls `wrap.world`.
 to ob.scan
   repeat :ob.count [
     make "ob.d :ob.u + item repcount :ox
-    make "ob.d modulo :ob.d :world
+    if :ob.d > :world [
+      make "ob.d :ob.d - :world
+    ]
+    if 0 > :ob.d [
+      make "ob.d :ob.d + :world
+    ]
     make "ob.d :ob.d - :half.world
     .setitem repcount :obx :ob.d
     make "ob.d :ob.v + item repcount :oz
-    make "ob.d modulo :ob.d :world
+    if :ob.d > :world [
+      make "ob.d :ob.d - :world
+    ]
+    if 0 > :ob.d [
+      make "ob.d :ob.d + :world
+    ]
     make "ob.d :ob.d - :half.world
     .setitem repcount :obz :ob.d
   ]
@@ -1589,70 +1786,62 @@ end
 ; obstacle rather than six. That is M2's
 ; change here and the only one.
 ;
-; The reject is a DIAMOND and not a
-; disc: `abs dx + abs dz` is one
-; statement where a squared distance is
-; three, and it is stricter than the
-; disc, so an obstacle at 45 degrees
-; pops in at 0.7 of `far`. Objects
-; popping in at the far cull distance is
-; design section 14's accepted cut
-; rather than a defect.
+; THERE IS NO FAR CULL AND NO CAP, and
+; M6 is where both went. Everything in
+; the view is drawn; the only rejection
+; left is `project.box`'s near one,
+; which exists because this file has no
+; clipper (design section 9) rather than
+; because of a budget.
 ;
-; `max.obstacles` caps the objects a
-; frame DRAWS, and it is spent on the
-; far side of the near cull rather than
-; the near side of it. The far cull is a
-; distance test, so an obstacle BEHIND
-; you survives it and only `project.box`
-; rejects it -- and spending the budget
-; before that rejection lets the
-; obstacles behind you crowd out the one
-; in front. That is not an edge case
-; here: about three of the eight survive
-; the far cull on a typical frame and
-; the cap is three, so it binds nearly
-; every frame and roughly half of what
-; it would be spent on is behind the
-; camera. What it looks like from the
-; driving seat is a cube dead ahead that
-; simply never appears.
+; WHAT PAID FOR IT WAS THE CLOCK. Design
+; section 12.3.1b measured the closed
+; frame at 300 MHz as `25.32 + 3.223 n`
+; and put twelve objects inside 15 fps.
+; The whole table is eight, and the
+; enemy is a ninth: 25.32 + 3.223 * 9 =
+; 54.3 ms against 66.7. The cap was cut
+; against the STOCK slope of 7.26-8.11
+; ms an object, where three was the
+; honest number, and it outlived the
+; measurement that made it necessary by
+; two milestones.
+;
+; This is a DEPARTURE FROM THE CABINET
+; and not a correction to it -- the ROM
+; culls at $7aff, 769 steps -- and it is
+; the one thing in M6 that moves away
+; from the arcade on purpose. What makes
+; it defensible is that the plains are
+; the same size (section 7): nothing on
+; this one is more than 1,131 steps away
+; on the diagonal, so a far plane at 769
+; is hiding a quarter of a world that
+; would otherwise fit.
+;
+; WHAT IT FIXES is the defect the old
+; comment here described and accepted:
+; the cap was spent on the far side of
+; the near cull, so obstacles BEHIND the
+; camera consumed it and a cube dead
+; ahead simply never appeared. That is
+; gone with the cap rather than fixed,
+; which is the better kind of fix.
 ;
 ; The rejected projection is still paid
-; for, and that is fine: it early-outs
-; after six statements and the table is
-; only eight entries long, so the
-; unbounded half of the work is bounded
-; by `ob.count` anyway. What the cap
-; protects is the drawing, which is
-; where the milliseconds are.
-;
-; A cap of zero therefore draws nothing,
-; which is how M4 turns the density down
-; without editing this procedure. `stop`
-; inside `repeat` leaves the enclosing
-; procedure, which is what ends the
-; scan.
+; for and that is still fine: it
+; early-outs after six statements and
+; the table is eight entries long, so
+; the work is bounded by `ob.count`.
 to draw.field
-  make "ob.n 0
   repeat :ob.count [
     make "p.dx item repcount :obx
     make "p.dz item repcount :obz
-    make "ob.d (abs :p.dx) + (abs :p.dz)
-    if :far > :ob.d [
-      if :ob.n = :max.obstacles [stop]
-      make "ob.k item repcount :okind
-      ifelse 1 = :ob.k [
-        if project.box [
-          draw.box
-          make "ob.n :ob.n + 1
-        ]
-      ] [
-        if project.pyr [
-          draw.pyr
-          make "ob.n :ob.n + 1
-        ]
-      ]
+    make "ob.k item repcount :okind
+    ifelse 1 = :ob.k [
+      if project.box [draw.box]
+    ] [
+      if project.pyr [draw.pyr]
     ]
   ]
 end
@@ -1902,8 +2091,7 @@ make "moon.d 10
 make "moon.arc 38
 
 to moon
-  make "mt.m :moon.az - :ph + 180
-  make "mt.m (modulo :mt.m 360) - 180
+  make "mt.m wrap.diff :moon.az - :ph
   if :moon.arc > abs :mt.m [
     make "mt.m :k * tan :mt.m
     draw.moon
@@ -2190,10 +2378,8 @@ to move.tank
   make "tk.dz :tk.s * :cs
   make "tk.guard :coll.r
   ifelse blocked? [make "bumped true] [
-    make "tk.x :px + :tk.dx
-    make "px modulo :tk.x :world
-    make "tk.z :pz + :tk.dz
-    make "pz modulo :tk.z :world
+    make "px wrap.world :px + :tk.dx
+    make "pz wrap.world :pz + :tk.dz
   ]
 end
 
@@ -2226,7 +2412,7 @@ to step.tank
   treads
   make "tk.r :left.tread - :right.tread
   make "ph :ph + :tk.r * :turn.rate
-  make "ph modulo :ph 360
+  make "ph wrap.deg :ph
   cam.setup
   make "tk.s :left.tread + :right.tread
   make "tk.s :tk.s * :tread.step
@@ -2700,11 +2886,9 @@ end
 ; projection and the radar want is two
 ; more statements on top.
 to enemy.offsets
-  make "e.d :ob.u + :e.x
-  make "e.d modulo :e.d :world
+  make "e.d wrap.world :ob.u + :e.x
   make "e.dx :e.d - :half.world
-  make "e.d :ob.v + :e.z
-  make "e.d modulo :e.d :world
+  make "e.d wrap.world :ob.v + :e.z
   make "e.dz :e.d - :half.world
 end
 
@@ -2722,15 +2906,19 @@ to enemy.camera
 end
 
 ; Design section 19.3: at 15 fps a
+; IT RUNS EVERY FRAME AS OF M6. It ran
+; on one frame in `e.think` before, on
+; design section 19.3's argument that a
 ; decision every third frame is
-; invisible and costs a third as much,
-; so this runs on one frame in
-; `e.think` and leaves three INTENTS
-; behind -- turn, drive and fire -- that
-; the other two frames act on. That is
-; the difference between a hunt that
-; costs 0.6 ms a frame and one that
-; costs 0.2.
+; invisible at 15 fps and costs a third
+; as much -- which confused a DECISION
+; with an ACTION. The ROM turns, drives
+; and tries to shoot every single frame;
+; what it does on a counter is pick a
+; new desired heading, and `e.mvc` is
+; now that counter. Deciding rarely and
+; acting always is the cabinet's shape
+; and it is also the cheap one.
 ;
 ; The bearing is one `arctan` rather
 ; than a cross product: the two-input
@@ -2740,28 +2928,44 @@ end
 ; is not. Player minus enemy is minus
 ; the offset, hence the +180.
 ;
+; TWO ANGLES, NOT ONE, and keeping them
+; apart is what M5 could not do. The
+; first is the error against `e.aimh`,
+; the heading it MEANT to be on, and it
+; decides whether to pivot or to drive.
+; The second is the error against the
+; player's actual bearing, and it
+; decides whether to fire. A tank
+; driving 90 degrees off you is settled
+; on the first and hopeless on the
+; second, which is exactly right.
+;
+; `e.f` IS A STEP COUNT, not a flag: 2
+; when it is lined up, 1 while it is
+; still turning onto the heading, 0
+; inside the stand-off, -1 reversing.
+; The ROM's `MoveUnit`-then-`MoveAgain`
+; is where the 2 comes from, and it
+; means a turning tank travels at half
+; speed for free.
+;
+; ONE FIRE CHECK A FRAME IS ENOUGH, and
+; the ROM's four are not needed. It
+; interleaves `TryShootPlayer` after
+; every 0.703-degree rotate step because
+; otherwise a 2.8-degree window could be
+; stepped straight over. Here the whole
+; frame's turn is 1.41 degrees for a
+; tank and 2.81 for a supertank against
+; a window 5.6 degrees wide, so the
+; window cannot be jumped: at least one
+; frame lands inside it. Same behaviour,
+; a quarter of the `arctan`s.
+;
 ; The range test is the field scan's
 ; DIAMOND and not a disc, for the same
 ; reason it is there: one statement
-; against three, and an enemy that
-; closes to 0.7 of the stand-off on the
-; diagonal is an enemy that presses a
-; little harder from the corners.
-;
-; AND `e.range` IS READ TWO WAYS, which
-; is the one place in this file where a
-; name means different things to
-; different kinds. For anything with a
-; gun it is a STAND-OFF: inside it, stop
-; driving and shoot. For a missile it is
-; the FINAL TURN: outside it, do not
-; home at all -- swerve, two seconds one
-; way and two the other -- and inside
-; it, turn onto the player and come. The
-; two readings are three lines apart and
-; behind one `ifelse` on `e.ram`, which
-; is the only way to write that without
-; leaving the reader to find it.
+; against three.
 ;
 ; `e.rage` above 255 is the three
 ; seconds after you respawn, during
@@ -2769,89 +2973,282 @@ end
 ; heading `respawn` gave it and decides
 ; nothing.
 to hunt
-  if :e.drift [stop]
+  if :e.drift [make "e.f 1 stop]
   if :e.rage > 255 [stop]
-  make "e.b (arctan :e.dz :e.dx) + 180
-  make "e.b :e.b - :e.h + 180
-  make "e.b (modulo :e.b 360) - 180
+  make "e.fire false
+  if :e.ram [fly.missile stop]
+  make "e.mvc :e.mvc - 1
+  if :e.rev > 0 [back.enemy stop]
+  if 1 > :e.mvc [aim.enemy]
+  make "e.d wrap.diff :e.aimh - :e.h
   make "e.t 0
-  if :e.b > :e.aim [make "e.t 1]
-  if 0 - :e.aim > :e.b [make "e.t -1]
-  make "e.d (abs :e.dx) + (abs :e.dz)
-  make "e.f 1
-  ifelse :e.ram [
-    if :e.d > :e.range [
-      make "e.t 1
-      if 15 > modulo :frame.count 30 [
-        make "e.t -1
-      ]
+  make "e.f 0
+  ifelse :e.band > abs :e.d [
+    if :e.d > 0 [make "e.t 0.5]
+    if 0 > :e.d [make "e.t -0.5]
+    make "e.f 1
+    if 0.35 > abs :e.d [make "e.f 2]
+    make "e.d (abs :e.dx) + (abs :e.dz)
+    if :e.range > :e.d [make "e.f 0]
+  ] [
+    if :e.d > 0 [make "e.t 1]
+    if 0 > :e.d [make "e.t -1]
+  ]
+  if not :e.gun [stop]
+  if :e.cool > 0 [stop]
+  if :tk.boom > 0 [stop]
+  make "e.d (arctan :e.dz :e.dx) + 180
+  make "e.d wrap.diff :e.d - :e.h
+  if not 2.8 > abs :e.d [stop]
+  if :e.rage > 0 [
+    if 2000 > :score [
+      if (abs :e.xc) > :e.zc [stop]
+      make "e.d (abs :e.dx) + (abs :e.dz)
+      if :e.d > 225 [stop]
+    ]
+  ]
+  make "e.fire true
+end
+
+; The heading the enemy WANTS, chosen
+; when `e.mvc` runs out -- the ROM's
+; `SetTankTurnTo`, and the whole of what
+; difficulty means in this game.
+;
+; READ IT AS A LADDER OF ESCAPES from
+; "come straight at the player", because
+; that is how it is written:
+;
+;  * seventeen seconds are up -- charge.
+;  * a coin comes up heads -- charge.
+;  * you are ahead on score at all --
+;    charge.
+;  * level -- drive 90 degrees off for
+;    four seconds, or one time in eight
+;    give up and reverse instead.
+;  * the enemy is ahead -- wander, 45
+;    degrees either way off wherever it
+;    was already going.
+;
+; THE COIN FLIP IS THE PIECE M5 NEVER
+; HAD and it is the one that matters
+; most. It is read before the score is,
+; so HALF of every mild tank's decisions
+; are an attack: the cabinet's easy
+; enemy is not passive, it is
+; INCONSISTENT, and inconsistent is much
+; harder to read than slow.
+;
+; The difference is the two scores in
+; points, and its sign is all that is
+; used here. The ROM compares two BCD
+; thousands bytes with a binary `sbc`,
+; which is exact below 10,000 and
+; approximate above -- there is no
+; reason to reproduce the approximation.
+to aim.enemy
+  make "e.mvc 4
+  ifelse 2.8 = :e.band [
+    make "e.band 22.5
+  ] [
+    make "e.band 2.8
+  ]
+  make "e.b (arctan :e.dz :e.dx) + 180
+  make "e.diff :score - :e.score
+  make "e.aimh :e.b
+  if 1 > :e.rage [stop]
+  if 0 = random 2 [stop]
+  if :e.diff > 0 [stop]
+  ifelse 0 = :e.diff [
+    ifelse 0 = random 8 [
+      make "e.rev 1 + random 2
+      make "e.mvc 48
+    ] [
+      make "e.aimh wrap.deg :e.b + 90
+      make "e.mvc 64
     ]
   ] [
-    if :e.range > :e.d [make "e.f 0]
-  ]
-  make "e.fire false
-  if not :e.gun [stop]
-  if 1 > :e.cool [
-    if :e.aim > abs :e.b [
-      if :far > :e.d [make "e.fire true]
-    ]
+    make "e.b (random 91) - 45
+    make "e.aimh wrap.deg :e.aimh + :e.b
   ]
 end
 
-; A blocked enemy is refused its step
-; and keeps its turn, exactly as the
-; player is, so it grinds around a cube
-; rather than through it. It does not
-; try to go round -- an enemy stuck
-; behind an obstacle is the cabinet's
-; behaviour and it is what makes hiding
-; behind one work.
+; Backing out of what it drove into.
+;
+; Three seconds of reverse-and-rotate,
+; and the ROM runs it WITH NO COLLISION
+; TEST AT ALL -- which is not sloppiness
+; but the only way a tank that spawned
+; inside a cube can ever get out of one.
+; `move.enemy` honours that.
+;
+; When it ends the tank adopts whatever
+; heading it finished on and drives that
+; way for 52 frames before it decides
+; anything, so it clears the obstacle
+; instead of turning straight back into
+; it.
+to back.enemy
+  make "e.t 1
+  if 1 = :e.rev [make "e.t -1]
+  make "e.f -1
+  if 1 > :e.mvc [
+    make "e.rev 0
+    make "e.f 0
+    make "e.aimh :e.h
+    make "e.mvc 52
+  ]
+end
+
+; The missile's steering, which shares
+; nothing with a tank's but the names.
+;
+; `e.aimh` HOMES, at up to `e.turn` a
+; frame, and `e.h` is that heading plus
+; a swerve -- so the missile is always
+; tracking you and usually pointed
+; somewhere else. Inside `e.range` the
+; swerve stops and the two become the
+; same heading: that is the final turn,
+; and it is the last thing you see.
+;
+; The swerve is the ROM's, straight
+; across: a sawtooth on the low five
+; bits of the frame counter, 0 to 31
+; angle units, which is 0 to 44 degrees
+; over 32 frames -- and a sign taken
+; from bit 3, so it flips every eight.
+; Two seconds of envelope, half a second
+; a side.
+to fly.missile
+  make "e.d (arctan :e.dz :e.dx) + 180
+  make "e.d wrap.diff :e.d - :e.aimh
+  if :e.d > :e.turn [make "e.d :e.turn]
+  if 0 - :e.turn > :e.d [
+    make "e.d 0 - :e.turn
+  ]
+  make "e.aimh wrap.deg :e.aimh + :e.d
+  make "e.h :e.aimh
+  make "e.d (abs :e.dx) + (abs :e.dz)
+  if :e.d > :e.range [
+    make "e.d modulo :frame.count 32
+    make "e.d 1.41 * :e.d
+    if 8 > modulo :frame.count 16 [
+      make "e.d 0 - :e.d
+    ]
+    make "e.h wrap.deg :e.aimh + :e.d
+  ]
+  make "e.t 0
+  make "e.f 1
+end
+
+; A BLOCKED ENEMY BACKS OUT, which is
+; M6's correction and the comment that
+; used to sit here was simply wrong. It
+; said an enemy stuck behind an obstacle
+; "is the cabinet's behaviour and it is
+; what makes hiding behind one work".
+; Neither half is true.
+;
+; `:HitSomething` sets a reverse flag
+; with a random turn direction and backs
+; up for 48 frames. And the disassembly
+; is explicit about where the hide-and-
+; shoot tactic really comes from: the
+; note at $6531 says running at a tank
+; and shooting it works "because the
+; player is suddenly at an angle that
+; causes the enemy tank to switch from
+; move forward to rotate" -- a
+; consequence of the aiming code, not of
+; the collision.
+;
+; TWO THINGS DO NOT TEST OBSTACLES. A
+; saucer flies over them, 50 steps up
+; against a 40-step cube. A missile hops
+; them: the ROM spawns it at altitude
+; $1800 and, on touching anything, puts
+; it back where it was and climbs. So
+; you can hide from a tank and you
+; cannot hide from a missile, and the
+; two booleans that say so are already
+; here.
+;
+; And a reversing tank tests nothing
+; either -- see `back.enemy`.
 to move.enemy
-  make "e.vx :e.step * :e.es
-  make "e.vz :e.step * :e.ec
+  make "e.d :e.step * :e.f
+  make "e.vx :e.d * :e.es
+  make "e.vz :e.d * :e.ec
   make "tk.dx :e.dx + :e.vx
   make "tk.dz :e.dz + :e.vz
   make "tk.guard :e.coll
   if not :e.drift [
-    if blocked? [stop]
+    if not :e.ram [
+      if 1 > :e.rev [
+        if blocked? [bump.enemy stop]
+      ]
+    ]
   ]
-  make "e.d :e.x + :e.vx
-  make "e.x modulo :e.d :world
-  make "e.d :e.z + :e.vz
-  make "e.z modulo :e.d :world
+  make "e.x wrap.world :e.x + :e.vx
+  make "e.z wrap.world :e.z + :e.vz
   make "e.dx :tk.dx
   make "e.dz :tk.dz
 end
 
-; The lateral miss is drawn in STEPS and
-; then turned into the angle that throws
-; it that far over THIS range, which is
-; the whole of the range-independence:
-; the shot lands `e.wide` either side of
-; you whether you are at 60 steps or
-; 600.
+; It drove into something. Back out of
+; it, turning, for three seconds, and
+; pick a direction to turn at random --
+; which is `:HitSomething` at $651a,
+; and the reason a cabinet tank never
+; ends up permanently wedged.
 ;
-; The range is floored at `tk.hit`
-; because it divides. Nothing stops the
-; player driving onto the enemy --
-; `blocked?` tests obstacles and not
-; tanks -- and inside the hit box the
-; angle would be meaningless anyway.
+; Nothing happens here on a collision
+; with the PLAYER, and that is the ROM's
+; behaviour too: it restores the
+; position and leaves the flags alone.
+; `blocked?` only ever reports
+; obstacles, so this cannot be reached
+; any other way.
+to bump.enemy
+  make "e.rev 1 + random 2
+  make "e.mvc 48
+end
+
+; IT FIRES ALONG ITS OWN HEADING AND
+; NOTHING ELSE, which is the ROM's
+; `TryShootPlayer` and is four
+; statements shorter than what M5 did.
+;
+; There was a lateral miss here: a
+; random offset in steps at the target,
+; converted into an angle for the range
+; it was fired over, so that accuracy
+; was range-independent. It was a good
+; solution to a problem the cabinet does
+; not have -- see the tuning header --
+; and the cabinet's own answer is
+; simpler and better. The gun points
+; where the tank points, the shell
+; leaves at `sh.step` a frame and takes
+; frames to arrive, and NOTHING LEADS
+; THE TARGET. A player who is driving
+; is missed; a player who has stopped to
+; aim is hit.
+;
+; The cooldown went with it. `es.on` is
+; the only gate, exactly as
+; `projectile_state_1` is the only gate
+; in the ROM: one shell up at a time and
+; no timer behind it.
 to enemy.fires
   make "e.fire false
   if :es.on [stop]
-  make "e.cool :e.reload
   make "es.on true
   make "es.x :e.x
   make "es.z :e.z
-  make "e.b (abs :e.dx) + (abs :e.dz)
-  if :tk.hit > :e.b [make "e.b :tk.hit]
-  make "e.d :e.wide * 2 + 1
-  make "e.d (random :e.d) - :e.wide
-  make "e.d arctan :e.d / :e.b
-  make "e.d :e.h + :e.d
-  make "es.vx :sh.step * sin :e.d
-  make "es.vz :sh.step * cos :e.d
+  make "es.vx :sh.step * :e.es
+  make "es.vz :sh.step * :e.ec
   make "es.dx :e.dx
   make "es.dz :e.dz
   make "es.y :e.te
@@ -2945,16 +3342,17 @@ end
 ; numbers that only mean something
 ; against each other, written down in
 ; different places and never compared.
-; `e.wide` and `tk.hit` are exactly such
-; a pair: a shot thrown fewer steps
-; sideways than the half-width of the
-; box it is aimed at cannot miss. Both
-; are in STEPS, which is what M3's fix
-; bought -- section 16.6.1's version of
-; this invariant joined three numbers in
-; two units with a tangent, and it was
-; wrong twice. The test sweeps every gun
-; kind AND every range.
+; `e.step` and `e.turn` are exactly such
+; a pair now that M6 has cut them
+; against the PLAYER's: a tank matches
+; the treads and a supertank doubles
+; them, so a row that drifts from that
+; relation is a row that has stopped
+; meaning anything. The pair that used
+; to be here, `e.wide` against `tk.hit`,
+; is gone with the deliberate miss --
+; and it was section 16.6.1's failure
+; twice over before it went.
 ;
 ; A SUPERTANK IS THE TANK'S ROW, BETTER
 ; IN FOUR PLACES: faster, turns harder,
@@ -2975,28 +3373,37 @@ to kind.tank
   make "e.drift false
   make "e.hw :ehalf
   make "e.te :ebode
-  make "e.step 6
-  make "e.turn 4
-  make "e.range 400
-  make "e.wide 60
-  make "e.aim 7
-  make "e.reload 24
+  make "e.step 2.32
+  make "e.turn 1.41
+  make "e.range 38
   make "e.hit 34
   make "e.pts 1000
 end
 
+; The supertank is the player DOUBLED in
+; both axes and that is the whole of it:
+; the ROM shifts its move delta left one
+; place (`asl`) and calls `RotateLeft`
+; four times instead of two. So 4.64
+; steps a frame against the treads' 4.64
+; -- it runs you down -- and 2.81
+; degrees against your 1.41. M5 had 9
+; and 5, which is 1.1x and 1.25x: a
+; supertank that was barely super.
+;
+; It stands off at $0800 rather than
+; $0500, 50 steps against 31, carrying
+; the same diagonal correction as the
+; tank's.
 to kind.super
   make "e.gun true
   make "e.ram false
   make "e.drift false
   make "e.hw 17
   make "e.te 20
-  make "e.step 9
-  make "e.turn 5
-  make "e.range 420
-  make "e.wide 50
-  make "e.aim 6
-  make "e.reload 15
+  make "e.step 4.64
+  make "e.turn 2.81
+  make "e.range 61
   make "e.hit 40
   make "e.pts 3000
 end
@@ -3004,58 +3411,83 @@ end
 ; A missile has no gun and no stand-off:
 ; it closes forever and kills by
 ; ARRIVING, which is what `e.ram` says.
-; It is faster than you can drive -- 9
-; steps a frame against the treads' 8 --
-; so it cannot be outrun, and it turns
-; at 2 degrees a frame against your 4,
-; so it can be turned inside. That pair
-; is the whole mechanic: you dodge it,
-; you do not escape it.
 ;
-; It WAS 11, which is 1.4x the player.
-; A board called that "very fast" and it
-; was: the margin, not the speed, is
-; what decides whether a thing is
-; dodgeable, and 1.4x leaves no room to
-; turn inside before it arrives. 9 is
-; 1.1x -- still not outrunnable, which
-; is the property that matters.
+; M6 INVERTED BOTH OF ITS NUMBERS,
+; because M5 had the mechanic backwards.
+; The old comment here reasoned: it is
+; slightly faster than you (9 against
+; the treads' 8) so it cannot be
+; outrun, and it turns at half your rate
+; (2 against 4) so it can be turned
+; inside -- "you dodge it, you do not
+; escape it".
 ;
-; `e.te` is 0 because it flies at eye
-; height, which is also where its
-; wreckage belongs.
+; The cabinet's missile is faster AND
+; turns tighter than the player. Its
+; step is a sine shifted right six
+; places, up to 511 units -- 12.5 steps,
+; TWO AND THREE-QUARTER TIMES the
+; player's 4.64 -- and it turns up to
+; two rotate units a frame, 2.81
+; degrees, TWICE the player's pivot. You
+; cannot outrun it and you cannot
+; out-turn it.
+;
+; WHAT MAKES IT DODGEABLE IS THE SWERVE,
+; which is the part M5 shrank to
+; nothing. Outside `e.range` it does not
+; steer at you at all: it throws its
+; heading up to 44 degrees off the
+; bearing and flips sign every eight
+; frames, so nearly all of that speed
+; goes sideways. You sidestep a missile;
+; you do not turn inside one.
 ;
 ; AND `e.range` IS ITS FINAL TURN rather
 ; than a stand-off, which is the one
 ; number in this file that means
-; different things to different kinds --
-; `hunt` reads it through `e.ram` and
-; the two readings are three lines
-; apart. A missile HOMES inside
-; `e.range` and swerves outside it, so
-; 700 is a missile that homes from the
-; moment it appears and 60 is one that
-; comes at you sideways until the last
-; four frames. The cabinet slides
-; between the two over the 25,000 points
-; above the threshold that let missiles
-; out in the first place, and that is
-; what the divisor is: 640 steps of
-; range over 25,000 points.
+; different things to different kinds.
+; Inside it the missile homes; outside
+; it, it weaves.
+;
+; 231 IS THE NUMBER THAT WAS BROKEN. It
+; was 700 -- and `e.spawn` is 620, so
+; `e.d > e.range` was false from the
+; moment a missile appeared and THE
+; WEAVE NEVER RAN. It could not begin to
+; run until 8,125 points, by which score
+; the cabinet is already tightening it.
+; Every missile M5 ever fired flew
+; straight in.
+;
+; The ROM's threshold is (missile score
+; + 25,000 - score) in BCD thousands,
+; taken as a high byte, floored at $0800
+; -- so 231 steps at 5,000 points down
+; to 50 at 30,000. That is what the
+; divisor is: 181 steps over 25,000
+; points.
+;
+; `e.te` is 0 because it flies at eye
+; height, which is also where its
+; wreckage belongs -- and `move.enemy`
+; lets it cross obstacles, because the
+; ROM's missile spawns at altitude and
+; hops back up over anything it touches.
+; You cannot hide from one behind a
+; cube.
 to kind.missile
   make "e.gun false
   make "e.ram true
   make "e.drift false
   make "e.hw :ms.fin
   make "e.te 0
-  make "e.step 9
-  make "e.turn 2
-  make "e.range 700 - (:score - 5000) * 0.0256
-  if 60 > :e.range [make "e.range 60]
-  if :e.range > 700 [make "e.range 700]
-  make "e.wide 60
-  make "e.aim 0
-  make "e.reload 0
+  make "e.step 12.5
+  make "e.turn 2.81
+  make "e.range (:score - 5000) * 0.00724
+  make "e.range 231 - :e.range
+  if 50 > :e.range [make "e.range 50]
+  if :e.range > 231 [make "e.range 231]
   make "e.hit 24
   make "e.pts 2000
 end
@@ -3087,9 +3519,6 @@ to kind.saucer
   make "e.step 5
   make "e.turn 0
   make "e.range 0
-  make "e.wide 60
-  make "e.aim 0
-  make "e.reload 0
   make "e.hit 40
   make "e.pts 5000
 end
@@ -3111,10 +3540,16 @@ end
 ;   until the cycle clock runs out
 ;   (16-32 seconds) -- then a tank.
 ; * A tank you have driven away from
-;   for 48-64 seconds is not replaced by
-;   another tank. It is replaced by a
-;   missile, which is the cabinet's
-;   answer to running away.
+;   for 32.8-49.2 seconds is not
+;   replaced by another tank. It is
+;   replaced by a missile, which is the
+;   cabinet's answer to running away.
+;   The window is `frame_count_256x`
+;   entered at 1 and thrown at 4: three
+;   wraps of a 256-frame counter from an
+;   arbitrary phase, so 513 to 768
+;   frames. This said 48-64 s until M6
+;   and waited about 45 % too long.
 ; * Anything else is a fresh choice, and
 ;   `pick.kind` makes it.
 ;
@@ -3129,17 +3564,16 @@ to next.kind
   if :e.ram [if :e.tmr > 0 [make "e.kind 2]]
   if :e.gun [if 1 > :e.tmr [make "e.kind 2]]
   if 1 = :e.kind [pick.kind]
-  make "e.d 720 + random 241
+  make "e.d 513 + random 256
   if 4 = :e.kind [make "e.d 220]
   if 2 = :e.kind [
     make "e.d :e.tmr
     if not :e.ram [
-      make "e.d 240 + random 241
+      make "e.d 257 + random 256
     ]
     make "ms.n :ms.n + 1
   ]
   make "e.tmr :e.d
-  aggress
   set.kind
 end
 
@@ -3179,7 +3613,7 @@ to pick.kind
     ]
   ]
   if :score > 4999 [
-    if 0 = random 3 [
+    if 0 = random 2 [
       make "e.kind 2
       stop
     ]
@@ -3190,36 +3624,48 @@ to pick.kind
   ]
 end
 
-; The difference between the two scores,
-; over 7,000, clamped -- and the whole
-; of what "difficulty" means in this
-; game. It is read at the spawn by
-; `place.enemy` for the bearing and by
-; `set.kind` for the numbers, and it is
-; written in exactly two places: here
-; and `rage`.
-to aggress
-  make "e.agg (:score - :e.score) / 7000
-  if 0 > :e.agg [make "e.agg 0]
-  if :e.agg > 1 [make "e.agg 1]
-end
-
-; Seventeen seconds are up.
+; The spawn cone: how wide an arc about
+; your own heading a new enemy may
+; appear in.
 ;
-; A tank that has been out here that
-; long stops being careful whatever the
-; score says -- `set.kind` re-reads its
-; row at full aggression, which is why
-; the row is read rather than edited.
-; A missile that has been out here that
-; long has been DODGED: it goes, and
-; `next.kind` decides whether the cycle
-; sends another.
-to rage
-  ifelse :e.ram [leave.enemy] [
-    make "e.agg 1
-    set.kind
-  ]
+; A LADDER OF FOUR RUNGS ON THE SCORE
+; DIFFERENCE, which is `CreateTank` at
+; $6a01 and is the ONLY thing the 7,000
+; ever governed. The ROM masks a random
+; angle with $0f, $1f, $3f or $7f -- a
+; cone of 45, 90, 180 or 360 degrees --
+; and steps up at 2,000, 4,000 and
+; 6,000 points ahead, clamping at 7,000.
+;
+; THE RUNGS ARE SCALED BY FIELD OF VIEW
+; AND THAT IS DELIBERATE. The cabinet's
+; view is 45 degrees (its math box notes
+; say so, and it culls at abs X > abs
+; Z); this one's is 63 (`k` 260). The
+; ROM's bottom rung is 45 degrees --
+; EXACTLY ONE SCREEN WIDTH -- so the
+; rule it encodes is "somewhere in
+; view", not "45 degrees", and the
+; faithful translation of that is 63
+; here. Every rung carries the same 1.4.
+;
+; Section 16.9.6 is why this matters: a
+; board found a 40-degree cone
+; unplayable because two spawns running
+; landed in the same third of the
+; screen, and the fix was to widen it
+; past the view. A cone equal to the
+; view is the cabinet's own floor and
+; sits right on that boundary, which is
+; why `test_two_spawns_running_are_not_the_same_place`
+; now asks its question at the rung
+; where the cabinet actually opens up.
+to spawn.cone
+  make "e.diff :score - :e.score
+  make "e.b 63
+  if :e.diff > 1999 [make "e.b 126]
+  if :e.diff > 3999 [make "e.b 252]
+  if :e.diff > 5999 [make "e.b 360]
 end
 
 ; The one derived number is hoisted out
@@ -3255,41 +3701,37 @@ end
 ; file is 25 global slots from its
 ; ceiling (design section 16.7.4).
 ;
-; AND THE AGGRESSION IS SPENT HERE, on
-; three of the row's numbers and only
-; for a gun: a mild enemy shoots twice
-; as wide, drives at 0.6 of its speed
-; and re-decides every ninth frame
-; rather than every third, which is what
-; "moves uncertainly and takes bad
-; shots" is when you write it down. A
-; missile is not softened, because a
-; missile that could be outrun would not
-; be a missile -- design section 16.7.4b
-; is the standing argument, and the
-; speed is the property it protects.
+; NO AGGRESSION IS SPENT HERE ANY MORE,
+; and that is M6's largest structural
+; change. M5 softened three of the row's
+; numbers by `e.agg` -- a mild enemy
+; shot twice as wide, drove at 0.6 of
+; its speed and re-decided every ninth
+; frame rather than every third.
 ;
-; `e.wide2` IS GONE, and it is worth
-; saying where: it was `2 * e.wide + 1`
-; in every row, which is section
-; 16.6.1's failure in miniature -- two
-; numbers that only mean something
-; against each other, written apart --
-; and `enemy.fires` now derives the span
-; from `e.wide` at the shot. One
-; statement on an event, and one global
-; slot back for the campaign above.
+; None of that is in the ROM. A mild
+; cabinet tank drives at FULL SPEED,
+; aims exactly as well and decides just
+; as often; what it does differently is
+; DRIVE SOMEWHERE ELSE -- 90 degrees off
+; you, or on a heading it wanders by 45
+; degrees at a time -- and hold that
+; choice for four seconds. Difficulty is
+; a change of intent, not a change of
+; capability, and `aim.enemy` is where
+; it now lives.
+;
+; That is also why a row can be read
+; straight through now: what `set.kind`
+; writes is what the enemy is, with
+; nothing scaled on the way in, so the
+; four rows above are the whole of the
+; four kinds.
 to set.kind
   if 3 = :e.kind [kind.super]
   if 2 = :e.kind [kind.missile]
   if 4 = :e.kind [kind.saucer]
   if 1 = :e.kind [kind.tank]
-  make "e.think 3
-  if :e.gun [
-    make "e.wide :e.wide * (2 - :e.agg)
-    make "e.step :e.step * (0.6 + 0.4 * :e.agg)
-    make "e.think 3 + 6 * (1 - :e.agg)
-  ]
   make "e.tw :e.hw * 0.62
   make "e.tt :e.te + :e.hw * 0.7
   make "e.bl :e.hw * 2.2
@@ -3329,22 +3771,21 @@ to place.enemy
   if 1 > random 2 [
     make "e.t :e.spawn * 0.5
   ]
-  make "e.d 150 + 210 * :e.agg
+  spawn.cone
   if :e.ram [
-    make "e.d 10
+    make "e.b 45
     make "e.t :e.spawn
   ]
+  make "e.d :e.b
   make "e.b (random :e.d) - :e.d / 2
-  make "e.b :ph + :e.b
+  make "e.b wrap.deg :ph + :e.b
   make "e.d :e.t * sin :e.b
-  make "e.d :px + :e.d
-  make "e.x modulo :e.d :world
+  make "e.x wrap.world :px + :e.d
   make "e.d :e.t * cos :e.b
-  make "e.d :pz + :e.d
-  make "e.z modulo :e.d :world
+  make "e.z wrap.world :pz + :e.d
   make "e.h :e.b + 180
   if :e.drift [make "e.h random 360]
-  make "e.h modulo :e.h 360
+  make "e.h wrap.deg :e.h
   make "e.ec cos :e.h
   make "e.es sin :e.h
   make "e.alive true
@@ -3353,6 +3794,10 @@ to place.enemy
   make "e.t 0
   make "e.f 1
   make "e.fire false
+  make "e.aimh :e.h
+  make "e.rev 0
+  make "e.mvc 4
+  make "e.band 2.8
   enemy.offsets
   enemy.camera
 end
@@ -3385,13 +3830,11 @@ to step.enemy
   ]
   if :e.rage > 0 [
     make "e.rage :e.rage - 1
-    if 0 = :e.rage [rage]
   ]
   if not :e.alive [stop]
-  make "e.d modulo :frame.count :e.think
-  if 0 = :e.d [hunt]
+  hunt
   make "e.h :e.h + :e.t * :e.turn
-  make "e.h modulo :e.h 360
+  make "e.h wrap.deg :e.h
   make "e.ec cos :e.h
   make "e.es sin :e.h
   if :e.cool > 0 [
@@ -3400,7 +3843,28 @@ to step.enemy
   if not 0 = :e.f [move.enemy]
   enemy.camera
   if :e.fire [enemy.fires]
-  if :e.ram [enemy.rams]
+  if :e.ram [enemy.rams dodged.missile]
+end
+
+; A MISSILE THAT GETS PAST YOU IS GONE,
+; and the test is a DISTANCE rather than
+; a clock. The ROM checks it in the
+; radar pass, at $6ba0: once the enemy's
+; distance high byte reaches $80 -- 800
+; steps -- a missile is written off as
+; missed, and whether another follows is
+; the cycle clock's business, which is
+; `next.kind`'s already.
+;
+; M5 used `e.rage`, 255 frames, so a
+; missile that shot past at 12.5 steps a
+; frame kept flying for another eleven
+; seconds. Seventeen seconds is the
+; TANK's clock and it always was.
+to dodged.missile
+  if not :e.alive [stop]
+  make "e.d (abs :e.dx) + (abs :e.dz)
+  if :e.d > 800 [leave.enemy]
 end
 
 ; A missile's whole attack. It is the
@@ -3467,6 +3931,7 @@ end
 
 to fire
   if :sh.on [stop]
+  if :sh.cool > 0 [stop]
   if :tk.boom > 0 [stop]
   make "sh.on true
   make "sh.x :px
@@ -3480,27 +3945,25 @@ to fire
 end
 
 to step.shell
+  if :sh.cool > 0 [make "sh.cool :sh.cool - 1]
   if not :sh.on [stop]
   make "sh.life :sh.life - 1
   if 1 > :sh.life [
     make "sh.on false
     stop
   ]
-  make "sh.d :sh.x + :sh.vx
-  make "sh.x modulo :sh.d :world
-  make "sh.d :sh.z + :sh.vz
-  make "sh.z modulo :sh.d :world
-  make "sh.d :ob.u + :sh.x
-  make "sh.d modulo :sh.d :world
+  make "sh.x wrap.world :sh.x + :sh.vx
+  make "sh.z wrap.world :sh.z + :sh.vz
+  make "sh.d wrap.world :ob.u + :sh.x
   make "sh.dx :sh.d - :half.world
-  make "sh.d :ob.v + :sh.z
-  make "sh.d modulo :sh.d :world
+  make "sh.d wrap.world :ob.v + :sh.z
   make "sh.dz :sh.d - :half.world
   if :e.alive [
     make "sh.d :sh.dx - :e.dx
     if :e.hit > abs :sh.d [
       make "sh.d :sh.dz - :e.dz
       if :e.hit > abs :sh.d [
+        make "sh.cool 6
         kill.enemy
         stop
       ]
@@ -3509,7 +3972,10 @@ to step.shell
   make "tk.dx :sh.dx
   make "tk.dz :sh.dz
   make "tk.guard :sh.guard
-  if blocked? [make "sh.on false]
+  if blocked? [
+    make "sh.on false
+    make "sh.cool 4
+  ]
 end
 
 to step.eshell
@@ -3519,26 +3985,28 @@ to step.eshell
     make "es.on false
     stop
   ]
-  make "es.d :es.x + :es.vx
-  make "es.x modulo :es.d :world
-  make "es.d :es.z + :es.vz
-  make "es.z modulo :es.d :world
-  make "es.d :ob.u + :es.x
-  make "es.d modulo :es.d :world
+  make "es.x wrap.world :es.x + :es.vx
+  make "es.z wrap.world :es.z + :es.vz
+  make "es.d wrap.world :ob.u + :es.x
   make "es.dx :es.d - :half.world
-  make "es.d :ob.v + :es.z
-  make "es.d modulo :es.d :world
+  make "es.d wrap.world :ob.v + :es.z
   make "es.dz :es.d - :half.world
-  if :tk.hit > abs :es.dx [
-    if :tk.hit > abs :es.dz [
-      hit.player
-      stop
+  if 1 > :tk.boom [
+    if :tk.hit > abs :es.dx [
+      if :tk.hit > abs :es.dz [
+        make "e.cool 6
+        hit.player
+        stop
+      ]
     ]
   ]
   make "tk.dx :es.dx
   make "tk.dz :es.dz
   make "tk.guard :sh.guard
-  if blocked? [make "es.on false]
+  if blocked? [
+    make "es.on false
+    make "e.cool 4
+  ]
 end
 
 ; A SHELL IS A DART, which it was not:
@@ -3707,13 +4175,24 @@ end
 ; EVERY POINT IN THIS GAME ARRIVES HERE,
 ; which is what makes the bonus tank one
 ; `if` rather than a rule scattered over
-; four scorers. One test and not a loop
-; because the largest single award is a
-; 5,000-point saucer against a 15,000
-; bonus: a score can step OVER a
-; boundary but it cannot step over two,
-; so `until` would be machinery for a
-; case that cannot arise.
+; four scorers.
+;
+; TWO TANKS A GAME AND NOT ONE EVERY
+; 15,000. `CheckAwardLife` reads a
+; SINGLE threshold from a DIP switch and
+; awards only when the old score was
+; below it and the new one is not, so it
+; can fire at most once; the second and
+; last award is a separate rule at
+; 100,000, and it is the one that plays
+; the 1812 Overture. M5 rolled
+; `extra.due` forward by `extra.at`
+; every time, so a long game accumulated
+; tanks the cabinet would never give.
+;
+; The third threshold is unreachable
+; rather than absent, which is one
+; statement where a flag would be two.
 ;
 ; It repaints the score row itself. A
 ; number that changed a second ago and
@@ -3728,10 +4207,12 @@ end
 to add.score :n
   make "score :score + :n
   if not :score < :extra.due [
-    make "hud.a :extra.due + :extra.at
-    make "extra.due :hud.a
     make "lives :lives + 1
     (sound [2 6] 1760 245 11)
+    make "extra.due 100000
+    if :score > 99999 [
+      make "extra.due 9999999
+    ]
   ]
   draw.score
 end
@@ -3751,7 +4232,20 @@ end
 ; goes up, which is the cabinet's timing
 ; and is the only reason the two are not
 ; one procedure.
+; AND A LIFE YOU DO NOT HAVE CANNOT BE
+; SPENT. `respawn` ends the game on the
+; frame `tk.boom` runs out, but
+; `play.frame` finishes the frame it is
+; in -- so `step.enemy` still runs, sees
+; a player who is no longer booming, and
+; takes one free shot at a game that is
+; already over. The ROM never reaches
+; that state because the death path
+; jumps straight to the high-score
+; screen; here the cheapest equivalent
+; is to say so where the life is spent.
 to hit.player
+  if 1 > :lives [stop]
   make "es.on false
   make "hits :hits + 1
   make "e.score :e.score + 1000
@@ -3869,6 +4363,38 @@ end
 ; anything set first, and the three
 ; seconds belong to whatever is out
 ; there when you come back.
+; A NEW TANK ARRIVES SOMEWHERE ELSE,
+; which is `:PlacePlayer` at $5232 --
+; random position, random facing,
+; re-rolled until it is not inside
+; something. M5 left the player where
+; they died and re-rolled the ENEMY
+; instead, which is the same idea from
+; the wrong end: it changes who is
+; behind whom without changing the
+; ground you are standing on, and the
+; cabinet changes both.
+;
+; The camera pair and the wrapped field
+; are rebuilt before `blocked?` is asked
+; anything, because that table belongs
+; to the camera it was hoisted against
+; -- the rule the seam test states.
+to place.player
+  repeat 4 [
+    make "px random :world
+    make "pz random :world
+    make "ph random 360
+    cam.setup
+    cam.offsets
+    ob.scan
+    make "tk.dx 0
+    make "tk.dz 0
+    make "tk.guard :coll.r
+    if not blocked? [stop]
+  ]
+end
+
 to respawn
   make "cracked false
   if 1 > :lives [
@@ -3876,6 +4402,7 @@ to respawn
     stop
   ]
   if :e.boom > 0 [stop]
+  place.player
   spawn.enemy
   make "e.rage 300
   make "e.h random 360
@@ -3935,25 +4462,66 @@ end
 ; overlay's red -- it is a piece of
 ; glass in front of the periscope and
 ; not a thing on the plain.
+; THE BLIP IS A PING AND NOT A LAMP,
+; which M5 had wrong and which is a
+; MECHANIC rather than a decoration.
+;
+; The ROM resets `radar_blip_inten` to
+; $f0 only on the frame the sweep line
+; crosses the enemy's bearing, then
+; takes 8 off it every frame. So the
+; blip flares once a revolution and is
+; gone well before the next one, and
+; between pings YOU have to remember
+; where the thing was. A blip that is
+; always drawn hands the player a
+; tracking radar the cabinet never gave
+; them.
+;
+; The crossing test is the ROM's: the
+; sweep has just passed the enemy if
+; `sweep - bearing` is between zero and
+; one frame's rotation.
+;
+; IT FADES IN LENGTH RATHER THAN
+; BRIGHTNESS, because this display has
+; no intensity axis to fade along -- a
+; vector monitor does, and that is what
+; the ROM is spending. Four steps down
+; to one over thirty frames reads as the
+; same decay.
+;
+; `rd.bx` carries the bearing before it
+; carries a coordinate, and `rd.d` a
+; length after it has carried a range.
+; Two names, four jobs, none overlapping
+; -- the file is at its global ceiling.
 to blip
+  make "rd.bx (arctan :e.zc :e.xc)
+  make "rd.bx wrap.diff :rd.sw - :rd.bx
+  if not 0 > :rd.bx [
+    if :rd.spin > :rd.bx [make "rd.bi 30]
+  ]
+  if 1 > :rd.bi [stop]
+  make "rd.bi :rd.bi - 1
   make "rd.bx :e.xc * :rd.sc
   make "rd.by :e.zc * :rd.sc
   make "rd.d (abs :rd.bx) + (abs :rd.by)
   if :rd.r > :rd.d [
+    make "rd.d 1 + :rd.bi / 10
     make "rd.bx :rd.x + :rd.bx
     make "rd.by :rd.y + :rd.by
     pu (setpos :rd.bx :rd.by)
     seth 0
-    bk 2
-    pd fd 4
+    bk :rd.d / 2
+    pd fd :rd.d
     pu
   ]
 end
 
 to radar
   setpc :sight.colour
-  make "rd.sw :rd.sw + :rd.spin
-  make "rd.sw modulo :rd.sw 360
+  make "rd.sw wrap.deg :rd.sw + :rd.spin
   pu (setpos :rd.x :rd.y)
   pd arc 360 :rd.r
   seth :rd.sw
@@ -4860,6 +5428,7 @@ to init.game
   cam.offsets
   ob.scan
   make "sh.on false
+  make "sh.cool 0
   make "es.on false
   make "bm.n 0
   make "tk.boom 0
@@ -4872,9 +5441,9 @@ to init.game
   make "lives :start.lives
   make "extra.due :extra.at
   make "e.score 0
-  make "e.agg 0
+  make "e.diff 0
   make "e.rage 255
-  make "e.tmr 720
+  make "e.tmr 640
   make "ms.n 0
   make "e.gun false
   make "e.ram false
