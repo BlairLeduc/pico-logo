@@ -1092,17 +1092,39 @@ make "sh.nose :sh.r * 2 / :sh.step
 ;--------------------------------------
 ; The explosion
 ;
-; Screen-space fragments from the hit
-; point, as Asteroids' `draw.boom` is,
-; and for the same reason: drifting the
-; wreck in three dimensions would want a
-; projection a fragment. Five short
-; strokes on a radius that grows with
-; the death frame reads as a tank coming
-; apart and costs fifteen statements on
-; ten frames out of every enemy's life.
-make "boom.frames 10
-make "boom.drift 7
+; TWO EXPLOSIONS, AND THEY ARE NOT THE
+; SAME KIND OF THING. What you kill
+; comes apart IN THE WORLD -- the
+; cabinet's tank breaks into pieces that
+; fly outward in perspective, and a
+; piece that leaves along your line of
+; sight shrinks as it goes. What kills
+; YOU comes apart on the GLASS, because
+; you are inside it: there is nothing
+; out there to project.
+;
+; So `draw.wreck` is three tumbling
+; solids at the dead enemy's world
+; position and `draw.boom` is the five
+; screen-space strokes that were once
+; both. The wreck is thirty-two edges
+; over twelve divides -- the same bill
+; the live tank paid, on frames where
+; the live tank is not being drawn -- so
+; the whole of it is free.
+;
+; Eighteen frames rather than M2's ten,
+; which is 1.2 seconds: a wreck that has
+; to fly, rise, fall and land needs long
+; enough to do it, and the same count is
+; the pause a death costs. The burst's
+; drift came down 7 -> 4 with it and
+; went back to its one call site in
+; `draw.boom`, a slot at a time being
+; what section 16.7.4 leaves: it grows
+; for eighteen frames now, and 7 a frame
+; would throw its strokes off the glass.
+make "boom.frames 18
 
 ;--------------------------------------
 ; The radar
@@ -1434,6 +1456,24 @@ make "bm.x 0
 make "bm.y 0
 make "bm.n 0
 make "tk.boom 0
+
+; The wreck, in the world. Four numbers
+; for three tumbling pieces, because
+; everything else it needs is the dead
+; enemy's own: `e.x`/`e.z` are where it
+; died, `e.h` is the axis it comes apart
+; along, and `e.hw` is how big it was.
+; None of them is touched again until
+; `spawn.enemy` -- which is why the
+; wreck must be FINISHED before that
+; runs, and `wr.n` is one frame shorter
+; than `e.boom` to make it so.
+;
+; `wr.y` is how high the pieces have
+; risen, and it is one arc all three
+; share.
+make "wr.n 0
+make "wr.y 0
 
 ; The cracked glass. `cracked` is the
 ; whole of the per-frame test; the four
@@ -3734,7 +3774,7 @@ end
 ; decision, and the global table has
 ; since made it permanent.
 ;
-; Missiles are held back until 5,000
+; Missiles are held back until 20,000
 ; points and then come up about one
 ; spawn in three. `ms.n` is what makes
 ; the tanks that come between them
@@ -3751,7 +3791,7 @@ to pick.kind
       stop
     ]
   ]
-  if :score > 4999 [
+  if :score > 19999 [
     if 0 = random 2 [
       make "e.kind 2
       stop
@@ -4271,30 +4311,63 @@ end
 ;======================================
 ; The explosion
 ;
-; Asteroids' `draw.boom` in screen
-; space: five short strokes on a radius
-; that grows with the death frame. The
-; alternative is drifting the wreck in
-; three dimensions, which wants a
-; projection per fragment for ten frames
-; and buys a difference nobody watching
-; an explosion can see.
+; THE KILL ITSELF IS SEVEN STATEMENTS
+; AND NO PROJECTION. Everything the
+; wreck needs is already stored on the
+; enemy that is dying -- where it is,
+; how big it is, which way it faces --
+; so the only things written here are
+; the countdown and a random axis for it
+; to come apart along.
 ;
-; `boom.frag` takes its bearing as a
-; PARAMETER, which the rest of this file
-; does not do. A local read costs 1.5x a
-; global's and that is worth 3.9 ms in
-; the frame walk (design section 13,
-; L0.5); this runs on ten frames of an
-; enemy's whole life, so the five copies
-; the global form would need cost more
-; to read than the locals cost to run.
+; `e.h` IS SAFE TO SCRIBBLE ON and it is
+; the reason no explosion looks like the
+; last one. A dead enemy does not steer,
+; `step.enemy` returns on `e.boom`
+; before it reads a heading, and
+; `place.enemy` rolls a fresh one when
+; the next enemy arrives -- so the
+; heading slot is a free random number
+; for exactly as long as the wreck needs
+; one.
 ;
-; The projection is done ONCE, at the
-; moment of the kill, and the fragments
-; then live in screen space. A tank that
-; blew up 300 steps away does not get
-; closer while it burns.
+; `e.t` IS WHERE IT DIED, and a saucer
+; is the reason it exists. `e.te` is the
+; top of the object -- 4 steps above the
+; eye for a tank, 20 for a supertank, 0
+; for a missile, which flies at eye
+; height, and 50 for a saucer, whose
+; keel is 41 above the eye and cannot be
+; shot from behind a cube. The wreck
+; builds its pieces around a height of
+; its own, so without this every kill
+; came apart AT EYE LEVEL and a saucer
+; blown out of the sky left its wreckage
+; on the ground under it. Taking the
+; object's top and dropping the piece
+; span's own top off it puts the pieces
+; where the object was: `e.te` minus
+; three tenths of a half-width is 0 for
+; a tank, which is what it was doing
+; already, and 43 for a saucer, which is
+; what it was not.
+;
+; `e.t` IS THE ENEMY'S OWN SCRATCH, like
+; `e.b` and `e.d` the wreck already
+; borrows: `hunt` writes it and
+; `place.enemy` resets it, and neither
+; runs while the countdown does.
+;
+; `wr.n` is `boom.frames - 1` and that
+; single subtraction is what keeps the
+; wreck and the next enemy apart. Both
+; countdowns are decremented in the same
+; frame -- `step.enemy` first, the draw
+; afterwards -- so on the frame
+; `e.boom` reaches zero and spawns, the
+; wreck must already be over, or it
+; would draw the dead tank's pieces at
+; the new tank's size and place.
 to kill.enemy
   make "sh.on false
   make "es.on false
@@ -4303,12 +4376,9 @@ to kill.enemy
   make "kills :kills + 1
   (sound [3 7] 3200 220 12)
   add.score :e.pts
-  make "bm.n 0
-  if :zmin > :e.zc [stop]
-  make "p.iz :k / :e.zc
-  make "bm.x :e.xc * :p.iz
-  make "bm.y :hz + :e.te * :p.iz
-  make "bm.n :boom.frames
+  make "e.h random 360
+  make "e.t :e.te - :e.hw * 0.3
+  make "wr.n :boom.frames - 1
 end
 
 ; EVERY POINT IN THIS GAME ARRIVES HERE,
@@ -4561,13 +4631,285 @@ to draw.boom
   if 1 > :bm.n [stop]
   make "bm.n :bm.n - 1
   make "bm.t :boom.frames - :bm.n
-  make "bm.t :bm.t * :boom.drift
+  make "bm.t :bm.t * 4
   setpc :moon.colour
   boom.frag 20
   boom.frag 85
   boom.frag 150
   boom.frag 215
   boom.frag 290
+  setpc :world.colour
+end
+
+;--------------------------------------
+; The wreck
+;
+; THE TANK COMES APART INTO THE THREE
+; SOLIDS IT WAS BUILT FROM: the hull,
+; the turret and the gun, each thrown
+; out along its own bearing, each
+; spinning at its own rate, all three
+; rising and falling on one arc. That is
+; what the cabinet does and it is why a
+; kill reads as a kill from any angle --
+; the pieces are in the WORLD, so a
+; piece flying away from you shrinks, a
+; piece flying across you sweeps, and
+; driving past a wreck shows you its
+; other side.
+;
+; IT COSTS WHAT THE LIVE TANK COST.
+; `turret.columns`
+; and `barrel.columns` are already
+; general box projectors -- centre,
+; half-width, two heights, a heading --
+; and every one of those is a global
+; this can simply write. Twelve divides
+; and thirty-two edges -- the tank's own
+; bill, plus the three re-folds
+; `wreck.at` explains -- on frames where
+; there is no live enemy to draw. The
+; explosion is therefore free, which is
+; the whole reason the three-dimensional
+; form the design refused at M2 is
+; affordable now: M2 priced a projection
+; PER FRAGMENT and this projects three
+; RIGID BODIES.
+;
+; WHAT IT SCRIBBLES ON IS REBUILT BY
+; `set.kind`. `e.tw`, `e.te`, `e.tt`,
+; `e.bb` and `e.bt` are the projectors'
+; inputs and the wreck writes fresh
+; values into them three times a frame;
+; every one is recomputed from `e.hw`
+; the next time an enemy spawns. `e.hw`
+; itself is never written, because it is
+; the scale every piece is measured in
+; -- a missile's wreck is small and a
+; saucer's is wide, for free.
+;
+; The rise is `t * (frames - t)`, an arc
+; that is zero at both ends by
+; construction. No velocity, no gravity
+; and no per-piece state: the pieces
+; leave the ground and land back on it
+; because the arithmetic cannot do
+; anything else, and the three factors
+; below (1, 1.35, 1.7) are how much of
+; that arc each piece gets.
+
+; One piece's place and facing. It flies
+; outward along `:b` degrees off the
+; wreck's axis and spins at `:sw`
+; degrees a frame, and those are two
+; different angles -- a piece that flew
+; along its own spin would corkscrew.
+;
+; IT RE-FOLDS THE WRECK'S PLACE FROM
+; `e.x`/`e.z` FOR EVERY PIECE rather
+; than taking the centre once a frame,
+; and the two statements that costs
+; three times are two GLOBALS it does
+; not have to hold. That is the trade
+; this file makes everywhere -- design
+; section 16.7.4's table is the scarce
+; thing and the frame has room -- and it
+; buys something besides: the offset is
+; added in world axes, so a piece goes
+; through the same single rotation the
+; enemy does and there is no second
+; angle to keep in step with the camera.
+;
+; `enemy.offsets` comes FIRST because it
+; writes `e.d`, which is the radius this
+; wants to keep.
+to wreck.at :b :sp :sw
+  enemy.offsets
+  make "e.b :e.h + :b
+  make "e.d :bm.t * :sp * :e.hw
+  make "e.dx :e.dx + :e.d * sin :e.b
+  make "e.dz :e.dz + :e.d * cos :e.b
+  enemy.camera
+  make "p.zc :e.zc
+  make "e.b :e.b + :bm.t * :sw
+  make "e.ec cos :e.b
+  make "e.es sin :e.b
+end
+
+; `near` GUARDS A DIVISOR HERE AND IS
+; NOT A CULL. B59 took the whole-object
+; culls out of this file and this does
+; not put one back: a piece is dropped
+; only when its centre is closer than 60
+; steps, which is closer than the eye
+; can make sense of and near enough that
+; `turret.columns`' clamped range minus
+; a half-width could reach zero. The
+; live enemy is kept out of that region
+; by its collision radius; a piece of
+; one is thrown, so it is asked here.
+to wreck.hull
+  wreck.at 0 0.12 7
+  if :near > :p.zc [stop]
+  make "e.d :e.t + :wr.y
+  make "e.tw :e.hw
+  make "e.te :e.d - :e.hw * 0.85
+  make "e.tt :e.d + :e.hw * 0.3
+  turret.columns
+  draw.box
+end
+
+to wreck.turret
+  wreck.at 140 0.19 -13
+  if :near > :p.zc [stop]
+  make "e.d :e.t + :wr.y * 1.35
+  make "e.tw :e.hw * 0.62
+  make "e.te :e.d + :e.hw * 0.2
+  make "e.tt :e.d + :e.hw * 0.9
+  turret.columns
+  draw.box
+end
+
+; The gun keeps its length: `e.bl` and
+; `e.bw` are untouched, so what
+; cartwheels away is the barrel that was
+; pointing at you a frame ago.
+to wreck.gun
+  wreck.at 250 0.24 25
+  if :near > :p.zc [stop]
+  make "e.d :e.t + :wr.y * 1.7
+  make "e.bb :e.d + :e.hw * 0.4
+  make "e.bt :e.bb + :e.bw * 2
+  barrel.columns
+  draw.barrel
+end
+
+;--------------------------------------
+; A shard, which is what the two solids
+; with no parts come apart into
+;
+; A MISSILE AND A SAUCER ARE ONE SHAPE
+; -- a four-point ring with an apex
+; either side of it -- and a piece of
+; one is the same shape smaller. So the
+; kinds that have no hull, turret and
+; gun break into three bipyramids
+; instead, `:f` of the size each, and
+; `draw.spindle` draws them exactly as
+; it draws the things they came off.
+;
+; IT PROJECTS ITSELF RATHER THAN CALLING
+; `project.saucer`, and the reason is
+; that `project.saucer` reads `sc.r`,
+; `sc.y`, `sc.a` and `sc.k` -- the
+; saucer's shape constants, which
+; nothing rebuilds. The wreck can
+; scribble on the enemy's own numbers
+; because `set.kind` writes them fresh
+; every spawn; it cannot scribble on a
+; constant. So the projection is spelt
+; out here over the piece's own radius,
+; which costs twenty statements and no
+; global at all.
+;
+; IT IS ROTATIONALLY SYMMETRIC, so the
+; heading never reaches the shape and
+; the spin `wreck.at` takes is zero: a
+; disc that tumbles about its own axis
+; is a disc. The four ring points are
+; one offset pair and its perpendicular,
+; which is section 8.2's free ninety
+; degrees and the reason this is twelve
+; edges over five divides -- cheaper
+; than the tank's twelve.
+to wreck.shard :b :sp :f :ar
+  wreck.at :b :sp 0
+  if :near > :p.zc [stop]
+  make "e.d :e.t + :wr.y * :ar
+  make "p.fx :e.hw * :f * 0.55
+  make "p.px :p.fx * :cs
+  make "p.pz :p.fx * :sn
+  make "p.z1 :p.zc + :p.pz
+  make "p.z2 :p.zc + :p.px
+  make "p.z3 :p.zc - :p.pz
+  make "p.z4 :p.zc - :p.px
+  make "p.iz :k / :p.z1
+  .setitem 1 :cx (:e.xc + :p.px) * :p.iz
+  .setitem 1 :cy1 :hz + :e.d * :p.iz
+  make "p.iz :k / :p.z2
+  .setitem 2 :cx (:e.xc - :p.pz) * :p.iz
+  .setitem 2 :cy1 :hz + :e.d * :p.iz
+  make "p.iz :k / :p.z3
+  .setitem 3 :cx (:e.xc - :p.px) * :p.iz
+  .setitem 3 :cy1 :hz + :e.d * :p.iz
+  make "p.iz :k / :p.z4
+  .setitem 4 :cx (:e.xc + :p.pz) * :p.iz
+  .setitem 4 :cy1 :hz + :e.d * :p.iz
+  make "p.iz :k / :p.zc
+  make "apx :e.xc * :p.iz
+  make "p.tx :apx
+  make "e.d :e.d + :p.fx
+  make "apy :hz + :e.d * :p.iz
+  make "e.d :e.d - :p.fx - :p.fx
+  make "p.ty :hz + :e.d * :p.iz
+  draw.spindle
+end
+
+; Every piece is placed against
+; `e.x`/`e.z` afresh, so the wreck stays
+; where the tank died while YOU keep
+; driving -- it slides across the view
+; and grows as you close on it, which is
+; the whole of what makes it look like a
+; thing on the plain rather than a mark
+; on the screen.
+;
+; THE PIECES FALL AS WELL AS FLY, and
+; that is the one statement `e.t * 0.85`
+; buys. The arc `wr.y` is symmetric, so
+; on its own it would land a saucer's
+; wreckage back at 43 steps up, hanging
+; in the air where the saucer was; the
+; decay walks the height it died at down
+; to a fifteenth over eighteen frames,
+; so what is thrown out of the sky comes
+; down. A tank's `e.t` is already about
+; zero and the decay does nothing to it,
+; which is the same statement paying for
+; itself twice.
+;
+; WHICH THREE PIECES IS `e.gun`, and it
+; is the only question this asks about
+; what died. `draw.foe` branches on the
+; same booleans for the same reason
+; (section 16.7.2): a tank and a
+; supertank are a hull, a turret and a
+; gun; a missile and a saucer are one
+; solid with no parts, so they break
+; into three of themselves.
+;
+; The first three frames are the flash,
+; and they are the only reason this
+; procedure knows about colour.
+to draw.wreck
+  if 1 > :wr.n [stop]
+  make "wr.n :wr.n - 1
+  make "bm.t :boom.frames - :wr.n
+  make "wr.y :boom.frames - :bm.t
+  make "wr.y :wr.y * :bm.t * :e.hw
+  make "wr.y :wr.y * 0.02
+  make "e.t :e.t * 0.85
+  setpc :moon.colour
+  if :bm.t > 3 [setpc :world.colour]
+  ifelse :e.gun [
+    wreck.hull
+    wreck.turret
+    wreck.gun
+  ] [
+    wreck.shard 0 0.12 1 1
+    wreck.shard 140 0.19 0.7 1.35
+    wreck.shard 250 0.24 0.5 1.7
+  ]
   setpc :world.colour
 end
 
@@ -5044,6 +5386,7 @@ to play.frame
     moon
     draw.field
     if :e.alive [draw.foe]
+    draw.wreck
     if :sh.on [draw.shell]
     if :es.on [draw.eshell]
     draw.boom
@@ -5431,7 +5774,7 @@ to draw.attract
   print "|Press Space to play|
   setcursor [9 28]
   print "|or H for instructions|
-  setcursor [7 30]
+  setcursor [10 30]
   ifelse :arrows [
     print "|C  steering: ARROWS|
   ] [

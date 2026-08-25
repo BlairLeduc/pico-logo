@@ -1011,7 +1011,49 @@ share `st->pattern`.
 
 ### P13 — Battlezone (design first)
 
-Status: **M5 PLAYED, 2026-08-25 — *"much more playable"*, and the board sent
+Status: **M7 BUILT, 2026-08-25 — real exploding objects, as the cabinet has
+(design §16.11).** Asked for from a board: *"I would like real exploding
+objects, just as the arcade version does."* M2 shipped five screen-space strokes
+on a growing radius and wrote the reason into the file — drifting the wreck in
+three dimensions "wants a projection per fragment for ten frames and buys a
+difference nobody watching an explosion can see". **The arithmetic half was
+right and the judgement half was wrong**: a mark on the glass does not shrink as
+it flies away from you, does not slide when you turn, and does not stay where the
+tank died while you drive on, and at 15 fps you have over a second to look at it.
+**What makes the three-dimensional form affordable is that it is not a fragment
+system**: the tank comes apart into the three solids it was already built from —
+hull, turret, gun — and `turret.columns` and `barrel.columns` are already general
+box projectors whose every input is a global the wreck can simply write. So it is
+**twelve divides and thirty-two edges, the live tank's own bill, on the frames
+where there is no live tank to draw**, and the explosion is free. **It adds two
+globals and gives one back** — `boom.drift` went to its one call site as a
+literal — for a peak of **237 of 254, 17 free** against the 16 the budget test
+enforces. Everything else it needs is the corpse's:
+`e.x`/`e.z` are where it died, `e.h` is the axis it comes apart along and gets a
+random value at the kill so no two explosions look alike, `e.hw` is the scale, so
+a missile's wreck is small and a saucer's is wide for nothing. The rise is one
+arc, `t · (frames − t)`, zero at both ends by construction — no velocities, no
+gravity, no per-piece state, and the pieces land because the arithmetic cannot do
+anything else. `boom.frames` went **10 → 18** (1.2 s), which is also the pause a
+death costs. **Each kind comes apart into itself**: a tank and a supertank are a
+hull, a turret and a gun, while a missile and a saucer are one solid with no
+parts and break into three smaller copies of it — three spindles, 12 edges over
+5 divides each, cheaper than the tank's wreck at both ends — and `e.gun` is the
+only question the wreck asks about what died, the same boolean `draw.foe`
+branches on while it is alive. **And a saucer explodes where it was flying**:
+`e.te` is 50 steps up for a saucer against 4 for a tank, the first cut built
+every piece around zero, so a saucer shot out of the sky left its wreckage on
+the ground under it — `kill.enemy` now captures the death height into `e.t` (the
+enemy's own scratch, so still no new global) and one statement a frame walks it
+down, which is what makes the pieces *fall*. **`near` guards a divisor and is not a cull** — B59's lesson stands;
+a *piece* can be thrown at your feet where the live enemy's collision radius
+never let it go, and `turret.columns` subtracts a half-width from a range clamped
+at 20. **The player's own death is still screen-space**, and for a reason rather
+than for economy: you are inside the tank that blew up. 6 new tests (172 host,
+84/84 ctest green); what a board has to answer is whether 1.2 s is the right
+length and whether a wreck that is free in edges is free in milliseconds.
+
+**M5 PLAYED, 2026-08-25 — *"much more playable"*, and the board sent
 back three things (§16.9.6).** *"The tanks seem to spawn in the same or similar
 place"*: they did, because the mild spawn cone was **40° drawn about the heading
 a fight leaves you with** — pointed at what you have just killed — and 40° is

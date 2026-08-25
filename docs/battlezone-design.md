@@ -98,8 +98,10 @@ The arcade rules, kept:
   (drifts, harmless, worth points). **Which one, and how hard it plays, is the
   campaign in §16.9**: the enemy keeps score too, and the difference between the
   two scores is the only difficulty knob in the game.
-- Both you and the enemy fire one shell at a time. A hit is an explosion of
-  drifting line fragments and a pause.
+- Both you and the enemy fire one shell at a time. A hit is an explosion and a
+  pause. **The two explosions are different things** (§16.11): what you kill
+  comes apart into its own three solids *out on the plain*, and what kills you
+  comes apart *on the glass*, because you are inside it.
 - Being hit **cracks the screen** — a static shatter overlay that stays until
   you respawn.
 - Radar in the top centre: a sweeping wedge over a circle, with a blip for the
@@ -2508,7 +2510,7 @@ does not move.
 | The enemy keeps score too, +1000 per player death; aggression is the difference over 7,000 | `e.score`, `e.agg`, `aggress` — clamped 0..1 |
 | Behind: it spawns in front of you, moves uncertainly, takes bad shots | a spawn cone of 40° opening to 360°; `e.wide` ×2, `e.step` ×0.6, `e.think` 3 → 9 |
 | It gets aggressive ~17 s after spawning whatever the score says | `e.rage` 255 frames → `rage` re-reads the row at `e.agg` 1 |
-| Missiles from a score threshold (5K on the default DIP) | `pick.kind`, one spawn in three above 5,000 |
+| Missiles from a score threshold (5K on the default DIP) | `pick.kind`, **one spawn in two above 20,000**. The rate is the cabinet's — `:MaybeMissile` is a straight coin flip rather than the one spawn in three M5 read it as — and **the threshold is a deliberate departure**: the ROM's 5,000 can be cleared by a single saucer, and this game holds missiles back to 20,000 |
 | Saucers from 2,000, at random intervals | `pick.kind`, one spawn in five above 2,000 |
 | Evade a tank 32.8–49.2 s and a missile is sent instead | `e.tmr` wound at the spawn; expiry is `leave.enemy`, and `next.kind` reads *tank + expired clock* as "was driven away from". **This row said 48–64 s until M6 and the ROM says otherwise**: `CreateTank` sets `frame_count_256x` to 1 and the missile is thrown once it reaches 4, which is three wraps of a 256-frame counter entered at an arbitrary phase — 513 to 768 frames. M5 waited about 45 % longer than the cabinet's worst case; M6 winds 513 + `random 256` |
 | Evade a missile and another comes, until a 16–32 s cycle clock expires | the same name, wound once by the missile that *starts* the cycle |
@@ -2908,6 +2910,132 @@ whether it *plays*. The questions a board has to answer:
   plain with 2.6× the density read as the arcade's or as clutter?
 - **Does a blip that goes dark between sweeps make the radar useful or useless**
   at this screen size?
+
+### 16.11 M7: the wreck, and the explosion the design refused at M2
+
+**Asked for from a board: "I would like real exploding objects, just as the
+arcade version does."** The cabinet's tank breaks into pieces that fly apart in
+perspective — a piece leaving along your line of sight shrinks, a piece crossing
+you sweeps, and driving past a wreck shows you its other side. M2 shipped five
+short strokes on a growing screen-space radius instead, and put the reason in the
+file: drifting the wreck in three dimensions "wants a projection per fragment for
+ten frames and buys a difference nobody watching an explosion can see."
+
+**The first half of that was arithmetic and the second half was a guess, and the
+guess was wrong.** A screen-space burst is a mark on the glass: it does not
+shrink, does not slide when you turn, and does not stay where the tank died while
+you drive on. At 15 fps you have 1.2 seconds to look straight at it.
+
+**What makes the three-dimensional form affordable is that it is not a fragment
+system.** M2 priced a projection *per fragment*; the wreck projects three **rigid
+bodies** — the hull, the turret and the gun, which are the three solids the tank
+was already built from. And `turret.columns` and `barrel.columns` are already
+general box projectors: a centre, a half-width, two heights and a heading, every
+one of them a global the wreck can simply write. So the wreck is **twelve divides
+and thirty-two edges — exactly the live tank's bill — on the frames where there
+is no live tank to draw.** The explosion is free.
+
+**It is two names of state and it borrows the rest from the corpse.** The
+dead enemy's own slots are untouched between the kill and the next spawn:
+`e.x`/`e.z` are where it died, `e.h` is the axis it comes apart along, `e.hw` is
+how big it was — so a missile's wreck is small and a saucer's is wide for
+nothing. `kill.enemy` scribbles a random heading into `e.h`, which is why no two
+explosions look alike, and that slot is free precisely because a dead enemy does
+not steer. **It adds two names and no more**: `wr.n`, the countdown, and `wr.y`,
+how high the pieces have risen. It wanted two more — the wreck's centre in the
+camera's frame, taken once and read three times — and gave them back: `wreck.at`
+re-folds the centre from `e.x`/`e.z` for each piece instead, which costs two
+statements three times a frame. The peak is **237 of 254, 17 free** against the
+budget test's 16 — the frame has room and the global table does not (§16.7.4) —
+and the version that pays in statements is also the more honest one,
+since the offset then goes through the same single rotation everything else in
+the file does.
+
+**The rise is one arc and there is no physics in it.** `wr.y` is
+`t · (frames − t)` scaled by `e.hw`: zero at both ends by construction, so the
+pieces leave the ground and land back on it because the arithmetic cannot do
+anything else. No velocities, no gravity, no per-piece state. Each piece takes a
+fixed share of that arc (1, 1.35, 1.7), flies out along its own bearing (0°,
+140°, 250° off the wreck's axis) and spins at its own rate (7, −13, 25 degrees a
+frame). **The outward bearing and the spin are two different angles on purpose**
+— a piece that flew along its own facing would corkscrew.
+
+**`boom.frames` went 10 → 18**, 1.2 seconds, because a wreck that has to fly,
+rise, fall and land needs long enough to do it; the same count is the pause a
+death costs, which is nearer the cabinet's than 0.67 s was. `boom.drift` came
+down 7 → 4 with it and went back to its call site as a literal, a slot being
+worth more than a name here — which is where the third of the wreck's four
+wanted globals came from.
+
+**`near` guards a divisor and is not a cull.** B59 took the whole-object culls
+out of this file and this does not put one back. `turret.columns` clamps its
+range at `zmin` — 20 — and then subtracts a half-width from it, and a saucer's
+half-width is 22, so a piece drawn from close enough could divide by something
+arbitrarily near zero and put a vertex anywhere on the screen. The live enemy is
+held out of that region by its collision radius; a *piece* of one is thrown, so
+each piece is asked, and one whose centre is inside `near` (60 steps) is dropped
+— which leaves the smallest divisor 38. The test named
+`test_a_wreck_at_your_feet_stays_on_the_arithmetic` kills a tank at 70 steps and
+reads back every stroke of every frame of the wreck.
+
+**One ordering rule holds the whole thing together, and it is one subtraction:**
+`wr.n` is `boom.frames - 1`. Both countdowns fall in the same frame, `step.enemy`
+first and the draw afterwards, so on the frame `e.boom` reaches zero and spawns
+the next enemy, the wreck must already be over — or it would draw the dead tank's
+pieces at the new tank's size, place and heading. There is a test for that too.
+
+**Each kind comes apart into itself, and `e.gun` is the only question the wreck
+asks about what died.** A tank and a supertank *are* a hull, a turret and a gun.
+A missile and a saucer are one solid with no parts — the four-point ring with an
+apex either side that §16.7.1 found — so they break into **three smaller copies
+of that solid**: `wreck.shard`, three spindles at twelve edges over five divides
+each, which is cheaper than the tank's wreck at both ends. It is the same
+boolean `draw.foe` branches on while the thing is alive (§16.7.2), asked once
+more.
+
+**`wreck.shard` projects itself instead of calling `project.saucer`, and the
+reason is the difference between a constant and a slot.** The wreck can scribble
+on `e.tw`, `e.te`, `e.tt`, `e.bb` and `e.bt` because `set.kind` rebuilds every
+one of them at the next spawn; `project.saucer` reads `sc.r`, `sc.y`, `sc.a` and
+`sc.k`, which are top-level constants that **nothing** rebuilds, so writing a
+piece's radius into `sc.r` would leave every saucer after it the wrong size. The
+projection is therefore spelt out over the piece's own radius — twenty
+statements, no new global, and no cull, since the shard has the same `near`
+divisor guard the boxes do.
+
+**A saucer explodes where it was flying, and that took one number.** `e.te` is
+how high the object stands: 4 steps above the eye for a tank, 20 for a
+supertank, 0 for a missile (which flies at eye height and is aimed at your eye),
+and **50 for a saucer**, whose keel at 41 above the eye is the whole reason you
+cannot shoot one from behind a cube. The first cut of the wreck built every
+piece around a height of zero, so **a saucer blown out of the sky left its
+wreckage on the ground under it** — the pieces teleported down 50 steps on the
+frame of the kill. `kill.enemy` now captures `e.te - e.hw · 0.3`, the object's
+top less the piece span's own top, into `e.t`: **0 for a tank, which is what it
+was already doing, and 43 for a saucer, which is what it was not.** `e.t` is the
+enemy's own scratch, like `e.b` and `e.d` the wreck already borrows — `hunt`
+writes it, `place.enemy` resets it, and neither runs while the countdown does —
+so the fix costs **no global at all**.
+
+**And then it falls.** The arc is symmetric by construction, so on its own it
+would set the wreckage back down at 43 steps up, hanging where the saucer was.
+One statement — `e.t · 0.85` a frame — walks the death height down to a
+fifteenth of itself over eighteen frames, so what is thrown out of the sky comes
+down. A tank's `e.t` is already about zero and the decay does nothing to it,
+which is the same statement paying for itself twice.
+
+**What did not change**: the player's own death is still five screen-space
+strokes, and it is screen-space for a reason rather than for economy — you are
+inside the tank that blew up, and there is nothing out there to project. A
+missile that *rams* you sets its own countdown without a wreck, which is right
+twice over: it died on top of you, and every piece of it would be inside the
+divisor guard anyway.
+
+**What only a board can answer**: whether 1.2 seconds is the right length at 15
+fps, whether a saucer's wreckage falls fast enough to read as falling, and
+whether a wreck that is free in edges is free in *milliseconds* — the
+claim is that it replaces the live tank frame for frame, and only the readout can
+confirm it does not land on top of something else.
 
 ## 17. Tests
 

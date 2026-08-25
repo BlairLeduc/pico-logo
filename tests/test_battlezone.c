@@ -83,8 +83,20 @@
 // A shell is a cube now rather than a four-pixel dash.
 #define EDGES_SHELL 12
 
-// The explosion is five short strokes on a growing radius.
+// The player's own explosion is five short strokes on a growing radius, drawn
+// on the glass because the player is inside the thing that blew up.
 #define FRAGS_BOOM 5
+
+// An enemy's explosion is the enemy: the hull's twelve edges, the turret's
+// twelve and the barrel's eight, thrown apart in the world.  The wreck costs
+// exactly what the live tank cost, on frames where the live tank is not drawn.
+#define EDGES_WRECK 32
+
+// A missile and a saucer have no hull, turret and gun -- they are one solid
+// with no parts -- so they come apart into three of themselves: three spindles
+// at twelve edges each, over five divides each, which is cheaper than the
+// tank's wreck at both ends.
+#define EDGES_SHARDS (3 * EDGES_SPINDLE)
 
 // PicoCalc key codes, as the game names them to `keydown?`/`keyhit?`.  One key
 // per tread per direction, laid out like the cabinet's two sticks: 1 and Q on
@@ -2388,11 +2400,13 @@ void test_the_enemys_shell_hits_the_player_and_pauses_the_tank(void)
 // M2 -- the explosion and the radar
 //==========================================================================
 
-void test_the_explosion_draws_its_fragments_and_runs_down(void)
+// THE PLAYER'S OWN DEATH IS THE ONLY SCREEN-SPACE EXPLOSION LEFT, and it is
+// screen-space for a reason rather than for economy: you are inside the tank
+// that blew up, so there is no object out on the plain to project.
+void test_the_players_explosion_draws_its_fragments_and_runs_down(void)
 {
     camera_at(800, 800, 0);
-    enemy_at(800, 1000, 180);
-    run("make \"kills 0  kill.enemy");
+    run("make \"lives 3  make \"tk.boom 0  make \"es.on false  hit.player");
     TEST_ASSERT_EQUAL_FLOAT(num(":boom.frames"), num(":bm.n"));
 
     mock_device_clear_graphics();
@@ -2404,6 +2418,203 @@ void test_the_explosion_draws_its_fragments_and_runs_down(void)
     mock_device_clear_graphics();
     run("draw.boom");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_line_count(), "the explosion never went out");
+}
+
+// WHAT YOU KILL COMES APART INTO THE THREE SOLIDS IT WAS BUILT FROM: the hull,
+// the turret and the gun.  The count is the whole of the assertion -- a wreck
+// that is thirty-two edges is a wreck that is being drawn by the same two box
+// projectors the live tank used, which is what makes it free.
+void test_the_wreck_is_the_tank_in_three_pieces_and_runs_down(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 1000, 180);
+    run("make \"kills 0  kill.enemy");
+    TEST_ASSERT_EQUAL_FLOAT(num(":boom.frames") - 1, num(":wr.n"));
+
+    mock_device_clear_graphics();
+    run("draw.wreck");
+    TEST_ASSERT_EQUAL_INT(EDGES_WRECK, mock_device_line_count());
+
+    for (int i = 0; i < (int)num(":boom.frames") + 2; i++)
+        run("draw.wreck");
+    mock_device_clear_graphics();
+    run("draw.wreck");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_line_count(), "the wreck never went out");
+}
+
+// Measure how wide the drawn wreck is on the glass.
+static float wreck_extent(void)
+{
+    float lo = 1e9f, hi = -1e9f;
+    for (int i = 0; i < mock_device_line_count(); i++)
+    {
+        const MockLine *l = mock_device_get_line(i);
+        lo = fminf(lo, fminf(l->x1, l->x2));
+        hi = fmaxf(hi, fmaxf(l->x1, l->x2));
+    }
+    return hi - lo;
+}
+
+// THE PIECES FLY APART, AND THEY DO IT IN THE WORLD.  Two things are asserted
+// and the second is the one that matters: the wreck spreads as it burns, and
+// it spreads AROUND THE PLACE THE TANK DIED rather than around a point on the
+// screen -- so a camera that turns sweeps it across the view exactly as it
+// sweeps a cube, which is the whole difference between this and the five
+// screen-space strokes it replaced.
+void test_the_wreck_flies_apart_in_the_world(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 1000, 180);
+    run("make \"kills 0  kill.enemy");
+
+    mock_device_clear_graphics();
+    run("draw.wreck");
+    const float first = wreck_extent();
+
+    for (int i = 0; i < 12; i++)
+        run("draw.wreck");
+    mock_device_clear_graphics();
+    run("draw.wreck");
+    const float later = wreck_extent();
+    // 50 px across on the frame it dies and 124 twelve frames later, at 200
+    // steps.  The threshold is well under that because what is being asserted
+    // is that the pieces separate at all, not the tuning of how far.
+    TEST_ASSERT_TRUE_MESSAGE(later > first * 1.5f, "the wreck did not fly apart");
+
+    // Turn the camera and the wreck must move with the plain.  It is dead
+    // ahead, so a turn to the left puts it to the right.
+    camera_at(800, 800, 340);
+    mock_device_clear_graphics();
+    run("draw.wreck");
+    float lo = 1e9f;
+    for (int i = 0; i < mock_device_line_count(); i++)
+        lo = fminf(lo, fminf(mock_device_get_line(i)->x1, mock_device_get_line(i)->x2));
+    TEST_ASSERT_TRUE_MESSAGE(lo > 0, "the wreck stayed on the screen when the camera turned");
+}
+
+// A WRECK CAN BE THROWN AT YOUR FEET, and that is what `near` guards in
+// `wreck.hull` and its two neighbours.  The live enemy is held off by its
+// collision radius; a PIECE of one is thrown, and `turret.columns` clamps its
+// range at `zmin` but then subtracts a half-width from it -- so a piece drawn
+// from inside 60 steps could divide by something arbitrarily near zero and put
+// a vertex anywhere at all.  This kills a tank at point-blank range and reads
+// every stroke of every frame of the wreck back.
+void test_a_wreck_at_your_feet_stays_on_the_arithmetic(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 870, 180);          // 70 steps ahead: a rammed missile's range
+    run("make \"kills 0  kill.enemy");
+
+    for (int f = 0; f < (int)num(":boom.frames"); f++)
+    {
+        mock_device_clear_graphics();
+        run("draw.wreck");
+        for (int i = 0; i < mock_device_line_count(); i++)
+        {
+            const MockLine *l = mock_device_get_line(i);
+            const float v[4] = {l->x1, l->y1, l->x2, l->y2};
+            for (int j = 0; j < 4; j++)
+            {
+                char msg[96];
+                snprintf(msg, sizeof(msg), "frame %d, stroke %d: %g", f, i, (double)v[j]);
+                TEST_ASSERT_TRUE_MESSAGE(isfinite(v[j]) && fabsf(v[j]) < 2000.0f, msg);
+            }
+        }
+    }
+}
+
+// Every stroke of the wreck, top and bottom, in screen rows.
+static void wreck_rows(float *lo, float *hi)
+{
+    *lo = 1e9f;
+    *hi = -1e9f;
+    for (int i = 0; i < mock_device_line_count(); i++)
+    {
+        const MockLine *l = mock_device_get_line(i);
+        *lo = fminf(*lo, fminf(l->y1, l->y2));
+        *hi = fmaxf(*hi, fmaxf(l->y1, l->y2));
+    }
+}
+
+// Kill whatever is out there and draw the first frame of its wreck.
+static int kill_and_draw(int kind)
+{
+    foe_at(kind, 800, 1100, 180);
+    run("make \"kills 0  kill.enemy");
+    mock_device_clear_graphics();
+    run("draw.wreck");
+    return mock_device_line_count();
+}
+
+// EACH KIND COMES APART INTO ITSELF.  A tank and a supertank are a hull, a
+// turret and a gun, so their wreck is three boxes; a missile and a saucer are
+// one solid with no parts, so theirs is three smaller copies of that solid.
+// `e.gun` is the only question `draw.wreck` asks about what died, which is the
+// same boolean `draw.foe` branches on when it is alive (design §16.7.2).
+void test_each_kind_comes_apart_into_its_own_shape(void)
+{
+    camera_at(800, 800, 0);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(EDGES_WRECK, kill_and_draw(1), "the tank");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(EDGES_WRECK, kill_and_draw(3), "the supertank");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(EDGES_SHARDS, kill_and_draw(2), "the missile");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(EDGES_SHARDS, kill_and_draw(4), "the saucer");
+}
+
+// A SAUCER BLOWS UP WHERE IT WAS FLYING AND THEN COMES DOWN.  Its keel is 41
+// steps above the eye and that is the whole reason you cannot shoot one from
+// behind a cube; a wreck built around eye level would have dropped the wreckage
+// on the ground the instant the shot landed.  `e.t` is where it died and the
+// decay in `draw.wreck` is what brings the pieces down out of the sky.
+void test_a_saucer_explodes_where_it_was_flying_and_falls(void)
+{
+    camera_at(800, 800, 0);
+    const float hz = num(":hz");
+
+    TEST_ASSERT_EQUAL_INT(EDGES_SHARDS, kill_and_draw(4));
+    float lo, hi, early_hi;
+    wreck_rows(&lo, &hi);
+    early_hi = hi;
+    TEST_ASSERT_TRUE_MESSAGE(lo > hz, "the saucer's wreck was on the ground, not in the sky");
+
+    for (int i = 0; i < (int)num(":boom.frames") - 3; i++)
+        run("draw.wreck");
+    mock_device_clear_graphics();
+    run("draw.wreck");
+    wreck_rows(&lo, &hi);
+    TEST_ASSERT_TRUE_MESSAGE(hi < early_hi - 10.0f, "the wreckage hung in the air");
+
+    // And the tank, whose hull sits ON the plain, still straddles the horizon.
+    TEST_ASSERT_EQUAL_INT(EDGES_WRECK, kill_and_draw(1));
+    wreck_rows(&lo, &hi);
+    TEST_ASSERT_TRUE_MESSAGE(lo < hz && hi > hz, "the tank's wreck left the ground");
+}
+
+// THE WRECK HAS TO BE OVER BEFORE THE NEXT ENEMY ARRIVES, because it is drawn
+// out of the dead enemy's own slots -- `e.x`, `e.z`, `e.h` and `e.hw` -- and
+// `spawn.enemy` writes every one of them.  Both countdowns run in the same
+// frame, `step.enemy` first, so `wr.n` is one shorter than `e.boom` and this
+// is the test that says so.
+void test_the_wreck_is_finished_before_the_next_enemy_spawns(void)
+{
+    new_game();
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 1000, 180);
+    run("make \"kills 0  make \"tk.boom 0  kill.enemy");
+    run("make \"paused false");
+
+    for (int i = 0; i < (int)num(":boom.frames") + 2; i++)
+    {
+        const bool spawned = num(":e.boom") <= 1;
+        run("play.frame");
+        if (spawned)
+        {
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(
+                0, num(":wr.n"),
+                "a piece of the old tank was still being drawn on the frame the new one spawned");
+            return;
+        }
+    }
+    TEST_FAIL_MESSAGE("the enemy never came back");
 }
 
 // The blip is the enemy's camera-frame position scaled, which is what makes it
@@ -2862,7 +3073,13 @@ static uint32_t last_freq_on(int voice)
 // The staple, and the two thresholds that hold the other kinds back.  A saucer
 // is worth 5,000 points and cannot hurt you, so it does not appear until the
 // plain is worth one; a missile is the cabinet's answer to a player who is
-// winning, and it waits for 5,000 points.
+// winning, and it waits.
+//
+// THE MISSILE THRESHOLD IS 20,000 AND THE CABINET'S IS 5,000 (the default DIP
+// setting).  It is a deliberate departure and not a number nobody checked: it
+// was moved after M6 measured everything else against the ROM, and it is worth
+// knowing that one saucer is 5,000 points, so the cabinet's threshold can be
+// cleared by a single kill.  The saucer's 2,000 is the cabinet's, untouched.
 void test_the_plain_opens_with_tanks_and_nothing_else(void)
 {
     run("rerandom");
@@ -2877,7 +3094,7 @@ void test_the_plain_opens_with_tanks_and_nothing_else(void)
     }
 }
 
-void test_a_saucer_waits_for_two_thousand_and_a_missile_for_five(void)
+void test_a_saucer_waits_for_two_thousand_and_a_missile_for_twenty(void)
 {
     run("rerandom");
 
@@ -2895,7 +3112,7 @@ void test_a_saucer_waits_for_two_thousand_and_a_missile_for_five(void)
     TEST_ASSERT_TRUE_MESSAGE(saucers > 0, "no saucer crossed the plain above 2,000 points");
 
     // Above both: missiles as well, and the tank is still the staple.
-    run("make \"score 9000  make \"ms.n 0");
+    run("make \"score 25000  make \"ms.n 0");
     int missiles = 0, tanks = 0;
     for (int i = 0; i < 60; i++)
     {
@@ -2908,8 +3125,8 @@ void test_a_saucer_waits_for_two_thousand_and_a_missile_for_five(void)
     // flip once the score clears the threshold, so above it a missile is as
     // likely as everything else put together and the tank stops being the
     // staple.  M5 read the cabinet's 50/50 as a third.
-    TEST_ASSERT_TRUE_MESSAGE(missiles > 0, "no missile flew above 5,000 points");
-    TEST_ASSERT_TRUE_MESSAGE(tanks > 0, "the tank vanished above 5,000 points");
+    TEST_ASSERT_TRUE_MESSAGE(missiles > 0, "no missile flew above 20,000 points");
+    TEST_ASSERT_TRUE_MESSAGE(tanks > 0, "the tank vanished above 20,000 points");
     TEST_ASSERT_TRUE_MESSAGE(missiles > 15, "missiles are rarer than the cabinet's coin flip");
 }
 
@@ -4606,7 +4823,12 @@ void test_every_hot_path_temporary_is_prefixed(void)
         "au.", "cr.", "hs.",
         // M5's one: the missile, which already owned `ms.fin` and now owns the
         // launch counter that promotes a tank to a supertank.
-        "ms.", NULL};
+        "ms.",
+        // M7's one: the wreck.  It is a family of four and not a `bm.` because
+        // the two explosions are two different things -- one is three solids
+        // out on the plain and the other is five strokes on the glass -- and a
+        // shared prefix would have invited sharing the slots.
+        "wr.", NULL};
     static const char *const state[] = {
         "px", "pz", "ph", "cs", "sn", "a", "b", "apx", "apy",
         "left.tread", "right.tread", "bumped", "paused", "quit",
@@ -5016,7 +5238,13 @@ int main(void)
     RUN_TEST(test_the_enemy_fires_exactly_along_its_heading);
     RUN_TEST(test_a_still_player_is_hit_and_a_moving_one_is_missed);
     RUN_TEST(test_the_enemys_shell_hits_the_player_and_pauses_the_tank);
-    RUN_TEST(test_the_explosion_draws_its_fragments_and_runs_down);
+    RUN_TEST(test_the_players_explosion_draws_its_fragments_and_runs_down);
+    RUN_TEST(test_the_wreck_is_the_tank_in_three_pieces_and_runs_down);
+    RUN_TEST(test_the_wreck_flies_apart_in_the_world);
+    RUN_TEST(test_a_wreck_at_your_feet_stays_on_the_arithmetic);
+    RUN_TEST(test_each_kind_comes_apart_into_its_own_shape);
+    RUN_TEST(test_a_saucer_explodes_where_it_was_flying_and_falls);
+    RUN_TEST(test_the_wreck_is_finished_before_the_next_enemy_spawns);
     RUN_TEST(test_the_blip_is_the_enemy_in_the_camera_frame);
     RUN_TEST(test_the_radar_is_drawn_and_the_blip_is_inside_it);
     RUN_TEST(test_the_game_asks_for_the_fast_clock_and_reads_it_back);
@@ -5032,7 +5260,7 @@ int main(void)
     RUN_TEST(test_the_session_asks_for_the_clock_before_any_game);
     RUN_TEST(test_a_frame_with_an_enemy_and_shells_runs);
     RUN_TEST(test_the_plain_opens_with_tanks_and_nothing_else);
-    RUN_TEST(test_a_saucer_waits_for_two_thousand_and_a_missile_for_five);
+    RUN_TEST(test_a_saucer_waits_for_two_thousand_and_a_missile_for_twenty);
     RUN_TEST(test_six_missiles_promote_the_tank_to_a_supertank);
     RUN_TEST(test_every_missile_launch_is_counted);
     RUN_TEST(test_a_tank_you_drive_away_from_is_replaced_by_a_missile);
