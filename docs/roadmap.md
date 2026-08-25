@@ -1011,7 +1011,54 @@ share `st->pattern`.
 
 ### P13 — Battlezone (design first)
 
-Status: **M4 IN PROGRESS — the models have their detail (§16.8) and it is
+Status: **M5 PLAYED, 2026-08-25 — *"much more playable"*, and the board sent
+back three things (§16.9.6).** *"The tanks seem to spawn in the same or similar
+place"*: they did, because the mild spawn cone was **40° drawn about the heading
+a fight leaves you with** — pointed at what you have just killed — and 40° is
+narrower than the 63° field of view, so two discrete distances inside it is two
+places. The floor is **150°** now: still the forward arc, wider than the view.
+Five tests described that spawn correctly and none of them asked whether two
+spawns in a row are *different*; the one that does now fails on the old cone
+with "thirty spawns covered 32 degrees, and the field of view is 63". And **the
+shell is a dart rather than a cube** — base square of edge `2 · sh.r`, apex four
+of them along the flight, twice as tall as its base edges. §16.8 argued the cube
+from "nothing about a shell's roll is observable", which is true and is not the
+question: a round's *direction* is the most observable thing about it. It is
+also **cheaper** — 8 edges over 3 divides against 12 over 4 — because the base
+square is two columns, the apex reuses `apx`/`apy`, and the free 90° gives the
+perpendicular away. Its slot came from `e.naim`, exactly as §16.9.2 predicted.
+And **"I cannot shoot the flying saucer because it is in the air"** (B54): it is
+not in the air as far as the shell is concerned — `step.shell` compares in x and
+z only — but `sc.y` 90 put the saucer above the gunsight for 99 % of its dwell
+and off the top of the screen for 19 % of it, so the altitude cost the *sight
+picture* and not the shot. **50** now, floored by the keel's clearance over a
+cube. All three rounds are *pictures* that passed every arithmetic claim the
+suite made about them, which is §16.9.5's prediction happening three times in
+one run. **154 host tests, 84/84 ctest green**; still 238 of 254 globals.
+
+**M5 BUILT — the game plays by the arcade's rules (§16.9).** M4 walked a ring of eight kinds; the cabinet does not.
+**The enemy keeps score too** — 1,000 every time it kills you — and the
+difference between the two scores is the only difficulty knob in the game: while
+it is winning it spawns in front of you, drives at 0.6 speed, re-decides every
+ninth frame and throws its shots twice as wide; 7,000 points clear of it and it
+comes from any bearing with every number its row says. Seventeen seconds on the
+plain does the same thing whatever the score is. **Missiles are earned at 5,000
+points and saucers at 2,000**, the sixth missile promotes tanks to supertanks,
+and **running away is answered**: drive away from a tank for 48–64 s and it is
+replaced by a missile, dodge that and another comes until a 16–32 s cycle clock
+expires. A spawn is at 3/4 or 3/8 of the range, neither of you may fire for two
+seconds after one, what comes back after you die spends three seconds going
+nowhere, a missile's final turn comes later as the score climbs, and the radar
+does not show a saucer. **The frame gains two comparisons and a decrement** —
+all of it is arithmetic on events — so §12's budget does not move and what M5
+needs a board for is whether the rules *play*. **150 host tests, 84/84 ctest
+green.** The global table paid for it: five names wanted, three found (`e.order`
+and `e.seq` retired with the ring, `e.wide2` derived at the shot), **238 of 254
+and exactly the 16 the budget test holds back**. The one rule that did not ship
+is the saucer flying *alongside* a tank — §14's oldest cut, and now enforced by
+the table rather than by the frame (§16.9.3).
+
+**M4 — the models have their detail (§16.8) and it is
 measured.** A tank is a hull, turret and barrel at 32 edges, a missile is a long
 pyramid with fins, a shell is a cube. On a board at 300 MHz: **BODY 26, MAX BODY
 33** with the enemy in the frame, 28 with a shot as well — so the frame is

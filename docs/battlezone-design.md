@@ -95,7 +95,9 @@ The arcade rules, kept:
   your position. They are the only way to tell that you are turning.
 - One enemy at a time: a **tank** (hunts you), a **supertank** (faster,
   smarter), a **missile** (flies straight at you, dodgeable), or a **saucer**
-  (drifts, harmless, worth points).
+  (drifts, harmless, worth points). **Which one, and how hard it plays, is the
+  campaign in §16.9**: the enemy keeps score too, and the difference between the
+  two scores is the only difficulty knob in the game.
 - Both you and the enemy fire one shell at a time. A hit is an explosion of
   drifting line fragments and a pause.
 - Being hit **cracks the screen** — a static shatter overlay that stays until
@@ -1131,7 +1133,7 @@ Cut from the arcade, with the reason:
 
 | Cut | Reason |
 |---|---|
-| Multiple simultaneous enemies | The frame is linear in visible vertices. The arcade sends one enemy at a time anyway |
+| Multiple simultaneous enemies | The frame is linear in visible vertices. **The second half of that reason was wrong and §16.9.3 corrects it**: the cabinet sends one tank *or* missile — and *possibly a saucer as well*. Here the saucer takes the slot. The frame could afford its twelve edges; the global table cannot afford a second object's state |
 | The obstacle field's true density | Eight in the table, three visible. §12's largest single lever if it misses |
 | Ground texture / detail below the horizon | The cabinet has none — the plain is empty black. Free authenticity, again |
 | Pitch and roll | A tank stays flat. Removes an axis from every transform |
@@ -1976,10 +1978,23 @@ Four rim points plus the centre is five divides, and the dome and the keel share
 the centre's.
 
 The shape is right for the reason that matters rather than for economy. A tank's
-periscope is 12 steps off the plain and the saucer floats at 90, so it is seen
+periscope is 12 steps off the plain and the saucer floats above it, so it is seen
 very nearly **edge-on** — a plate with a dome above and a hull below, which is
 exactly what a rim quad and two apexes draw from that angle. It is the only view
 this game has, and the model is cut for it.
+
+**It floated at 90 and the gunsight could not reach it** (B54). The rim projects
+to `hz + sc.y * k/z`, so over 20 measured dwells the saucer spent 63 % of its
+frames above the top of the sight's upper centre tick — no drawn mark anywhere
+near it — and 19 % off the top of the screen altogether, having drifted inside
+about 195 steps. The hit test never looks up, so the altitude was costing the
+*sight picture* and not the shot: a shot fired down the bearing kills it, and
+aimed with no lead at all it lands 30 times in 60 at a mean 481 steps. **50**
+puts the rim on the tick at both spawn distances and keeps the whole model on
+the glass when it drifts in, and it cannot fall much further: the keel is the
+floor at `sc.k + eye` = 53 against a 40-tall cube. It also makes the edge-on
+claim above *more* true — 90 up at 300 steps is 17° off the horizontal, which is
+not edge-on at all.
 
 #### 16.7.2 The three booleans, and why the frame never asks what it is looking at
 
@@ -1989,7 +2004,7 @@ fifteen numbers together — into the live `e.*` names, and leaves three boolean
 behind: `e.gun` (has a barrel, draws one, fires), `e.ram` (kills by *arriving*,
 which is the missile and only the missile), `e.drift` (does not hunt, does not
 fire, and is not stopped by an obstacle, which is the saucer flying over the
-plain at 90 steps). After that **the frame costs exactly nothing for having four
+plain with its keel 53 steps up). After that **the frame costs exactly nothing for having four
 kinds**: `hunt`, `move.enemy`, both collisions and the draw dispatch each read a
 boolean where they would have compared a kind number, and a boolean read is
 cheaper than a comparison.
@@ -2386,11 +2401,254 @@ so a new game keeps it, and a test says so.
 
 **M4 — tuning.** Played, then cut.
 
+**M5 — the arcade's rules.** The enemy's own score and the aggression it buys,
+the missile and saucer thresholds, the evade and cycle clocks, two spawn
+distances and a spawn cone, the two-second no-fire and the three-second
+confusion, the missile's final turn, and a radar that does not show a saucer.
+
+### 16.9 M5: the campaign, and the ring that was not one
+
+*"I would like the game to play like the arcade."* — and the source it came with
+is the disassembly notes at
+[6502disassembly.com/va-battlezone](https://6502disassembly.com/va-battlezone/),
+which describe the cabinet's rules in prose. M3 shipped **a ring**: `e.order`,
+eight kinds, walked one at a time — and §16.7.2 defended it as "one list that M4
+can re-cut without touching a line of code". The cabinet has no ring. What it has
+is a rule set, and every part of it is a consequence of one number: **the
+difference between your score and the enemy's**.
+
+**M5 is the milestone with no drawing in it.** Nothing new is projected, nothing
+new is drawn, and the frame gains two comparisons and a decrement. Everything
+below is arithmetic on *events* — a spawn, a death, a clock running out — which
+is why it comes after the models rather than before them, and why §12's budget
+does not move.
+
+#### 16.9.1 The rules, and what each one cost
+
+| The cabinet's rule | What shipped |
+|---|---|
+| The enemy keeps score too, +1000 per player death; aggression is the difference over 7,000 | `e.score`, `e.agg`, `aggress` — clamped 0..1 |
+| Behind: it spawns in front of you, moves uncertainly, takes bad shots | a spawn cone of 40° opening to 360°; `e.wide` ×2, `e.step` ×0.6, `e.think` 3 → 9 |
+| It gets aggressive ~17 s after spawning whatever the score says | `e.rage` 255 frames → `rage` re-reads the row at `e.agg` 1 |
+| Missiles from a score threshold (5K on the default DIP) | `pick.kind`, one spawn in three above 5,000 |
+| Saucers from 2,000, at random intervals | `pick.kind`, one spawn in five above 2,000 |
+| Evade a tank 48–64 s and a missile is sent instead | `e.tmr` wound at the spawn; expiry is `leave.enemy`, and `next.kind` reads *tank + expired clock* as "was driven away from" |
+| Evade a missile and another comes, until a 16–32 s cycle clock expires | the same name, wound once by the missile that *starts* the cycle |
+| The 6th missile promotes tanks to supertanks; the 129th demotes them | `ms.n`, counted in `next.kind` |
+| Missiles delay their final turn as the score nears threshold + 25K | `e.range` for a missile is its **homing distance**: 700 at 5,000 points, 60 at 30,000, and outside it the missile weaves |
+| Spawn distance is 3/4 or 3/8 of maximum range, evenly | `e.spawn` or half of it |
+| Missiles spawn at the far point within a few degrees of your facing | a 10° cone, and always the far distance |
+| Neither may fire for two seconds after a spawn | `e.cool` 30 at the placement rather than `e.reload` |
+| After you die the enemy runs a random heading for three seconds | `e.rage` 300, and `hunt` decides nothing above 255 |
+| The radar shows tanks and missiles; not obstacles, not saucers | one boolean in `radar` |
+
+**Three names carry two or three meanings each, and that is the design rather
+than an accident.** The global table is the binding constraint (§16.8), so the
+campaign is written in *clocks that cannot both be running*:
+
+- **`e.tmr`** is the *sequence's* clock — a tank's 48–64 s tenure, a missile
+  cycle's 16–32 s, a saucer's dwell — because a tank, a missile and a saucer are
+  never on the plain together. `next.kind` owns it: whoever chooses the enemy
+  winds the clock that decides what follows it.
+- **`e.rage`** is the *enemy's* clock: 255 frames of it, and what happens at zero
+  depends on what is out there. A tank stops being careful; a missile has been
+  **dodged** and goes. Above 255 it is the three seconds of confusion after a
+  respawn.
+- **`e.range`** is a **stand-off** for anything with a gun and a **final turn**
+  for a missile. The two readings sit three lines apart behind one `ifelse` on
+  `e.ram`, which is the only way to write that and leave it findable.
+
+**It is declared wound and not expired**, and that one line is load-bearing: a
+tank beside an *expired* clock is exactly how `next.kind` recognises a tank that
+was driven away from, so `e.tmr` 0 at load opens every game with a missile. It
+did, for one build.
+
+#### 16.9.2 What it costs, and the ledger that decided its shape
+
+**The frame: two comparisons and a decrement.** `step.enemy` counts two clocks
+and tests one boolean; `hunt` gains an `ifelse` on `e.ram` and one comparison,
+on one frame in three; `radar` gains one boolean while the enemy is a saucer.
+Call it under 0.2 ms on a frame whose peak §16.8 measured at 51.7 against 66.7.
+**Nothing in the draw pass changed**, so M5 does not need a board to keep the
+budget — it needs one to know whether the rules *play*.
+
+**The globals, which is where the real work went.** §16.8 closed at 236 of 254
+and predicted the constraint: *"the next model that wants a temporary will have
+to find one — and that, rather than the frame, is now the binding constraint."*
+M5 wanted five and found three:
+
+| | |
+|---|---:|
+| M4's peak | 236 |
+| `e.score`, `e.agg`, `e.rage`, `ms.n` | +4 |
+| `e.order`, `e.seq` — the ring, retired | −2 |
+| `e.left` → `e.tmr` — renamed, not added | 0 |
+| `e.wide2` — derived at the shot instead | −1 |
+| **M5's peak** | **238 of 254** |
+
+which leaves **exactly the 16 the budget test enforces** and no more. `e.wide2`
+went for §16.6.1's reason as much as for the slot — it was `2 · e.wide + 1` in
+all four rows, which is two numbers that only mean something against each other
+written apart — and `enemy.fires` now derives the span at the shot, one statement
+on an event. **The next name that is wanted has to come from somewhere too**, and
+the candidate is `e.naim`: it exists only to save a negation inside one
+comparison in `hunt`, which runs one frame in three.
+
+#### 16.9.3 The one rule that did not ship, and why
+
+**"There will be one tank or missile on the battlefield, and possibly a
+saucer."** The cabinet flies a saucer *alongside* the thing that is hunting you.
+Here a saucer takes the slot instead — it is chosen where a tank would be, it
+crosses, and it leaves.
+
+This is **§14's first row**, decided before any of the game existed — *multiple
+simultaneous enemies: the frame is linear in visible vertices* — and it is now
+enforced by something harder than the frame. A second live object needs its own
+world position, heading, camera pair and dwell: eight or nine names against the
+sixteen the workspace is holding for everything else, and the table's ceiling is
+254 by a `_Static_assert`, not by taste. The frame could probably afford the
+saucer's twelve edges; the table cannot afford its state.
+
+What is kept is what the saucer is *for*: 5,000 points that cannot hurt you, off
+the radar, gone if you ignore it.
+
+#### 16.9.4 Three things building it found
+
+**A default that meant something.** `e.gun` is declared `true` at load and
+`e.tmr` was declared 0 — and `next.kind` reads *a gun beside an expired clock* as
+"this tank was evaded". Every game opened with a missile, and the test that
+caught it was the obstacle re-roll test, which failed **60 of 60** because
+missiles spawn dead ahead and the fixture's obstacle ring has one dead ahead.
+A rule written over state that outlives the thing it describes has to say what
+that state means *before* the first thing exists.
+
+**The mock's random source is the constant 42.** `random 5` is therefore always
+2 and `random 3` always 0, so a test that wants a spread has to ask for
+`rerandom` — and a test that forgets reads a game with no variety at all as a
+passing one. Every M5 test that samples a distribution calls it, and the aim
+test needed one adding.
+
+**A respawn replaces a live enemy rather than keeping it**, which is M3's
+courtesy (`respawn` → `spawn.enemy`), so the three seconds of confusion had to be
+set **after** the spawn and not before it: `place.enemy` writes over `e.h`,
+`e.cool` and `e.rage`, and the confusion belongs to whatever is out there when
+you come back rather than to the thing that killed you.
+
+#### 16.9.5 What only a board can answer
+
+Every number in §16.9.1 is a *feel* number, and the host can only say that they
+are wired up. The questions a play test has to answer:
+
+- **Is the mild enemy too mild?** A tank at `e.agg` 0 drives 3.6 steps a frame
+  against the treads' 8 and throws its shot up to 120 steps wide. It is meant to
+  be beatable and it may be beneath notice — in which case the floor moves, not
+  the slope.
+- **Is the ramp the right length?** Full aggression is 7,000 points, which is
+  seven tanks, and 17 seconds gets there anyway.
+- **Does the weave read as a swerve or as a bug?** ±30° at 2° a frame, and it
+  only starts mattering above 5,000 points.
+- **Is one spawn in five too many saucers**, given that here a saucer is a turn
+  *instead of* an attack rather than beside one?
+- **And is the two-second no-fire long enough** at 15 fps against a spawn that
+  may be 310 steps away and already inside a tank's stand-off?
+
+#### 16.9.6 The play test: two places, a round with no direction, and a saucer out of reach
+
+M5's first board run. *"The game is much more playable"* — and three things came
+back with it: a defect in something M5 had just written, a shape the design has
+now been wrong about twice, and a number that had been wrong since M3 and needed
+a player to notice.
+
+**"The tanks seem to spawn in the same or similar place."** They did, and the
+cause was §16.9.1's own cone. At `e.agg` 0 it was **40°**, drawn about the
+heading you are left with — and the heading a fight leaves you with is *pointed
+at the thing you have just killed*. 40° is **narrower than the 63° field of
+view** (§ Tuning, `k` 260), so the replacement arrived in the same third of the
+screen, at one of two ranges, against the same stretch of horizon. Two discrete
+distances inside a cone narrower than the view is **two places**, and a plain
+with nothing on it cannot tell you otherwise.
+
+The floor is **150°** now — still the forward arc, so nothing that has just
+arrived shoots you in the back, and wider than the view, so *where did it go* is
+a question again. Full aggression still opens it to 360.
+
+**And no test on the host had a chance of catching it**, which is the part worth
+keeping. Every claim M5 made about a spawn was true: in front of the player, at
+one of two distances, out of an obstacle, facing you, unable to fire for two
+seconds — five tests, all passing, describing a game that spawns everything in
+the same place. **None of them asked whether two spawns in a row are
+different.** `test_two_spawns_running_are_not_the_same_place` asks, and it is
+deliberately about the *picture* rather than the arithmetic: thirty spawns have
+to cover more bearing than the view does, and a spawn has to land somewhere
+other than the one before it. It fails on the old cone with **"thirty spawns
+covered 32 degrees, and the field of view is 63"**.
+
+**"Change the shell from a cube to a pyramid, point first."** §16.8 argued the
+cube from a real premise and then drew the wrong conclusion from it:
+
+> It is axis-aligned to the *world* rather than to its flight — nothing about a
+> shell's roll is observable — which is the saucer's two-statement trick again.
+
+A shell's *roll* is not observable. A shell's **direction** is the most
+observable thing about it, and it is the thing you most need — §16.8 had already
+said as much one paragraph earlier about its *range*, and then chose a solid
+with no direction in it. A cube tells you how far away a round is and nothing
+about where it is going. **A square pyramid tells you both**: base square of edge
+`2 · sh.r`, apex `4 · sh.r` along the flight, twice as tall as its base edges,
+and the point is where it is going.
+
+**It is cheaper than the cube**, which is not why it was done but is worth
+recording against §16.8's table:
+
+| | edges | divides |
+|---|---:|---:|
+| shell, M4's cube | 12 | 4 |
+| **shell, M5's dart** | **8** | **3** |
+| worst-case frame | 176 → **168** | |
+
+Three savings, and all three are arguments this file has already made. The base
+square's four corners are **two columns**, because a vertical offset does not
+change z and the top and bottom of a corner share a divide (§16.7.1). The apex
+is one point rather than a column, so it goes in `apx`/`apy` where
+`draw.spindle` already keeps one. And the **free 90°** pays for the alignment
+that the cube was avoiding: the base square's horizontal axis is the flight
+turned a quarter turn, a quarter turn commutes with the camera's rotation, so
+the perpendicular in the camera's frame is the nose offset with its components
+swapped and one negated — the saucer's trick (§16.7.1) doing a different job,
+and it costs nothing.
+
+Eight edges take **two strokes**, and that is the floor rather than a choice:
+four of the pyramid's five corners carry three edges each, and a figure with
+four odd-degree corners cannot be walked in one trail.
+
+**"I cannot shoot the flying saucer because it is in the air."** It is not in the
+air as far as the shell is concerned — `step.shell` compares in x and z only and
+nothing in the file looks up — but `sc.y` 90 put the saucer above the gunsight
+for 99 % of its dwell and off the top of the screen for 19 % of it, so the
+altitude was costing the *sight picture* rather than the shot. B54, and §16.7.1
+carries the measurement and the fix: **50**, floored by the keel's clearance over
+a cube.
+
+**Three rounds, three tests that could not have existed before the board.** The
+spawn cone, the shell's direction and the saucer's altitude are all *pictures*,
+and each one passed every arithmetic claim the suite made about it. That is the
+pattern §16.9.5 predicted and it has now happened three times in one run.
+
+**The slot came from `e.naim`**, exactly as §16.9.2 said the next one would have
+to. It held minus `e.aim` so that `hunt` would not have to negate it; `hunt` now
+writes `0 - :e.aim > :e.b` inline, which is safe because **arithmetic binds
+tighter than comparison** — checked on the host rather than assumed, since this
+file has already been bitten once by a precedence it did not verify (§16.8.1).
+The peak is still **238 of 254**. And `sh.nose`, the number that turns a velocity
+into a nose offset, is **derived at load** from `sh.r` and `sh.step` rather than
+typed, for §16.6.1's reason: it means nothing except against those two, and a
+shell whose speed changed would otherwise silently stop being the right shape.
+
 ## 17. Tests
 
 `tests/test_battlezone.c` on the mock device, mirroring `test_asteroids.c`'s
-shape. **38 at M1's close; 73 at M2's; 125 at M3's.** The ones that are specific
-to this game:
+shape. **38 at M1's close; 73 at M2's; 125 at M3's; 154 at M5's.** The ones that
+are specific to this game:
 
 - **The projection is right.** Known camera, known world point, known screen
   coordinate, computed by hand. This is the test that would have caught a
@@ -2461,6 +2719,11 @@ M3's additions, and the failure each exists for:
 - **A saucer flies over an obstacle a tank is stopped by.** Both halves, in the
   same test, because "it flies" is one boolean in one procedure and the only
   proof it is wired up is a tank grounded in the same place.
+- **A saucer is somewhere the gunsight can reach.** The rim is on the sight's
+  upper centre tick at both spawn distances and the dome is on the glass a
+  quarter of the way in, with the keel still clear of a cube — B54's four
+  numbers, pinned together because lowering the altitude to fix the first three
+  is what threatens the fourth.
 - **The shatter is static.** Every stroke's endpoints, twice, not just the
   count: what is stored is a bearing and two lengths, and a shatter re-rolled
   each frame would be a snowstorm rather than damage to the glass.

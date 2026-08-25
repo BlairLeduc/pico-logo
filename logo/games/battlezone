@@ -1,5 +1,5 @@
-; Battlezone -- M3: the game. See
-; docs/battlezone-design.md.
+; Battlezone -- M5: the arcade's rules.
+; See docs/battlezone-design.md.
 ;
 ;   load "battlezone
 ;   battlezone
@@ -30,6 +30,51 @@
 ; where this game found out that it does
 ; not -- 51.7 ms on the worst frame at
 ; 300 MHz against 66.7.
+;
+; M5 IS THE CAMPAIGN, and it is the
+; milestone with no drawing in it at
+; all. M3 sent the four enemies round a
+; ring of eight; the cabinet does not,
+; and M5 replaces the ring with the rule
+; the cabinet actually runs (design
+; section 16.9):
+;
+; * THE ENEMY KEEPS SCORE TOO, 1,000 a
+;   time every time it kills you, and
+;   the difference between the two
+;   scores is the only difficulty knob
+;   in the game. Behind, and it appears
+;   in front of you, drives slowly,
+;   thinks slowly and shoots wide;
+;   7,000 points clear of it, and it
+;   comes from any bearing with every
+;   number its row says. Seventeen
+;   seconds on the plain does the same
+;   thing whatever the score is.
+; * MISSILES ARE EARNED at 5,000 points
+;   and saucers at 2,000, and the sixth
+;   missile promotes the tanks to
+;   supertanks.
+; * RUNNING AWAY IS ANSWERED. Drive away
+;   from a tank for 48-64 seconds and it
+;   is replaced by a missile; dodge that
+;   and another comes, until the cycle
+;   clock runs out.
+; * A SPAWN IS AT ONE OF TWO DISTANCES,
+;   and neither of you may fire for two
+;   seconds after one. After you die,
+;   what comes back spends three seconds
+;   going nowhere in particular.
+; * THE RADAR DOES NOT SHOW A SAUCER,
+;   which is the cabinet's rule and is
+;   most of what makes 5,000 points
+;   worth looking out of the window for.
+;
+; It costs the frame two comparisons and
+; a decrement, because all of it is
+; arithmetic on EVENTS -- a spawn, a
+; death, a clock -- and none of it is in
+; the draw pass.
 ;
 ; M3 IS THE ONE THAT MAKES IT A GAME.
 ; Lives and a score, the four enemies in
@@ -496,7 +541,6 @@ make "e.step 6
 make "e.turn 4
 make "e.range 400
 make "e.aim 7
-make "e.naim 0 - :e.aim
 make "e.hw :ehalf
 make "e.te :ebode
 
@@ -565,7 +609,6 @@ make "e.te :ebode
 ; joined by a tangent -- reduced to two
 ; numbers in steps.
 make "e.wide 60
-make "e.wide2 121
 
 ; Frames between hunt decisions (design
 ; section 19.3: at 15 fps a decision
@@ -638,15 +681,54 @@ make "e.coll 60
 ; rate, reload, aim -- are all invisible
 ; until it is too late to matter.
 
-; The sequence. `spawn.enemy` walks this
-; ring, so the cabinet's escalation --
-; tank, then a missile, then a supertank
-; and eventually a saucer -- is a list
-; and not a state machine. The tank is
-; the staple and the saucer is rare,
-; which is what a 5,000-point enemy that
-; cannot hurt you has to be.
-make "e.order [1 2 1 3 1 2 3 4]
+; The campaign, which is what the
+; cabinet has instead of a sequence.
+;
+; THE ENEMY KEEPS SCORE TOO, and it is
+; the only difficulty knob in the game.
+; `e.score` goes up 1,000 every time you
+; die, and `e.agg` is the difference
+; between the two scores over 7,000,
+; clamped to 0..1: at 0 the enemy is
+; winning, so it appears in front of
+; you, drives slowly, thinks slowly and
+; shoots wide; at 1 it comes from any
+; bearing with the numbers its row
+; actually says. Nothing else in this
+; file decides how hard the game is.
+;
+; `e.rage` is the enemy's own clock,
+; seventeen seconds of it, and what
+; happens when it runs out depends on
+; what is out there -- see `rage`.
+; Above 255 it is the three seconds of
+; nothing the cabinet gives you after
+; you respawn.
+;
+; `e.tmr` is the SEQUENCE's clock rather
+; than the enemy's: how long this one's
+; tenure lasts before the next is
+; chosen, wound by `next.kind` at every
+; spawn. Three meanings, one at a time,
+; because a tank, a missile and a saucer
+; are never on the plain together.
+;
+; IT IS DECLARED WOUND AND NOT EXPIRED,
+; and that is load-bearing: a clock that
+; has run out beside `e.gun` is how
+; `next.kind` recognises a tank that was
+; driven away from, so a zero here would
+; open every game with a missile.
+;
+; `ms.n` counts missiles LAUNCHED, which
+; is what promotes a tank to a
+; supertank: the cabinet's counter runs
+; from the 6th missile to the 129th.
+make "e.score 0
+make "e.agg 0
+make "e.rage 255
+make "e.tmr 720
+make "ms.n 0
 
 
 ;--------------------------------------
@@ -694,14 +776,37 @@ make "ms.fin 7
 ; edge-on -- a plate, a dome on top and
 ; a hull below, which is what the rim
 ; quad and the two apexes draw.
+;
+; `sc.y` WAS 90 AND THE GUNSIGHT COULD
+; NOT REACH IT (B54). The rim projects
+; to `hz + sc.y * k/z`, so at 90 it sat
+; above the sight's upper centre tick
+; for two thirds of a dwell and off the
+; top of the screen for a fifth of it,
+; and a saucer you cannot line up is a
+; saucer you cannot shoot -- the hit
+; test never looks up, so the altitude
+; was costing the sight picture and not
+; the shot. 50 puts it on the tick at
+; both spawn distances and keeps the
+; whole model on the glass when it
+; drifts in. It cannot go much lower:
+; the keel is the floor, and `kind.saucer`
+; promises it clears a cube.
+;
+; Lowering it also makes the edge-on
+; argument above MORE true, not less --
+; 90 up at 300 steps is 17 degrees off
+; the horizontal, which is not edge-on
+; at all.
 make "sc.r 22
-make "sc.y 90
+make "sc.y 50
 ; The dome 12 above the rim and the keel
 ; 9 below it, folded into their heights
 ; above the eye once here so the
 ; projection is one add and not two.
-make "sc.a 102
-make "sc.k 81
+make "sc.a 62
+make "sc.k 41
 
 ;--------------------------------------
 ; Lives and the score
@@ -759,9 +864,10 @@ make "sh.frames 22
 make "sh.guard 36
 make "tk.hit 30
 
-; Half-width of the shell cube, and the
-; height its axis flies at -- written by
-; whichever of the two is being drawn.
+; Half-edge of the shell's base square,
+; and the height its axis flies at --
+; written by whichever of the two is
+; being drawn.
 ;
 ; It was 5 and a board said halve it: a
 ; 10-step round is a crate next to a
@@ -774,6 +880,30 @@ make "tk.hit 30
 ; reading it matters.
 make "sh.r 2.5
 make "sh.y 0
+
+; A SHELL IS A DART, and this is the one
+; number that makes it one. It was a
+; cube, axis-aligned to the WORLD on the
+; grounds that nothing about a shell's
+; roll is observable -- and a board
+; asked for the shape that says which
+; way a round is going, which a cube
+; cannot. A square pyramid can: base
+; square of edge `2 * sh.r`, apex `4 *
+; sh.r` ahead of it along the flight, so
+; it is twice as tall as its base edges
+; and the point is where it is going.
+;
+; The apex is `2 * sh.r` in front of the
+; centre and the velocity vector is
+; `sh.step` long, so THIS is the number
+; that turns one into the other. It is
+; derived and not typed, because it only
+; means something against those two:
+; section 16.6.1's rule, and the reason
+; a shell that changed speed would still
+; be the right shape.
+make "sh.nose :sh.r * 2 / :sh.step
 
 ;--------------------------------------
 ; The explosion
@@ -1055,11 +1185,13 @@ make "e.f 0
 make "e.fire false
 
 ; Which of the four it is, what it is
-; worth, the three booleans that carry
-; its behaviour, and where in `e.order`
-; the sequence has got to. All of them
-; are written once, by `set.kind`, at
-; the moment of the spawn.
+; worth, and the three booleans that
+; carry its behaviour. All of them are
+; written once, by `set.kind`, at the
+; moment of the spawn -- and `next.kind`
+; reads the three of them BEFORE that
+; call, where they still describe the
+; enemy that has just left.
 make "e.kind 1
 make "e.pts 0
 ; The turret's half-width and top, and
@@ -1075,7 +1207,6 @@ make "e.bb 0
 make "e.gun true
 make "e.ram false
 make "e.drift false
-make "e.seq 0
 
 ; The player's shell and the enemy's.
 ; World position, the velocity fixed at
@@ -2616,17 +2747,48 @@ end
 ; closes to 0.7 of the stand-off on the
 ; diagonal is an enemy that presses a
 ; little harder from the corners.
+;
+; AND `e.range` IS READ TWO WAYS, which
+; is the one place in this file where a
+; name means different things to
+; different kinds. For anything with a
+; gun it is a STAND-OFF: inside it, stop
+; driving and shoot. For a missile it is
+; the FINAL TURN: outside it, do not
+; home at all -- swerve, two seconds one
+; way and two the other -- and inside
+; it, turn onto the player and come. The
+; two readings are three lines apart and
+; behind one `ifelse` on `e.ram`, which
+; is the only way to write that without
+; leaving the reader to find it.
+;
+; `e.rage` above 255 is the three
+; seconds after you respawn, during
+; which the enemy keeps whatever
+; heading `respawn` gave it and decides
+; nothing.
 to hunt
   if :e.drift [stop]
+  if :e.rage > 255 [stop]
   make "e.b (arctan :e.dz :e.dx) + 180
   make "e.b :e.b - :e.h + 180
   make "e.b (modulo :e.b 360) - 180
   make "e.t 0
   if :e.b > :e.aim [make "e.t 1]
-  if :e.naim > :e.b [make "e.t -1]
+  if 0 - :e.aim > :e.b [make "e.t -1]
   make "e.d (abs :e.dx) + (abs :e.dz)
   make "e.f 1
-  if :e.range > :e.d [make "e.f 0]
+  ifelse :e.ram [
+    if :e.d > :e.range [
+      make "e.t 1
+      if 15 > modulo :frame.count 30 [
+        make "e.t -1
+      ]
+    ]
+  ] [
+    if :e.range > :e.d [make "e.f 0]
+  ]
   make "e.fire false
   if not :e.gun [stop]
   if 1 > :e.cool [
@@ -2684,7 +2846,8 @@ to enemy.fires
   make "es.z :e.z
   make "e.b (abs :e.dx) + (abs :e.dz)
   if :tk.hit > :e.b [make "e.b :tk.hit]
-  make "e.d (random :e.wide2) - :e.wide
+  make "e.d :e.wide * 2 + 1
+  make "e.d (random :e.d) - :e.wide
   make "e.d arctan :e.d / :e.b
   make "e.d :e.h + :e.d
   make "es.vx :sh.step * sin :e.d
@@ -2695,10 +2858,65 @@ to enemy.fires
   make "es.life :sh.frames
 end
 
-; A new one appears at `e.spawn` on a
-; random bearing, already facing you --
-; the cabinet gives you that courtesy
-; too, and then starts closing.
+; A new one appears at one of TWO
+; DISTANCES, evenly -- the whole of
+; `e.spawn` or half of it, which is the
+; cabinet's 3/4 and 3/8 of its maximum
+; range -- and on a bearing drawn from a
+; cone that opens with the aggression:
+; 150 degrees of the forward arc while
+; the enemy is winning, the whole 360
+; once you are 7,000 points clear. Being
+; ahead of the player is a KINDNESS and
+; that is why it goes with the score: an
+; enemy you cannot see is an enemy you
+; have to find.
+;
+; THE FLOOR WAS 40 DEGREES AND A BOARD
+; CALLED IT: "the tanks seem to spawn in
+; the same or similar place". They did.
+; A fight ends with you pointed at the
+; thing you have just killed, the cone
+; is drawn about the heading you are
+; left with, and 40 degrees of it is
+; narrower than the 63-degree field of
+; view -- so the replacement arrived in
+; the same third of the screen, at one
+; of two ranges, against the same
+; stretch of horizon. Two discrete
+; distances inside a cone that narrow is
+; two places, and a plain with nothing
+; on it cannot tell you otherwise.
+;
+; 150 is still the forward arc -- you
+; are never shot in the back by
+; something that has just arrived, which
+; is the rule the cabinet actually has
+; -- and it is wider than the view, so
+; where it went is a question again.
+;
+; A missile is neither. It always comes
+; from the far point and always from
+; within ten degrees of where you are
+; looking, because a missile is a dodge
+; and not a search. A saucer takes a
+; heading of its own instead of yours,
+; because nothing about a saucer depends
+; on you.
+;
+; It arrives already facing you, and it
+; may not fire for two seconds -- the
+; cabinet gives you both, and 30 frames
+; is the second of them at 15 fps.
+;
+; `e.t` IS BORROWED for the distance,
+; the way section 16.8.2 borrows `tk.r`
+; and `tk.s` for the steering intents:
+; it is the turn intent, this procedure
+; writes it 0 before it returns, and the
+; value cannot outlive the call. One
+; global slot the campaign above needed
+; more (section 16.9.2).
 ;
 ; AND NOT INSIDE A CUBE. `blocked?`
 ; keeps the tank and the enemy out of an
@@ -2761,11 +2979,9 @@ to kind.tank
   make "e.turn 4
   make "e.range 400
   make "e.wide 60
-  make "e.wide2 121
   make "e.aim 7
   make "e.reload 24
   make "e.hit 34
-  make "e.left 0
   make "e.pts 1000
 end
 
@@ -2779,11 +2995,9 @@ to kind.super
   make "e.turn 5
   make "e.range 420
   make "e.wide 50
-  make "e.wide2 101
   make "e.aim 6
   make "e.reload 15
   make "e.hit 40
-  make "e.left 0
   make "e.pts 3000
 end
 
@@ -2810,6 +3024,24 @@ end
 ; `e.te` is 0 because it flies at eye
 ; height, which is also where its
 ; wreckage belongs.
+;
+; AND `e.range` IS ITS FINAL TURN rather
+; than a stand-off, which is the one
+; number in this file that means
+; different things to different kinds --
+; `hunt` reads it through `e.ram` and
+; the two readings are three lines
+; apart. A missile HOMES inside
+; `e.range` and swerves outside it, so
+; 700 is a missile that homes from the
+; moment it appears and 60 is one that
+; comes at you sideways until the last
+; four frames. The cabinet slides
+; between the two over the 25,000 points
+; above the threshold that let missiles
+; out in the first place, and that is
+; what the divisor is: 640 steps of
+; range over 25,000 points.
 to kind.missile
   make "e.gun false
   make "e.ram true
@@ -2818,27 +3050,31 @@ to kind.missile
   make "e.te 0
   make "e.step 9
   make "e.turn 2
-  make "e.range 0
+  make "e.range 700 - (:score - 5000) * 0.0256
+  if 60 > :e.range [make "e.range 60]
+  if :e.range > 700 [make "e.range 700]
   make "e.wide 60
-  make "e.wide2 121
   make "e.aim 0
   make "e.reload 0
   make "e.hit 24
-  make "e.left 0
   make "e.pts 2000
 end
 
 ; It drifts, it is harmless, and it is
 ; worth more than anything else on the
-; plain. `e.left` is the one thing only
-; a saucer has: it crosses and then
-; leaves, so ignoring it costs you the
-; points rather than stalling the
-; sequence behind it.
+; plain. It crosses and then leaves --
+; `next.kind` winds `e.tmr` to its dwell
+; and `step.enemy` sees it out -- so
+; ignoring a saucer costs you the points
+; rather than stalling the sequence
+; behind it.
 ;
 ; It is not stopped by an obstacle,
-; because it is 90 steps up and an
-; obstacle is 40 tall. `move.enemy` is
+; because its keel is 53 steps off the
+; plain and an obstacle is 40 tall --
+; `sc.k` above the eye, plus the eye.
+; That margin is what stops `sc.y`
+; falling any further. `move.enemy` is
 ; where that is spent -- one boolean
 ; read -- and it is the only place in
 ; the file that knows a saucer flies.
@@ -2852,27 +3088,138 @@ to kind.saucer
   make "e.turn 0
   make "e.range 0
   make "e.wide 60
-  make "e.wide2 121
   make "e.aim 0
   make "e.reload 0
   make "e.hit 40
-  make "e.left 220
   make "e.pts 5000
 end
 
-; The sequence is a ring rather than a
-; state machine, so the escalation the
-; cabinet runs -- tank, missile, tank,
-; supertank, and eventually a saucer --
-; is one list that M4 can re-cut without
-; touching a line of code.
+; WHAT COMES NEXT, AND HOW LONG IT
+; GETS. M4 walked a ring; the cabinet
+; does not, and this is its rule.
+;
+; The three booleans still describe the
+; enemy that has just LEFT, because
+; `set.kind` is the last thing here --
+; so `e.ram` means "a missile was
+; evaded" and `e.gun` means "a tank
+; was", and `e.tmr` says whether it was
+; evaded for long enough to matter:
+;
+; * A missile that has been dodged is
+;   followed by another, and another,
+;   until the cycle clock runs out
+;   (16-32 seconds) -- then a tank.
+; * A tank you have driven away from
+;   for 48-64 seconds is not replaced by
+;   another tank. It is replaced by a
+;   missile, which is the cabinet's
+;   answer to running away.
+; * Anything else is a fresh choice, and
+;   `pick.kind` makes it.
+;
+; Then the clock is wound for whatever
+; was chosen, and a missile that is
+; CONTINUING a cycle keeps the clock it
+; is already running on -- winding it
+; again is how a missile cycle would
+; become forever.
 to next.kind
-  make "e.seq :e.seq + 1
-  if :e.seq > count :e.order [
-    make "e.seq 1
+  make "e.kind 1
+  if :e.ram [if :e.tmr > 0 [make "e.kind 2]]
+  if :e.gun [if 1 > :e.tmr [make "e.kind 2]]
+  if 1 = :e.kind [pick.kind]
+  make "e.d 720 + random 241
+  if 4 = :e.kind [make "e.d 220]
+  if 2 = :e.kind [
+    make "e.d :e.tmr
+    if not :e.ram [
+      make "e.d 240 + random 241
+    ]
+    make "ms.n :ms.n + 1
   ]
-  make "e.kind 0 + item :e.seq :e.order
+  make "e.tmr :e.d
+  aggress
   set.kind
+end
+
+; The fresh choice, and the three
+; thresholds in it are the cabinet's.
+;
+; A saucer is worth 5,000 points and
+; cannot hurt you, so it is not on the
+; plain until the plain is worth one --
+; 2,000 points -- and then it turns up
+; about one spawn in five, which is the
+; 0-17 seconds the cabinet leaves
+; between them, in the only currency
+; this game has to spend: a slot.
+; DESIGN SECTION 14 IS WHY IT IS A SLOT.
+; The cabinet flies a saucer over while
+; a tank is hunting you; one enemy at a
+; time is the frame budget's oldest
+; decision, and the global table has
+; since made it permanent.
+;
+; Missiles are held back until 5,000
+; points and then come up about one
+; spawn in three. `ms.n` is what makes
+; the tanks that come between them
+; harder: the cabinet promotes them at
+; the 6th missile and demotes them at
+; the 129th, which is an 8-bit counter
+; started at $ff wrapping past 127, and
+; it is left in because a game that runs
+; that long has earned the joke.
+to pick.kind
+  if :score > 1999 [
+    if 0 = random 5 [
+      make "e.kind 4
+      stop
+    ]
+  ]
+  if :score > 4999 [
+    if 0 = random 3 [
+      make "e.kind 2
+      stop
+    ]
+  ]
+  make "e.kind 1
+  if :ms.n > 5 [
+    if 129 > :ms.n [make "e.kind 3]
+  ]
+end
+
+; The difference between the two scores,
+; over 7,000, clamped -- and the whole
+; of what "difficulty" means in this
+; game. It is read at the spawn by
+; `place.enemy` for the bearing and by
+; `set.kind` for the numbers, and it is
+; written in exactly two places: here
+; and `rage`.
+to aggress
+  make "e.agg (:score - :e.score) / 7000
+  if 0 > :e.agg [make "e.agg 0]
+  if :e.agg > 1 [make "e.agg 1]
+end
+
+; Seventeen seconds are up.
+;
+; A tank that has been out here that
+; long stops being careful whatever the
+; score says -- `set.kind` re-reads its
+; row at full aggression, which is why
+; the row is read rather than edited.
+; A missile that has been out here that
+; long has been DODGED: it goes, and
+; `next.kind` decides whether the cycle
+; sends another.
+to rage
+  ifelse :e.ram [leave.enemy] [
+    make "e.agg 1
+    set.kind
+  ]
 end
 
 ; The one derived number is hoisted out
@@ -2907,12 +3254,42 @@ end
 ; each is used exactly once and this
 ; file is 25 global slots from its
 ; ceiling (design section 16.7.4).
+;
+; AND THE AGGRESSION IS SPENT HERE, on
+; three of the row's numbers and only
+; for a gun: a mild enemy shoots twice
+; as wide, drives at 0.6 of its speed
+; and re-decides every ninth frame
+; rather than every third, which is what
+; "moves uncertainly and takes bad
+; shots" is when you write it down. A
+; missile is not softened, because a
+; missile that could be outrun would not
+; be a missile -- design section 16.7.4b
+; is the standing argument, and the
+; speed is the property it protects.
+;
+; `e.wide2` IS GONE, and it is worth
+; saying where: it was `2 * e.wide + 1`
+; in every row, which is section
+; 16.6.1's failure in miniature -- two
+; numbers that only mean something
+; against each other, written apart --
+; and `enemy.fires` now derives the span
+; from `e.wide` at the shot. One
+; statement on an event, and one global
+; slot back for the campaign above.
 to set.kind
   if 3 = :e.kind [kind.super]
   if 2 = :e.kind [kind.missile]
   if 4 = :e.kind [kind.saucer]
   if 1 = :e.kind [kind.tank]
-  make "e.naim 0 - :e.aim
+  make "e.think 3
+  if :e.gun [
+    make "e.wide :e.wide * (2 - :e.agg)
+    make "e.step :e.step * (0.6 + 0.4 * :e.agg)
+    make "e.think 3 + 6 * (1 - :e.agg)
+  ]
   make "e.tw :e.hw * 0.62
   make "e.tt :e.te + :e.hw * 0.7
   make "e.bl :e.hw * 2.2
@@ -2948,19 +3325,31 @@ to leave.enemy
 end
 
 to place.enemy
-  make "e.b random 360
-  make "e.d :e.spawn * sin :e.b
+  make "e.t :e.spawn
+  if 1 > random 2 [
+    make "e.t :e.spawn * 0.5
+  ]
+  make "e.d 150 + 210 * :e.agg
+  if :e.ram [
+    make "e.d 10
+    make "e.t :e.spawn
+  ]
+  make "e.b (random :e.d) - :e.d / 2
+  make "e.b :ph + :e.b
+  make "e.d :e.t * sin :e.b
   make "e.d :px + :e.d
   make "e.x modulo :e.d :world
-  make "e.d :e.spawn * cos :e.b
+  make "e.d :e.t * cos :e.b
   make "e.d :pz + :e.d
   make "e.z modulo :e.d :world
   make "e.h :e.b + 180
+  if :e.drift [make "e.h random 360]
   make "e.h modulo :e.h 360
   make "e.ec cos :e.h
   make "e.es sin :e.h
   make "e.alive true
-  make "e.cool :e.reload
+  make "e.cool 30
+  make "e.rage 255
   make "e.t 0
   make "e.f 1
   make "e.fire false
@@ -2990,6 +3379,15 @@ to step.enemy
     stop
   ]
   enemy.offsets
+  make "e.tmr :e.tmr - 1
+  if 0 = :e.tmr [
+    if not :e.ram [leave.enemy]
+  ]
+  if :e.rage > 0 [
+    make "e.rage :e.rage - 1
+    if 0 = :e.rage [rage]
+  ]
+  if not :e.alive [stop]
   make "e.d modulo :frame.count :e.think
   if 0 = :e.d [hunt]
   make "e.h :e.h + :e.t * :e.turn
@@ -3003,10 +3401,6 @@ to step.enemy
   enemy.camera
   if :e.fire [enemy.fires]
   if :e.ram [enemy.rams]
-  if :e.drift [
-    make "e.left :e.left - 1
-    if 1 > :e.left [leave.enemy]
-  ]
 end
 
 ; A missile's whole attack. It is the
@@ -3147,33 +3541,54 @@ to step.eshell
   if blocked? [make "es.on false]
 end
 
-; A SHELL IS A CUBE, which it was not:
-; it was a four-pixel dash, on the
-; argument that a shell has no size
-; worth transforming. It has, up close,
-; and a round coming at you is the one
-; object in this game you most need to
-; read the range of -- a dash gives you
-; nothing to judge it by and a cube
-; grows.
+; A SHELL IS A DART, which it was not:
+; it was a four-pixel dash, and then a
+; cube. The dash lost because a round
+; coming at you is the one object in
+; this game you most need to read the
+; range of, and a dash gives you nothing
+; to judge it by. The cube lost for the
+; other half of the same reason: a round
+; coming at you is also the one object
+; whose DIRECTION you need, and a cube
+; has none. A square pyramid does --
+; base square of edge `2 * sh.r`, apex
+; `4 * sh.r` along the flight, twice as
+; tall as its base edges -- and it is
+; pointing wherever it is going.
 ;
-; It is AXIS-ALIGNED TO THE WORLD and
-; not to its own flight, which costs two
-; statements instead of four: a cube is
-; nearly symmetric, nothing about a
-; shell's roll is observable, and the
-; camera turns the world axes into one
-; offset pair and its own perpendicular
-; -- the saucer's trick, and the same
-; two lines.
+; IT IS ALIGNED TO ITS OWN FLIGHT, which
+; the cube deliberately was not, and the
+; two statements it costs are in the
+; callers rather than here: each hoists
+; its own velocity into `p.px`/`p.pz`
+; the way it hoists its own height into
+; `sh.y`, because the two shells have
+; different velocities and share this
+; procedure.
 ;
-; Four columns, four divides, and the
-; twelve edges come out of `draw.box`
-; unchanged. The cost is real and it is
-; the largest single item in this
-; milestone's drawing: two shells in the
-; air is twenty-four edges where it used
-; to be two.
+; THE FREE 90 DEGREES PAYS FOR IT. The
+; base square's horizontal axis is the
+; flight turned a quarter turn, and a
+; quarter turn commutes with the
+; camera's rotation -- so the
+; perpendicular in the CAMERA's frame is
+; the nose offset with its components
+; swapped and one negated, at no cost at
+; all. It is the saucer's trick (section
+; 16.7.1) doing a different job.
+;
+; And it is CHEAPER than the cube it
+; replaces: three divides against four,
+; eight edges against twelve. The base
+; square's four corners are two columns,
+; because a vertical offset does not
+; change z and the top and bottom of a
+; corner share one divide -- and the
+; apex is one point rather than a
+; column, so it goes in `apx`/`apy`,
+; which is where `draw.spindle` already
+; keeps an apex.
 ;
 ; `sh.y` is the height its axis flies
 ; at, above the eye. The player's is
@@ -3181,26 +3596,47 @@ end
 ; the middle of the gunsight -- and the
 ; enemy's is the barrel it left.
 to shell.columns
-  make "p.px :sh.r * :cs
-  make "p.pz :sh.r * :sn
+  make "p.px :p.px * :sh.nose
+  make "p.pz :p.pz * :sh.nose
   make "p.za :sh.y + :sh.r
   make "p.zb :sh.y - :sh.r
-  make "p.iz :k / (:p.zc + :p.pz)
-  .setitem 1 :cx (:p.xc + :p.px) * :p.iz
+  make "p.dx :p.xc - :p.px
+  make "p.dz :p.zc - :p.pz
+  make "p.iz :k / (:p.dz - :p.px * 0.5)
+  .setitem 1 :cx (:p.dx + :p.pz * 0.5) * :p.iz
   .setitem 1 :cy1 :hz + :p.zb * :p.iz
   .setitem 1 :cy2 :hz + :p.za * :p.iz
-  make "p.iz :k / (:p.zc + :p.px)
-  .setitem 2 :cx (:p.xc - :p.pz) * :p.iz
+  make "p.iz :k / (:p.dz + :p.px * 0.5)
+  .setitem 2 :cx (:p.dx - :p.pz * 0.5) * :p.iz
   .setitem 2 :cy1 :hz + :p.zb * :p.iz
   .setitem 2 :cy2 :hz + :p.za * :p.iz
-  make "p.iz :k / (:p.zc - :p.pz)
-  .setitem 3 :cx (:p.xc - :p.px) * :p.iz
-  .setitem 3 :cy1 :hz + :p.zb * :p.iz
-  .setitem 3 :cy2 :hz + :p.za * :p.iz
-  make "p.iz :k / (:p.zc - :p.px)
-  .setitem 4 :cx (:p.xc + :p.pz) * :p.iz
-  .setitem 4 :cy1 :hz + :p.zb * :p.iz
-  .setitem 4 :cy2 :hz + :p.za * :p.iz
+  make "p.iz :k / (:p.zc + :p.pz)
+  make "apx (:p.xc + :p.px) * :p.iz
+  make "apy :hz + :sh.y * :p.iz
+end
+
+; Eight edges in TWO STROKES, which is
+; the fewest a square pyramid can be
+; drawn in: four of its five corners
+; have three edges on them, and a figure
+; with four odd corners needs two trails
+; however you walk it. The first takes
+; the base square and comes back out to
+; the apex; the second is the one
+; diagonal pair the first could not
+; reach.
+to draw.dart
+  pu (setpos item 1 :cx item 1 :cy1)
+  pd (setpos item 1 :cx item 1 :cy2)
+  (setpos item 2 :cx item 2 :cy2)
+  (setpos item 2 :cx item 2 :cy1)
+  (setpos item 1 :cx item 1 :cy1)
+  (setpos :apx :apy)
+  (setpos item 2 :cx item 2 :cy2)
+  pu (setpos item 1 :cx item 1 :cy2)
+  pd (setpos :apx :apy)
+  (setpos item 2 :cx item 2 :cy1)
+  pu
 end
 
 to draw.shell
@@ -3208,8 +3644,10 @@ to draw.shell
   if :near > :p.zc [stop]
   make "p.xc :sh.dx * :cs - :sh.dz * :sn
   make "sh.y 0
+  make "p.px :sh.vx * :cs - :sh.vz * :sn
+  make "p.pz :sh.vz * :cs + :sh.vx * :sn
   shell.columns
-  draw.box
+  draw.dart
 end
 
 to draw.eshell
@@ -3217,8 +3655,10 @@ to draw.eshell
   if :near > :p.zc [stop]
   make "p.xc :es.dx * :cs - :es.dz * :sn
   make "sh.y :es.y
+  make "p.px :es.vx * :cs - :es.vz * :sn
+  make "p.pz :es.vz * :cs + :es.vx * :sn
   shell.columns
-  draw.box
+  draw.dart
 end
 
 ;======================================
@@ -3314,6 +3754,7 @@ end
 to hit.player
   make "es.on false
   make "hits :hits + 1
+  make "e.score :e.score + 1000
   make "lives :lives - 1
   make "tk.boom :boom.frames
   (sound [3 7] 900 220 13)
@@ -3412,7 +3853,22 @@ end
 ; of the two enemies was never seen. The
 ; enemy's own countdown wins, because it
 ; is the one that was already going to
-; fire.
+; fire. Two spawns for one death is a
+; count of spawns in the tests rather
+; than a ring position, since M5's
+; campaign has no ring.
+;
+; AND THE ONE THAT COMES BACK IS
+; CONFUSED FOR THREE SECONDS -- a random
+; heading and no decisions, which is
+; what the cabinet gives you after a
+; death. It is set AFTER the spawn and
+; not before, because a respawn replaces
+; a live enemy rather than keeping it:
+; `place.enemy` would write over
+; anything set first, and the three
+; seconds belong to whatever is out
+; there when you come back.
 to respawn
   make "cracked false
   if 1 > :lives [
@@ -3421,6 +3877,10 @@ to respawn
   ]
   if :e.boom > 0 [stop]
   spawn.enemy
+  make "e.rage 300
+  make "e.h random 360
+  make "e.ec cos :e.h
+  make "e.es sin :e.h
 end
 
 to boom.frag :d
@@ -3505,7 +3965,9 @@ to radar
   seth 0 - :rd.fov
   pd fd :rd.r
   pu
-  if :e.alive [blip]
+  if :e.alive [
+    if not :e.drift [blip]
+  ]
   setpc :world.colour
 end
 
@@ -4309,6 +4771,8 @@ to show.instructions
   print "|The saucer cannot hurt you|
   setcursor [6 14]
   print "|and will not wait about|
+  setcursor [7 15]
+  print "|and is not on radar|
   setcursor [3 16]
   print "|A missile flies faster than|
   setcursor [3 17]
@@ -4317,6 +4781,8 @@ to show.instructions
   print "|Turn inside it.|
   setcursor [4 20]
   print "|Hide behind the obstacles|
+  setcursor [3 21]
+  print "|Run and it sends a missile|
   setcursor [3 22]
   print "|An extra tank every 15000|
   setcursor [2 24]
@@ -4405,7 +4871,14 @@ to init.game
   make "score 0
   make "lives :start.lives
   make "extra.due :extra.at
-  make "e.seq 0
+  make "e.score 0
+  make "e.agg 0
+  make "e.rage 255
+  make "e.tmr 720
+  make "ms.n 0
+  make "e.gun false
+  make "e.ram false
+  make "e.drift false
   make "au.in 0
   spawn.enemy
   make "paused false
@@ -4503,7 +4976,7 @@ to battlezone
   ct
   settc [7 0]
   ifelse "fast = :cpu.at [
-    print [Battlezone M3]
+    print [Battlezone M5]
   ] [
     no.clock
   ]
