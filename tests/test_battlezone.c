@@ -1456,12 +1456,26 @@ void test_the_attract_screen_picks_the_steering(void)
     TEST_ASSERT_TRUE_MESSAGE(truth(":arrows"), "starting a game threw the steering away");
 }
 
-void test_the_collision_radius_covers_the_near_plane(void)
+// `coll.r` IS THE ARCADE'S STAND-OFF AND NOT THE NEAR PLANE'S.  The test that
+// stood here asserted `coll.r` >= `near` + half*sqrt2 -- the invariant B59
+// retired, because the guard bounds a distance and the cull compared a
+// camera-frame z.  With the cull gone the number went back to what it is for:
+// how close a tank may bring its centre to a cube's.  The cabinet's is $0480,
+// 28.8 steps at 40 raw units to the step ($6923, `CheckObstUnitColl`), against
+// obstacles smaller than this file draws; 20 + 14 is the same idea in this
+// file's units and 40 leaves a few steps of daylight on top of it.  90 left
+// FIFTY-SIX, and a board reported it as the collision being wrong.
+void test_you_can_drive_up_to_an_obstacle_and_not_up_to_two_of_them(void)
 {
-    const float near = num(":near");
     const float half = num(":half");
-    TEST_ASSERT_TRUE_MESSAGE(num(":coll.r") >= near + half * 1.4143f,
-                             "an obstacle can vanish before you bump it");
+    const float guard = num(":coll.r");
+
+    // Daylight between the hulls when you stop, head-on: the cube's face is
+    // `half` from its centre and the tank is `ehalf` from yours.
+    const float daylight = guard - half - num(":ehalf");
+    char msg[128];
+    snprintf(msg, sizeof(msg), "a tank stops %g steps short of a cube's face", (double)daylight);
+    TEST_ASSERT_TRUE_MESSAGE(daylight > 0.0f && daylight < 20.0f, msg);
 }
 
 // The consequence, driven rather than argued: run at a cube head-on for long
@@ -1475,8 +1489,11 @@ void test_you_cannot_drive_close_enough_for_an_obstacle_to_vanish(void)
     run("make \"okind [1 1 1 1]  make \"okind se :okind [1 1 1 1]");
     run("make \"px 800  make \"pz 100  make \"ph 0");
 
+    // 150 frames and not 120: the tank drives 4.64 steps a frame and `coll.r`
+    // is 40 rather than 90, so it now has fifty more steps to cover before
+    // anything stops it.
     press_forward();
-    for (int i = 0; i < 120; i++)
+    for (int i = 0; i < 150; i++)
         run("pollkeys  step.tank");
     release_forward();
 
@@ -2106,13 +2123,13 @@ void test_the_enemy_cannot_drive_through_an_obstacle(void)
     camera_at(800, 800, 0);
 
     // Straight in front of the cube at 1,000, driving into it.
-    enemy_at(800, 1000 - num(":e.coll") + 2.0f, 0);
+    enemy_at(800, 1000 - num(":coll.r") + 2.0f, 0);
     const float before = num(":e.z");
     run("make \"e.f 1  make \"e.t 0  move.enemy");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(before, num(":e.z"), "the enemy drove into a cube");
 
     // Facing away from it, it is free to go.
-    enemy_at(800, 1000 - num(":e.coll") + 2.0f, 180);
+    enemy_at(800, 1000 - num(":coll.r") + 2.0f, 180);
     run("make \"e.f 1  make \"e.t 0  move.enemy");
     TEST_ASSERT_TRUE_MESSAGE(num(":e.z") < before, "the enemy could not drive away from a cube");
 }
@@ -2142,13 +2159,132 @@ void test_a_spawn_is_re_rolled_out_of_an_obstacle(void)
     {
         run("spawn.enemy");
         run("make \"tk.dx :e.dx  make \"tk.dz :e.dz");
-        run("make \"tk.guard :e.coll");
+        run("make \"tk.guard :coll.r");
         if (truth("blocked?"))
             stuck++;
     }
     char msg[96];
     snprintf(msg, sizeof(msg), "%d of 60 spawns landed inside an obstacle", stuck);
     TEST_ASSERT_TRUE_MESSAGE(stuck <= 3, msg);
+}
+
+
+// THE SHOT AT THE EDGE OF THE WINDOW, and it is the whole of a board's "the
+// tank's shots seem to be always accurate -- in the arcade, driving towards a
+// tank, the shots miss to one side or the other at first".
+//
+// `hunt` fires when the bearing error is under 2.8 degrees and `enemy.fires`
+// sends the shell down the tank's own heading, so the worst shot the enemy can
+// take is thrown d*tan(2.8) sideways: 7 steps at 150 and 29 at 600.  Against
+// the guard that was here -- `tk.hit` 30 square, 42 across a corner -- every
+// one of those was a hit, at every range the plain has, and no amount of
+// driving changed it.
+//
+// The corridor is HALF `ehalf` -- seven steps, which is the cabinet's own kill
+// radius: `TestProjCollU` ($5fb2) compares a true distance against 224 to 320
+// raw units, 5.6 to 8 steps at 40 raw to the step.  So the shot stops being
+// certain at 7/tan(2.8) = 143 steps.
+//
+// SEVEN AND NOT FOURTEEN, and the first cut of this test said fourteen.  It
+// read the ROM's window as 1.4 degrees -- `TryShootPlayer` at $65c5 takes an
+// angle difference of 0 or 1 -- and doubled the box to keep the ratio against
+// this file's 2.8.  Both sides of that difference are the HIGH BYTE of a 9-bit
+// facing at 1.406 degrees a unit (`RotateLeft` steps the low byte by $80), so
+// one unit of difference is a true error of up to 2.81 degrees: the cabinet's
+// window is this file's, and the box that goes with it is the cabinet's seven.
+// The board saw the difference as "I still get hit by shells that look like
+// they should miss", which is what a round passing 13 steps to one side looks
+// like from inside a tank you cannot see.
+//
+// It asserts both outcomes and never a ratio, and it drives `hunt` rather than
+// assuming the window, so a change to either number has to face this test.
+void test_the_enemys_worst_shot_misses_at_range_and_kills_up_close(void)
+{
+    run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
+
+    const int ranges[] = {60, 100, 400, 620};
+    for (int r = 0; r < 4; r++)
+    {
+        camera_at(800, 800, 0);
+        // Dead ahead, aimed 2.7 degrees off you.
+        foe_at(1, 800, (float)(800 + ranges[r]), 182.7f);
+        run("make \"e.cool 0  make \"e.rage 0  make \"e.mvc 9  make \"tk.boom 0  hunt");
+        TEST_ASSERT_TRUE_MESSAGE(truth(":e.fire"),
+                                 "the fire window no longer admits a 2.7 degree error");
+
+        // `lives` is reset every round: `hit.player` refuses to spend a life
+        // the player does not have (B58).
+        run("make \"hits 0  make \"lives 3  make \"tk.boom 0  make \"es.on false  enemy.fires");
+        for (int i = 0; i < 40 && truth(":es.on"); i++)
+            run("step.eshell");
+
+        char msg[128];
+        const bool hit = num(":hits") > 0;
+        snprintf(msg, sizeof(msg), "the worst shot at %d steps %s", ranges[r],
+                 hit ? "hit" : "missed");
+        if (ranges[r] < 143)
+            TEST_ASSERT_TRUE_MESSAGE(hit, msg);
+        else
+            TEST_ASSERT_FALSE_MESSAGE(hit, msg);
+    }
+}
+
+// The same defect seen from the side, with no aiming in it at all: a shell on a
+// heading that takes it past you is a shell that missed.  `tk.hit` is 30 and
+// square, so a round going by 25 steps to your right killed you; what decides
+// now is the distance from the shell's LINE, and the square is only the reject
+// in front of it.
+void test_a_shell_that_goes_by_you_is_a_shell_that_missed(void)
+{
+    run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
+
+    // Straight down the z axis, 25 steps to one side of the tank: inside the
+    // old square in both axes, and a miss.  Ten would be a miss too; 25 is kept
+    // because it is what the square used to call a hit.
+    camera_at(800, 800, 0);
+    foe_at(1, 825, 1100, 180);
+    run("make \"hits 0  make \"lives 3  make \"tk.boom 0  make \"es.on false  enemy.fires");
+    for (int i = 0; i < 40 && truth(":es.on"); i++)
+        run("step.eshell");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":hits"),
+                                    "a shell that flew past killed the player");
+
+    // And five steps to one side is a hit: seven is what the cabinet kills
+    // inside, and a shell that close is coming down the middle of the hull.
+    camera_at(800, 800, 0);
+    foe_at(1, 805, 1100, 180);
+    run("make \"hits 0  make \"lives 3  make \"tk.boom 0  make \"es.on false  enemy.fires");
+    for (int i = 0; i < 40 && truth(":es.on"); i++)
+        run("step.eshell");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":hits"), "a shell down the hull missed");
+}
+
+// Your own gun is the same test with the guards the other way round, and it was
+// the same size of wrong: `e.hit` is 34, so a round passing 25 steps beside a
+// 14-step tank killed it.  The cabinet runs BOTH directions through the one
+// routine, so what kills a tank is the same seven steps that kill you -- a
+// round through the edge of a tank's silhouette goes past it, which is why the
+// cabinet's long shots miss and closing is worth doing.
+void test_your_shell_kills_what_the_gunsight_covers(void)
+{
+    run("make \"ox [100 100 100 100]  make \"ox se :ox [100 100 100 100]");
+    run("make \"oz [100 100 100 100]  make \"oz se :oz [100 100 100 100]");
+
+    camera_at(800, 800, 0);
+    foe_at(1, 825, 1100, 180);
+    run("make \"score 0  make \"sh.on false  make \"sh.cool 0  make \"tk.boom 0  fire");
+    for (int i = 0; i < 40 && truth(":sh.on"); i++)
+        run("step.shell");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":e.alive"), "a shell that went by killed the tank");
+
+    camera_at(800, 800, 0);
+    foe_at(1, 805, 1100, 180);
+    run("make \"score 0  make \"sh.on false  make \"sh.cool 0  make \"tk.boom 0  fire");
+    for (int i = 0; i < 40 && truth(":sh.on"); i++)
+        run("step.shell");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":e.alive"), "a shell down the hull missed");
 }
 
 //==========================================================================
@@ -3416,6 +3552,57 @@ void test_a_spawn_is_at_one_of_two_distances(void)
 // bottom rung of 45 is EXACTLY its own field of view.  So the rule it encodes
 // is "somewhere in view", and with a 63-degree view here that is 63.  Every
 // rung carries the same 1.4.
+// AND IT ARRIVES POINTING ANYWHERE.  The other half of the same board's report:
+// "when I kill a tank a new one appears in front of me; in the arcade I see it
+// off in the distance, pointing in a random direction".
+//
+// The distance and the bearing were already the cabinet's -- $6000 or $3000 of
+// range on a cone about your own facing, whose bottom rung is NARROWER than the
+// view -- so a replacement in front of you is what the cabinet does.  What it
+// does not do is point it at you: `CreateTank` ($69e8) reads POKEY_RANDOM into
+// `enemy_turn_to` and never touches `enemy_facing`, and the only unit whose
+// facing it aims at the player is the missile ($6adb).  A tank that arrives
+// broadside has to turn before it can shoot, and 180 degrees of that is eight
+// seconds at `e.turn` -- which is the whole difference between a new tank on
+// the horizon and a new tank in your face.
+void test_a_new_tank_arrives_pointing_anywhere_and_a_missile_at_you(void)
+{
+    new_game();
+    camera_at(800, 800, 0);
+    run("rerandom");
+
+    run("make \"e.kind 1  set.kind");
+    int at_you = 0, flank_or_back = 0;
+    for (int i = 0; i < 40; i++)
+    {
+        run("place.enemy");
+        // How far the tank's facing is from the bearing back to the player.
+        const float back = atan2f(-num(":e.dx"), -num(":e.dz")) * 57.2958f;
+        float err = fmodf(num(":e.h") - back + 540.0f, 360.0f) - 180.0f;
+        if (fabsf(err) < 45.0f)
+            at_you++;
+        if (fabsf(err) > 90.0f)
+            flank_or_back++;
+    }
+    char msg[128];
+    snprintf(msg, sizeof(msg), "%d of 40 spawns arrived aimed at the player, %d showing a flank",
+             at_you, flank_or_back);
+    TEST_ASSERT_TRUE_MESSAGE(at_you < 20, msg);
+    TEST_ASSERT_TRUE_MESSAGE(flank_or_back > 8, msg);
+
+    // A missile is the exception the ROM makes, and it is the one that matters:
+    // it is a dodge and not a search, so it arrives already looking at you.
+    run("make \"e.kind 2  set.kind");
+    for (int i = 0; i < 20; i++)
+    {
+        run("place.enemy");
+        const float back = atan2f(-num(":e.dx"), -num(":e.dz")) * 57.2958f;
+        const float err = fmodf(num(":e.h") - back + 540.0f, 360.0f) - 180.0f;
+        snprintf(msg, sizeof(msg), "a missile arrived %g degrees off the player", (double)err);
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(err) < 1.0f, msg);
+    }
+}
+
 void test_a_losing_player_gets_the_enemy_in_front_of_them(void)
 {
     new_game();
@@ -3608,6 +3795,11 @@ void test_the_enemy_is_confused_for_three_seconds_after_you_respawn(void)
 
     // `hunt` decides nothing while it is confused, so the intents it was given
     // survive: no turn, and driving on whatever heading `respawn` handed it.
+    // The desired heading is put 90 degrees off the one it is on, because a
+    // spawn no longer arrives pointing at you -- `e.h` and `e.aimh` come out
+    // of `place.enemy` on the same random bearing, and a tank already on its
+    // desired heading has nothing to do whether it is confused or not.
+    run("make \"e.aimh wrap.deg :e.h + 90  make \"e.mvc 9");
     run("make \"e.t 0  make \"e.f 1  make \"e.fire false");
     run("hunt");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":e.t"), "a confused enemy turned onto you");
@@ -4969,7 +5161,7 @@ void test_a_blocked_enemy_backs_out_and_can_leave_a_cube_it_spawned_in(void)
     camera_at(800, 800, 0);
 
     // Driving straight into the cube.
-    foe_at(1, 800, 1000 - num(":e.coll") + 2.0f, 0);
+    foe_at(1, 800, 1000 - num(":coll.r") + 2.0f, 0);
     run("make \"e.rev 0  make \"e.f 1  make \"e.t 0  move.enemy");
     TEST_ASSERT_TRUE_MESSAGE(num(":e.rev") > 0, "a blocked enemy did not start backing out");
     TEST_ASSERT_TRUE_MESSAGE(num(":e.mvc") > 40, "the reverse got no clock");
@@ -4989,7 +5181,7 @@ void test_a_blocked_enemy_backs_out_and_can_leave_a_cube_it_spawned_in(void)
     for (int i = 0; i < 40; i++)
         run("step.enemy");
     run("enemy.offsets");
-    run("make \"tk.dx :e.dx  make \"tk.dz :e.dz  make \"tk.guard :e.coll");
+    run("make \"tk.dx :e.dx  make \"tk.dz :e.dz  make \"tk.guard :coll.r");
     TEST_ASSERT_FALSE_MESSAGE(truth("blocked?"),
                               "an enemy that spawned inside a cube never got out of it");
 }
@@ -5204,7 +5396,7 @@ int main(void)
     RUN_TEST(test_fire_pause_and_quit_are_the_same_in_both_schemes);
     RUN_TEST(test_the_attract_screen_picks_the_steering);
 
-    RUN_TEST(test_the_collision_radius_covers_the_near_plane);
+    RUN_TEST(test_you_can_drive_up_to_an_obstacle_and_not_up_to_two_of_them);
     RUN_TEST(test_you_cannot_drive_close_enough_for_an_obstacle_to_vanish);
     RUN_TEST(test_a_blocked_tank_can_still_turn);
     RUN_TEST(test_a_frame_runs_and_draws_the_scene);
@@ -5238,6 +5430,9 @@ int main(void)
     RUN_TEST(test_the_enemy_fires_exactly_along_its_heading);
     RUN_TEST(test_a_still_player_is_hit_and_a_moving_one_is_missed);
     RUN_TEST(test_the_enemys_shell_hits_the_player_and_pauses_the_tank);
+    RUN_TEST(test_the_enemys_worst_shot_misses_at_range_and_kills_up_close);
+    RUN_TEST(test_a_shell_that_goes_by_you_is_a_shell_that_missed);
+    RUN_TEST(test_your_shell_kills_what_the_gunsight_covers);
     RUN_TEST(test_the_players_explosion_draws_its_fragments_and_runs_down);
     RUN_TEST(test_the_wreck_is_the_tank_in_three_pieces_and_runs_down);
     RUN_TEST(test_the_wreck_flies_apart_in_the_world);
@@ -5271,6 +5466,7 @@ int main(void)
     RUN_TEST(test_seventeen_seconds_makes_a_mild_enemy_aggressive);
     RUN_TEST(test_a_missile_that_gets_past_you_has_been_dodged);
     RUN_TEST(test_a_spawn_is_at_one_of_two_distances);
+    RUN_TEST(test_a_new_tank_arrives_pointing_anywhere_and_a_missile_at_you);
     RUN_TEST(test_a_losing_player_gets_the_enemy_in_front_of_them);
     RUN_TEST(test_two_spawns_running_are_not_the_same_place);
     RUN_TEST(test_a_missile_comes_from_the_far_point_and_from_in_front);

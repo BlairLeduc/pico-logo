@@ -415,9 +415,10 @@ make "far 700
 make "world 1600
 make "half.world 800
 
-; `coll.r` must exceed `near` +
-; half*sqrt2 -- see `blocked?`.
-make "coll.r 90
+; How close the tank may bring its
+; CENTRE to an obstacle's -- see
+; `blocked?`.
+make "coll.r 40
 
 ; How many obstacles are in the table.
 ;
@@ -715,15 +716,25 @@ make "e.te :ebode
 make "e.mvc 4
 make "e.band 2.8
 
-; Where a new one appears, and the two
-; collision half-widths: what a shell
-; has to come within to kill it, and
-; what it has to come within to be
-; stopped by an obstacle. `e.hit` is
-; per kind from M3 on; `e.coll` is not,
-; because it guards against an obstacle
-; and an obstacle is the same size
-; whatever is driving at it.
+; Where a new one appears, and what a
+; shell has to come within to kill it.
+; `e.hit` is per kind from M3 on.
+;
+; WHAT IT NO LONGER HAS IS A GUARD OF
+; ITS OWN AGAINST AN OBSTACLE. `e.coll`
+; was 60 and the argument for one number
+; rather than four was already written
+; here -- an obstacle is the same size
+; whatever is driving at it -- and the
+; same sentence finishes the job: the
+; thing driving at it is a tank either
+; way, so `coll.r` guards both. The
+; cabinet does keep two ($0480 for the
+; player, $0340 for the enemy, a third
+; more bubble for the man with the
+; coin), and a slot is worth more here
+; than six steps of stand-off nobody can
+; see from inside the other tank.
 ;
 ; `e.hit` IS NOT THE ROM'S 19 AND MUST
 ; NOT BE. The cabinet's unit radius is
@@ -739,13 +750,18 @@ make "e.band 2.8
 ; the same half-a-step argument
 ; `sh.guard` is built on.
 ;
-; The ROM's 19 lives in `tk.hit`
-; instead, which is what a MISSILE has
-; to come within to kill you, and 30
-; there is the cabinet's $0500.
+; The ROM's unit-against-unit pair lives
+; in `tk.hit` instead -- what a MISSILE
+; has to come within to kill you by
+; arriving. The cabinet has two of those
+; and they are the other way up from
+; what this file long said: $6985 uses
+; $0500 for a TANK driving into you, 32
+; steps, and $0300 for a missile, 19. 30
+; sits between them, and M7 cut the
+; missile's whole attack against it.
 make "e.spawn 620
 make "e.hit 34
-make "e.coll 60
 
 ; The heading it WANTS, and whether it
 ; is backing out of something.
@@ -1016,6 +1032,86 @@ make "sh.step 32
 make "sh.frames 22
 make "sh.guard 36
 make "tk.hit 30
+
+; AND HALF A STEP WIDER IS THE WRONG
+; SHAPE SIDEWAYS. Half a step is what a
+; guard needs ALONG the flight, so that
+; a 32-step frame cannot straddle the
+; target; across it the guard is what
+; the cabinet kills inside, and nothing
+; more. A square guard
+; is both at once, so `tk.hit` 30 was
+; also saying "a shell that passes 30
+; steps to your side kills you" -- and
+; 42 on the diagonal.
+;
+; THAT NUMBER IS WHY THE ENEMY COULD NOT
+; MISS, which is what a board reported:
+; "the tank's shots seem to be always
+; accurate, and in the arcade they miss
+; to one side or the other at first".
+; The gun fires along the tank's heading
+; and `hunt` fires it inside a 2.8
+; degree window, so a shot is thrown
+; d * tan(2.8) sideways -- 29 steps at
+; 600. Against a 30-step box that is a
+; hit AT EVERY RANGE ON THE PLAIN.
+;
+; THE CABINET KILLS INSIDE SEVEN STEPS.
+; `TestProjCollU` ($5fb2) compares a
+; TRUE distance against 224 to 320 raw
+; units -- 5.6 to 8 steps at 40 raw to
+; the step, the wider end when the two
+; hulls are broadside to each other --
+; and that is a QUARTER of the radius
+; the same tank carries when it drives
+; at a cube. A shell goes past a tank in
+; Battlezone.
+;
+; SEVEN AND NOT FOURTEEN, WHICH IS THE
+; CORRECTION A SECOND BOARD RUN FORCED.
+; The first cut of this comment read the
+; ROM's fire window as 1.4 degrees, put
+; this file's at twice that, and doubled
+; the box to keep the ratio. The window
+; is NOT twice the cabinet's. $65c5
+; compares `CalcAngleToPlayer` against
+; `enemy_facing` and takes 0 or 1 --
+; but both are HIGH BYTES of a 9-bit
+; angle at 1.406 degrees a unit, so a
+; difference of one unit is a true error
+; of anything up to 2.81 degrees. The
+; cabinet's window IS 2.8 degrees, the
+; same as `hunt`'s, and the box that
+; goes with it is the cabinet's own
+; seven.
+;
+; That is the range the board could see:
+; 7 / tan(2.8) is 143 steps, so a shot
+; is certain inside about 140 and a
+; coin toss at 300. At 14 it was certain
+; inside 286 -- "I still get hit by
+; shells that look like they should
+; miss", which is exactly what a shell
+; passing 13 steps to one side at point
+; blank looks like.
+;
+; IT IS NOT A NAME OF ITS OWN, and that
+; is the global table rather than taste:
+; this file peaks twelve slots from the
+; ceiling and the number it wants is
+; already written down twice. Half of
+; `ehalf` is 7 -- the cabinet's number,
+; and half a tank -- and half of `e.hw`
+; is the same for whichever kind is on
+; the plain, which is the guard the
+; shell you fired needs. Each is
+; multiplied by `sh.step` where it is
+; read, because the corridor crosses an
+; offset with a VELOCITY rather than a
+; heading, and that multiply happens
+; only on the frames where the square
+; has already said "nearly".
 
 ; Half-edge of the shell's base square,
 ; and the height its axis flies at --
@@ -1773,12 +1869,16 @@ end
 ; the middle of the screen than it
 ; should, so an obstacle you are inside
 ; is drawn slightly narrower than it is.
-; With `coll.r` 90 and the view cone
-; above, an obstacle's columns never get
-; below 29 steps and this never fires
-; for one at all -- it is the enemy
-; driving into your face (`e.range` 38)
-; that reaches it.
+; With `coll.r` 90 an obstacle's columns
+; never got below 29 steps and this
+; never fired for one. `coll.r` is 40
+; now (section 16.12.1), so a cube you
+; have driven into stands its near
+; corners at `zmin` exactly -- the floor
+; meets it rather than firing under it,
+; and the enemy driving into your face
+; (`e.range` 38) is still what reaches
+; past it.
 to near.floor
   if :zmin > :p.zc [output "true]
   if :zmin > :p.z1 [make "p.z1 :zmin]
@@ -2480,26 +2580,53 @@ to arrow.treads
   ]
 end
 
-; `coll.r` 90 IS NEAR + HALF*ROOT TWO
-; AND THAT ARGUMENT IS RETIRED. It was
-; cut so that a centre-distance guard of
-; `near` + 28.3 would fire before the
-; near cull could drop a cube you were
-; driving at -- and it does not, because
-; the guard bounds a DISTANCE and the
-; cull compared a camera-frame z. Off
-; the nose the two are d and d *
-; cos(bearing), and no radius closes
-; that gap. B59 is what it cost and
-; section 9 is where the cull went.
+; `coll.r` WAS 90 AND IT IS 40, WHICH
+; IS THE WHOLE OF WHAT A BOARD MEANT BY
+; "the collision seems wrong". 90 was
+; `near` + half*root two, cut so that a
+; centre-distance guard would fire
+; before the near cull could drop a cube
+; you were driving at. B59 retired the
+; cull and section 9 retired the
+; argument, and the number was left
+; standing with the note that it was
+; "the right SIZE for a tank beside a
+; cube -- about 20 steps of daylight".
+; That arithmetic was wrong as well:
+; the guard is centre to centre, a cube
+; is 20 half-wide and a tank 14, so 90
+; leaves FIFTY-SIX steps of daylight
+; head-on and 107 on the diagonal. You
+; were stopped by a cube two and a half
+; tank-lengths before you reached it,
+; and the cabinet does no such thing.
 ;
-; The number stays where it is because
-; it is the right SIZE for a tank beside
-; a cube -- 90 steps between centres of
-; a 40-step box and a 28-step tank
-; leaves about 20 steps of daylight --
-; and nothing downstream depends on it
-; any more.
+; THE CABINET'S NUMBER IS $0480 AND THE
+; SCALE IS 40 RAW UNITS TO THE STEP.
+; Two independent anchors give it: a
+; spawn is 3/4 of a full-scale sine,
+; $6000, and this file spawns at 620;
+; the stand-off is $0500 and this file
+; stands off at 31. `CheckObstUnitColl`
+; uses $0480 for the player against any
+; obstacle -- 28.8 steps -- and the
+; per-type table for the enemy, $0340
+; for a tall box, 20.8. Both are the
+; obstacle's radius PLUS the unit's, and
+; the ROM's own projectile table ($6139)
+; puts the box at $58*4 = 8.8 steps, so
+; the cabinet's player carries about 20
+; steps of radius and its enemy about
+; 12. THIS FILE'S OBSTACLES ARE BIGGER
+; THAN THE CABINET'S -- `half` is 20
+; where the ROM's box is 8.8 -- and its
+; tanks are the same size, `ehalf` 14
+; against about 12. So the radii are
+; added in THIS file's units rather than
+; copied: 20 + 14 is 34 for a tank
+; beside a cube, and 40 for the player
+; leaves the cabinet's few steps of
+; daylight on top of it.
 ;
 ; A square test rather than a round one,
 ; because it is one comparison an axis
@@ -3361,7 +3488,7 @@ to move.enemy
   make "e.vz :e.d * :e.ec
   make "tk.dx :e.dx + :e.vx
   make "tk.dz :e.dz + :e.vz
-  make "tk.guard :e.coll
+  make "tk.guard :coll.r
   if not :e.drift [
     if not :e.ram [
       if 1 > :e.rev [
@@ -3471,19 +3598,48 @@ end
 ; -- and it is wider than the view, so
 ; where it went is a question again.
 ;
+; AND IT ARRIVES POINTING ANYWHERE,
+; which is the other half of what a
+; board reported: "when I kill a tank a
+; new one appears in front of me; in the
+; arcade I see it off in the distance,
+; pointing in a random direction". The
+; distance and the bearing were already
+; the cabinet's -- $6000 and $3000 of
+; range, a cone about your own facing,
+; and its bottom rung is NARROWER than
+; the view ($0f masks 21 degrees either
+; side), so a replacement in front of
+; you is the cabinet's behaviour and not
+; the defect. What was not the
+; cabinet's is that it arrived pointing
+; AT YOU: `CreateTank` reads
+; POKEY_RANDOM into `enemy_turn_to` and
+; leaves `enemy_facing` alone, and the
+; only unit whose facing it aims is the
+; missile ($6adb). A tank that spawns
+; broadside has to turn before it can
+; shoot, and 180 degrees of that is
+; eight seconds at `e.turn` -- which is
+; the whole of the difference between a
+; new tank on the horizon and a new tank
+; in your face.
+;
 ; A missile is neither. It always comes
 ; from the far point and always from
 ; within ten degrees of where you are
 ; looking, because a missile is a dodge
-; and not a search. A saucer takes a
-; heading of its own instead of yours,
-; because nothing about a saucer depends
-; on you.
+; and not a search, and the ROM points
+; its facing at you where it points no
+; other unit's. A saucer takes a random
+; heading like a tank's, because nothing
+; about a saucer depends on you.
 ;
-; It arrives already facing you, and it
-; may not fire for two seconds -- the
-; cabinet gives you both, and 30 frames
-; is the second of them at 15 fps.
+; Whatever it is facing, it may not fire
+; for two seconds -- `TryShootPlayer`
+; refuses while `rez_protect` is under
+; $20 -- and 30 frames is that at 15
+; fps.
 ;
 ; `e.t` IS BORROWED for the distance,
 ; the way section 16.8.2 borrows `tk.r`
@@ -3925,7 +4081,7 @@ to spawn.enemy
     place.enemy
     make "tk.dx :e.dx
     make "tk.dz :e.dz
-    make "tk.guard :e.coll
+    make "tk.guard :coll.r
     if not blocked? [stop]
   ]
 end
@@ -3962,8 +4118,8 @@ to place.enemy
   make "e.x wrap.world :px + :e.d
   make "e.d :e.t * cos :e.b
   make "e.z wrap.world :pz + :e.d
-  make "e.h :e.b + 180
-  if :e.drift [make "e.h random 360]
+  make "e.h random 360
+  if :e.ram [make "e.h :e.b + 180]
   make "e.h wrap.deg :e.h
   make "e.ec cos :e.h
   make "e.es sin :e.h
@@ -4092,21 +4248,31 @@ end
 ; own steps and the plain wraps
 ; underneath it.
 ;
-; THE ENEMY'S SHELL HITS THE PLAYER WITH
-; TWO COMPARISONS AND NO ARITHMETIC AT
-; ALL, because the player is at the
-; origin of the camera-relative frame
-; every offset in this file is already
-; in. That is the cheapest collision in
-; the game and it is the one that
-; matters most.
+; A SHELL KILLS INSIDE A CORRIDOR AND
+; NOT INSIDE A BOX, and the box is the
+; broad phase in front of it. `tk.hit`
+; and `e.hit` are half a step wider than
+; the target so a 32-step frame cannot
+; straddle it, and being square they are
+; that wide SIDEWAYS as well -- which is
+; a shell that misses by a tank's length
+; and kills anyway. So the square still
+; rejects, in the two comparisons and no
+; arithmetic it always cost, and what it
+; lets through is crossed with the
+; shell's own velocity: one multiply
+; each way and a subtract, on the frames
+; where something is nearly hit. The
+; player's is still the cheapest
+; collision in the game, because the
+; player is at the origin of the
+; camera-relative frame every offset in
+; this file is already in.
 ;
-; The guards are half a step wider than
-; the things they test against, or a
-; 32-step shell walks straight through a
-; 20-step cube between two frames. That
-; is the whole reason `sh.guard` is 36
-; and not 20.
+; `sh.guard` 36 stays a square: it is
+; tested against an obstacle, and an
+; obstacle is square and does not care
+; which way the shell was going.
 
 to fire
   if :sh.on [stop]
@@ -4140,11 +4306,14 @@ to step.shell
   if :e.alive [
     make "sh.d :sh.dx - :e.dx
     if :e.hit > abs :sh.d [
-      make "sh.d :sh.dz - :e.dz
-      if :e.hit > abs :sh.d [
-        make "sh.cool 6
-        kill.enemy
-        stop
+      if :e.hit > abs (:sh.dz - :e.dz) [
+        make "sh.d :sh.d * :sh.vz
+        make "sh.d :sh.d - ((:sh.dz - :e.dz) * :sh.vx)
+        if :e.hw * :sh.step / 2 > abs :sh.d [
+          make "sh.cool 6
+          kill.enemy
+          stop
+        ]
       ]
     ]
   ]
@@ -4173,9 +4342,13 @@ to step.eshell
   if 1 > :tk.boom [
     if :tk.hit > abs :es.dx [
       if :tk.hit > abs :es.dz [
-        make "e.cool 6
-        hit.player
-        stop
+        make "es.d :es.dz * :es.vx
+        make "es.d :es.dx * :es.vz - :es.d
+        if :ehalf * :sh.step / 2 > abs :es.d [
+          make "e.cool 6
+          hit.player
+          stop
+        ]
       ]
     ]
   ]

@@ -609,10 +609,13 @@ centre further out than 60 cannot have a column inside 20. `near.floor` pushes
 every column that came inside `zmin` = 20 out to it and rejects only when the
 *centre* is inside, which is an object inside the tank you are sitting in.
 
-**`zmin` = 20 is cut so that it never fires for an obstacle at all.** With
-`coll.r` 90 and the cone test, an obstacle's nearest column cannot get below
-about 29 steps; the floor is there for the enemy driving into your face and for
-a saucer you flew under. A floored column lands nearer the middle of the screen
+**`zmin` = 20 is cut for the enemy driving into your face and for a saucer you
+flew under, and §16.12.1 brought obstacles down to meet it.** With `coll.r` 90
+an obstacle's nearest column could not get below about 29 steps and the floor
+never fired for one; with the guard at 40 the near corners of a cube you have
+driven into sit at `zmin` itself, and one that is scraped at the edge of the
+view reaches it. The floor is what makes that safe, which is why it is a floor
+and not a cull. A floored column lands nearer the middle of the screen
 than it should, so an object you are inside is drawn slightly narrow — the trade
 is that it is drawn at all.
 
@@ -657,13 +660,16 @@ edge on the slower board.
 reach `zmin` = 20, so the same box tops out at 520 steps — three screens — and
 its verticals cost about 500 µs each on a Pico 2 W. What keeps the frame honest
 is that only *one* object can be that close, that `coll.r` keeps an obstacle's
-columns above about 29 in practice, and that most of what a close object draws is
-off the glass and skipped per pixel.
+columns at about `zmin` and no lower (§16.12.1: 40 between centres, so the near
+corners of a cube stand at 20), and that most of what a close object draws is off
+the glass and skipped per pixel.
 
 **Worst case measured off the geometry rather than a board:** an obstacle scraped
 at the edge of the view (centre `z` = 58, `x` = 69) draws about 4,200 pixels of
 edge, ~4 ms on a Pico 2 W against ~1.9 ms for the same cube at the old near
-plane. §12's `25.32 + 3.223 n` has about 12 ms of headroom at nine objects, so
+plane. A cube driven into head-on under §16.12.1's guard is the same order and
+slightly under it — near face at `z` = 20, verticals 520 pixels, about 3,600 in
+all — so the bound stands where it was. §12's `25.32 + 3.223 n` has about 12 ms of headroom at nine objects, so
 the spike fits; it wants confirming on a board, and §19 carries it.
 
 ### 9.3 `window`, which is what the whole of §9 rests on
@@ -3036,6 +3042,165 @@ fps, whether a saucer's wreckage falls fast enough to read as falling, and
 whether a wreck that is free in edges is free in *milliseconds* — the
 claim is that it replaces the live tank frame for frame, and only the readout can
 confirm it does not land on top of something else.
+
+### 16.12 The play test after M7: the disassembly arrives, and three numbers do not survive it
+
+A board played M7 and reported three things, and this is the first round in
+which the **cabinet's own source** (`docs/battlezone.asm`) was on hand to settle
+them rather than the manual and the operator's notes:
+
+> *"The collision detection seems wrong compared to the arcade version. Also the
+> tank's shots seem to be always accurate — when I play the arcade version and I
+> am driving towards a tank, the shots miss to one side or the other at first.
+> Also, when I kill a tank, a new one appears in front of me. Not so in the
+> arcade version: I see it off in the distance, pointing in a random
+> direction."*
+
+**One conversion makes all three answerable.** §16.10.1 fixed the ruler at
+**40 raw units to the step**, and the disassembly agrees with it twice over: a
+spawn is 3/4 of a full-scale sine, `$6000`, and this file spawns at 620; the
+tank stops closing at `$0500` and this file stands off at 31. Every number
+below is read through that.
+
+#### 16.12.1 The collision radius was cut for a plane that no longer exists
+
+`coll.r` was **90**, and the comment above it had already retired its own
+argument: it was `near` + half·√2, cut so that a centre-distance guard would
+fire before the near cull could drop a cube you were driving at, and B59
+retired the cull. What was left standing was the claim that 90 was "the right
+SIZE for a tank beside a cube — about 20 steps of daylight", **and that
+arithmetic was wrong as well.** The guard is centre to centre; a cube is 20
+half-wide and a tank 14; 90 leaves **fifty-six steps** of daylight head-on and
+107 across a corner. You were stopped by a cube two and a half tank-lengths
+before you reached it, which is what a board means by the collision being wrong.
+
+The cabinet's number is `$0480` — `CheckObstUnitColl` at `$6923` uses it for the
+player against *any* obstacle — which is 28.8 steps against obstacles smaller
+than this file draws (`$6139` puts a tall box at `$58`·4 = 8.8 steps, where
+`half` here is 20). So the radii are added in **this file's** units instead of
+copied: 20 + 14 is 34, and **40** leaves the few steps of daylight the cabinet
+leaves on top of it.
+
+`e.coll` **went away entirely**, and that is where the global slot for the rest
+of this section came from. The argument for one number rather than four was
+already written beside it — an obstacle is the same size whatever is driving at
+it — and the same sentence finishes the job: the thing driving at it is a tank
+either way. The cabinet does keep two (`$0480` for the player, `$0340` for the
+enemy, a third more bubble for the man with the coin), and a slot is worth more
+here than six steps of stand-off nobody can see from inside the other tank.
+
+#### 16.12.2 A square guard is a corridor's width in the wrong direction
+
+**The enemy could not miss, and the reason was not its aim.** `hunt` fires
+inside a 2.8-degree window and `enemy.fires` sends the shell down the tank's own
+heading, so the worst shot it can take is thrown `d·tan(2.8°)` sideways — 7
+steps at 150, **29 at 600**. It was tested against `tk.hit`, **30 steps and
+square**, so every shot on the plain was a hit and no amount of driving changed
+it.
+
+Half a step wider than the target is what a guard needs **along** the flight, so
+that a 32-step frame cannot straddle what it is aimed at. A square is that wide
+**sideways as well**, and sideways the right number is the hull. The cabinet
+keeps the two apart by construction: it advances a projectile four times a frame
+and tests a **true distance** each time, against 224–320 raw units
+(`TestProjCollU`, `$5fb2`) — **5.6 to 8 steps**, a *quarter* of the radius the
+same tank carries when it drives into a cube.
+
+So the square is now the **broad phase** and a corridor decides. What the square
+lets through is crossed with the shell's own velocity — one multiply each way
+and a subtract, on the frames where something is nearly hit — and the width is
+`ehalf` for the shell coming at you and `e.hw` for the one you fired.
+
+**The window is the cabinet's already, and so is the box.** This is the one
+number the first cut of §16.12 got wrong, and §16.12.2a is the correction.
+
+| | cabinet | this file |
+|---|---:|---:|
+| fire window (`TryShootPlayer`, `$65c5`) | 2.8° | 2.8° |
+| kill half-width (`TestProjCollU`, `$5fb2`) | 5.6–8 steps | 7 |
+| range at which a shot stops being certain | ~143 steps | **143** |
+
+2.8° is not slack at either end: a supertank turns 2.81° in one of this file's
+frames where the ROM interleaves a fire check after every 0.703° step, and a
+window narrower than the frame's turn is a window that gets jumped (§16.7's "one
+fire check a frame is enough" rests on it). `e.hit` 34 was the same defect
+pointed the other way — a round passing 25 steps beside a 14-step tank killed it
+— and the cabinet runs both directions through the one routine, so what kills a
+tank is the same seven steps that kill you.
+
+#### 16.12.2a The window was read off the wrong half of a 9-bit angle
+
+The board played it again: *"much better for collisions, and the spawns are
+better as well. However, I still get hit by shells that look like they should
+miss."*
+
+**14 steps was a doubling of the cabinet's 7, and the thing it was doubled
+against does not exist.** The argument above ran: the ROM fires inside one angle
+unit, a unit is 1.406°, so the cabinet's window is 1.4° where this file's is
+2.8, and doubling the box keeps `box / tan(window)` — the range at which a shot
+stops being certain — where the cabinet has it.
+
+`$65c5` does take a difference of 0 or 1. **Both sides of it are the HIGH BYTE
+of a 9-bit facing.** `RotateLeft` (`$638d`) adds `$80` to `plyr_facing_lo`,
+carrying into the high byte, so a unit of rotation is **0.703°** and the byte
+the fire test compares is the angle rounded to 1.406°. A difference of one unit
+between two rounded bytes is a true error of anything up to **2.81°**. The
+cabinet's window is this file's window, and the box that goes with it is the
+cabinet's own seven.
+
+What that costs is 143 steps instead of 286 — and 286 was the whole of what the
+board could still see, because a shell passing 13 steps to one side at point
+blank is a shell that visibly went by. The corridor is now half `ehalf` for the
+round coming at you and half `e.hw` for the one you fired, which is the same
+"quarter of the driving radius" the ROM's own two tables show.
+
+**And this is the third time §16.6.1's failure has come back**: two numbers that
+only mean something against each other, written down in different sections. The
+stand-off against the hit box at M2, the angular wobble against the range at M3,
+and now the fire window against the kill width. The invariant this time is one
+line — **a shot thrown `d·tan(window)` sideways misses when that exceeds the
+kill half-width** — and `test_the_enemys_worst_shot_misses_at_range_and_kills_up_close`
+drives it at four ranges through the real `hunt`, so neither number can move
+without facing the other.
+
+#### 16.12.3 A new tank arrives pointing anywhere
+
+The distance and the bearing were already the cabinet's, and the board's
+complaint is **not** that the replacement appears in front: `CreateCommon`
+masks a random angle with `$0f` at the bottom rung, which is ±21° about your own
+facing — *narrower* than the 63° this file draws. A tank in view is what the
+cabinet gives you.
+
+What it does not give you is a tank **pointing at you**. `CreateTank` (`$69e8`)
+reads POKEY_RANDOM into `enemy_turn_to` and never touches `enemy_facing`, and
+the only unit whose facing it aims at the player is the **missile** (`$6adb`,
+which is a dodge and not a search). `place.enemy` was setting `e.h` to the
+bearing back to the player for every kind. A tank that arrives broadside has to
+*turn* before it can shoot, and 180° of that is eight seconds at `e.turn` —
+which is the whole difference between a new tank on the horizon and a new tank
+in your face.
+
+#### 16.12.4 What the global table said, and what it hid
+
+The budget test failed on this change **before** any of it added a name, and the
+reason is worth keeping: the peak went 237 → 239 because the play loop now
+reaches the radar's blip, which mints `rd.by` and `rd.d`. The count was not
+under-budget before; it was under-*measured*. Retiring `e.coll` and writing both
+corridor widths as `ehalf`·`sh.step` and `e.hw`·`sh.step` where they are read —
+rather than as two more names — leaves the peak at **238 of 254**, which is the
+16 slots §16.7.4 budgets.
+
+#### 16.12.5 What only a board can answer
+
+Four tests, each failing on M7's code with the board's own sentence in the
+failure message, and the first of them rewritten by the second board run. What
+they cannot say is whether **40** is close enough to a cube to hide behind one
+and far enough not to fill the glass, whether 143 steps reads as "they miss at
+first" from the driving seat, whether a tank that arrives broadside is *found*
+— the cone is the cabinet's, but a tank that is not driving at you is a tank
+that has to be looked for — and **whether your own gun at seven steps rewards
+closing or just frustrates**, since halving the enemy's corridor halved yours by
+the same argument.
 
 ## 17. Tests
 
