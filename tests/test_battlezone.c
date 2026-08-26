@@ -2093,13 +2093,57 @@ void test_the_frame_timer_brackets_the_present(void)
                              "frame.ms is taken before sync, so it leaves out the present");
 }
 
+// THE SHIPPED GAME DOES NOT SHOW ITS DEVELOPMENT READOUT.  `hud.every` is both
+// the averaging period and the switch, and the file it loads sets it to zero:
+// a player is not reading milliseconds, and a game that prints them on rows 25
+// to 27 is a harness with a title screen.  This is the load-time value, so it
+// is checked against the file rather than against a variable a test has set.
+void test_the_readout_is_off_in_a_shipped_game(void)
+{
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":hud.every"),
+                                    "the frame readout is on in the shipped file");
+}
+
+// And the frame does not pay for a readout it is not showing: `play.frame`
+// asks before it tallies.  With the switch off, fifteen frames leave the
+// accumulator where they found it -- which is also what says the rows stay
+// blank, since `draw.hud` is only ever reached through `hud.tally`.
+void test_the_frame_does_not_tally_while_the_readout_is_off(void)
+{
+    run("make \"px 800  make \"pz 800  make \"ph 0  make \"paused false");
+    run("make \"quit false  make \"frame.count 0  pollkeys");
+    run("make \"hud.every 0  make \"hud.n 0");
+
+    for (int i = 0; i < 15; i++)
+        run("play.frame");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":hud.n"),
+                                    "the frame tallied for a readout nobody is showing");
+}
+
+// `D` on the attract screen is the way back to the instrument, and it is a
+// toggle rather than a switch that only goes on: a board left showing the
+// readout has to be able to put it away without restarting the session.  The
+// arithmetic form is `15 - :hud.every`, so check both directions.
+void test_d_toggles_the_readout_both_ways(void)
+{
+    run("make \"hud.every 0");
+    run("make \"hud.every 15 - :hud.every");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(15, num(":hud.every"), "D did not turn the readout on");
+
+    run("make \"hud.every 15 - :hud.every");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":hud.every"), "D did not turn the readout off again");
+}
+
 // A figure that changes fifteen times a second cannot be read off a screen by
 // somebody driving, so the readout is averaged over `hud.every` frames. Check
 // that it fires on that period and resets, rather than every frame or never.
+// The switch is turned on here, because the shipped default is off.
 void test_the_readout_is_averaged_over_a_second(void)
 {
     run("make \"px 800  make \"pz 800  make \"ph 0  make \"paused false");
     run("make \"quit false  make \"frame.count 0  pollkeys");
+    run("make \"hud.every 15");
     run("make \"hud.n 0  make \"hud.bs 0  make \"hud.fs 0");
     run("make \"hud.bm 0  make \"hud.fm 0");
 
@@ -5791,6 +5835,40 @@ void test_a_frame_with_each_kind_runs(void)
 // table, so leaving slots free is the point rather than slack to be spent.
 #define GLOBAL_HEADROOM 16
 
+// AND THE OTHER TABLE, WHICH HAS NO MARGIN LEFT AT ALL.  `procedures[]` is
+// `MAX_PROCEDURES` slots and this file defines exactly that many, which was
+// found the way these things are always found: a 129th `to` was added during
+// the polish pass and the test suite failed on the LAST procedure in the file
+// rather than on the new one.  That is what overflow looks like from the
+// outside -- `proc_define` returns false, the definition is dropped, and the
+// name that goes missing is whichever one happened to be at the end.
+//
+// So the guard reads the source rather than the workspace, and it names the
+// count in its message: the next person to want a procedure here has to take
+// one back or raise the cap, and raising it costs SRAM on a board where SRAM
+// is the scarce thing.  Folding a switch into arithmetic, the way
+// `hud.every`'s `15 - :hud.every` does, is the cheap way out and it is the
+// one this file took.
+void test_the_game_fits_the_procedure_table(void)
+{
+    FILE *f = fopen(BATTLEZONE_SOURCE, "rb");
+    TEST_ASSERT_NOT_NULL(f);
+
+    char line[512];
+    int defs = 0;
+    while (fgets(line, sizeof(line), f))
+        if (repl_line_starts_with_to(line))
+            defs++;
+    fclose(f);
+
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "battlezone defines %d procedures of %d -- the table overflows and the "
+             "LAST definition in the file is the one that silently goes missing",
+             defs, MAX_PROCEDURES);
+    TEST_ASSERT_TRUE_MESSAGE(defs <= MAX_PROCEDURES, msg);
+}
+
 void test_the_game_fits_the_global_table_with_room_to_spare(void)
 {
     const int at_load = var_global_count(true);
@@ -6250,6 +6328,9 @@ int main(void)
     RUN_TEST(test_a_paused_frame_neither_drives_nor_draws);
     RUN_TEST(test_quit_ends_the_loop);
     RUN_TEST(test_the_frame_timer_brackets_the_present);
+    RUN_TEST(test_the_readout_is_off_in_a_shipped_game);
+    RUN_TEST(test_the_frame_does_not_tally_while_the_readout_is_off);
+    RUN_TEST(test_d_toggles_the_readout_both_ways);
     RUN_TEST(test_the_readout_is_averaged_over_a_second);
     RUN_TEST(test_the_readout_keeps_a_peak_not_an_average_of_peaks);
     RUN_TEST(test_the_enemy_draws_thirteen_edges);
@@ -6387,6 +6468,7 @@ int main(void)
     RUN_TEST(test_the_enemy_does_not_fire_at_a_dying_player);
     RUN_TEST(test_a_shell_in_the_air_cannot_hit_a_dying_player);
     RUN_TEST(test_a_shell_that_strikes_something_holds_the_gun_shut);
+    RUN_TEST(test_the_game_fits_the_procedure_table);
     RUN_TEST(test_the_game_fits_the_global_table_with_room_to_spare);
     RUN_TEST(test_every_hot_path_temporary_is_prefixed);
     return UNITY_END();

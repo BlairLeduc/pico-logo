@@ -1289,6 +1289,20 @@ what keeps the cons pool out of it entirely (§5).
 Everything else is fixed-size flat global lists set up once at load: the
 obstacle field, the model tables, the horizon profile.
 
+**And there are two fixed tables, not one.** The global table is the one this
+document has budgeted against since M3 — 254 slots, a peak of 237, and
+`test_the_game_fits_the_global_table_with_room_to_spare` holds 16 in reserve
+for whatever else is in the workspace. The **procedure** table is the one
+nobody was counting: `MAX_PROCEDURES` is 128 and the game defines **exactly
+128**, so it is full, and the polish pass found that out by adding a 129th
+(§16.16). It is worth knowing what that failure looks like, because it does not
+look like the thing you just wrote: `proc_define` returns false, the definition
+with no slot is dropped, and the slot that has no home is the **last `to` in
+the file** rather than the new one. Raising the cap is `static UserProcedure
+procedures[MAX_PROCEDURES]` in `core/procedures.c`, which is SRAM on a board
+where SRAM is the scarce thing — so the cheap way out is to not need the
+procedure, which is what `hud.every`'s `15 - :hud.every` is.
+
 ## 16. Milestones
 
 **M0 — measure, before any game code.** `tests/logo/p13m0`, on both a Pico 2 W
@@ -3545,11 +3559,94 @@ was rewritten: it had been asserting the hierarchy M7 invented.
 frame except the merp, which is one gate on frames where the tank is already
 refusing to move.
 
+
+### 16.16 Production polish: the readout goes off, and the table was already full
+
+The game is finished. What this pass changed is what a player sees and what the
+next person to open the file trips over, and it found one thing nobody had
+counted.
+
+**The development readout is off.** Rows 25 to 27 have carried BODY, FRAME, the
+peak of each and the clock since M1, and §16.4.4 is right that "a milestone has
+its instrument before it has its enemy" — every milestone in this document was
+closed by a board reading those two numbers while somebody drove. But a
+finished game is not a harness with a title screen, and a player is not reading
+milliseconds. **`hud.every` is now both the averaging period and the switch**:
+zero is off, the file loads at zero, and `play.frame` asks `if :hud.every > 0`
+before it tallies. `D` on the attract screen puts it back at fifteen.
+
+**A flag of its own was the obvious shape and it is the wrong one twice.** The
+global table has seventeen slots left, and a second name for a state one number
+already holds is not what they are for — that is the small reason. The large
+one is the next paragraph.
+
+**`MAX_PROCEDURES` is 128 and this file defines exactly 128.** The first cut of
+this pass wrote a `readout.toggle` procedure, which is the ordinary way to
+write a toggle, and 198 of 198 tests failed. **The one that failed to define
+was not `readout.toggle`** — it was `battlezone`, the last `to` in the file,
+because `proc_define` fills slots in order and the definition that finds none
+is dropped where it is. So the symptom is a procedure that has been in the file
+for two weeks going missing, and the cause is a procedure added somewhere else
+entirely. It cost twenty minutes and it would cost anybody the same twenty
+minutes, so:
+
+- **The switch is arithmetic instead**: `make "hud.every 15 - :hud.every` is
+  the toggle, one statement, no procedure. 15 − 0 is 15 and 15 − 15 is 0.
+- **`test_the_game_fits_the_procedure_table` is the guard**, and it reads the
+  source rather than the workspace so that it fails on the count rather than on
+  a missing name. Its message says how many of how many, which is the sentence
+  that would have saved the twenty minutes.
+- **§15 carries the recipe** for raising the cap and the reason not to.
+
+**The rest is bookkeeping the file had stopped doing.** The banner said
+`M5: the arcade's rules` two milestones and three passes after M5; the
+sign-off printed `Battlezone M5`; and the header now names the milestones in
+order and says which section of this document each one is. The roadmap's log
+had no row for the sound at all.
+
+**16 over-40-column lines wrapped**, 26 down to 9, all of them into the
+three-line `if` form the file already uses everywhere else — same list, same
+cost, no semantic change. **The nine left are deliberate.** Seven are
+deep-indent arithmetic (`make "sh.d :sh.d - ((:sh.dz - :e.dz) * :sh.vx)` at
+eight spaces of indent), where the only ways under 40 are to drop parentheses
+that are load-bearing for precedence or to break an expression across lines,
+and §16.8.1 is the section about what happens in this file when precedence is
+got wrong. One is a comment quoting a 44-character test name. Battlezone is the
+most 40-column-clean program in the tree by a wide margin — 9 lines of 7,014,
+against Asteroids' 1,185 of 2,153 — and the last nine are not worth the risk.
+
+**4 new tests** (202 host, 84/84 ctest green): the readout is off in the
+shipped file, the frame does not tally while it is off, `D` toggles it both
+ways, and the procedure table fits.
+
+**Played on hardware, 2026-08-26: good.** Nothing here changes the drawing, so
+the frame is what §16.6 measured less the readout's own cost — which is now
+paid only when it is switched on, and switching it on is what puts it back.
+What the board confirms is the part a host test cannot: that a game with those
+three rows blank still reads as a finished game rather than as something with a
+piece missing.
+
+**The open board questions are unchanged by this pass**, because it did not
+touch the things they ask about: M7's (is 1.2 s the right length for a wreck at
+15 fps) and §16.14's (what `voices` costs in a real frame). This pass adds one
+of its own — whether a player ever wants those rows back, or whether `D` stays
+purely a developer's key.
+
 ## 17. Tests
 
 `tests/test_battlezone.c` on the mock device, mirroring `test_asteroids.c`'s
-shape. **38 at M1's close; 73 at M2's; 125 at M3's; 154 at M5's.** The ones that
-are specific to this game:
+shape. **38 at M1's close; 73 at M2's; 125 at M3's; 154 at M5's; 202 after the
+polish pass.** The ones that are specific to this game:
+
+- **The shipped game does not show its development readout**, the frame does
+  not tally while it is off, and `D` toggles it both ways. The first of those
+  reads the load-time value rather than one a test has set, so it is a check on
+  the *file* and not on the machinery (§16.16).
+- **The two fixed tables both fit.** The global one with 16 slots in reserve,
+  peaking at 237 of 254 — which needs a game *played*, and every kind of enemy
+  killed, because the peak is minted at runtime. The procedure one reads the
+  source instead, because its overflow drops the last definition in the file
+  and there is no name left to ask about (§15).
 
 - **The projection is right.** Known camera, known world point, known screen
   coordinate, computed by hand. This is the test that would have caught a

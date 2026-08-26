@@ -1,4 +1,4 @@
-; Battlezone -- M5: the arcade's rules.
+; Battlezone.
 ; See docs/battlezone-design.md.
 ;
 ;   load "battlezone
@@ -17,6 +17,37 @@
 ; scores, kept beside this file in
 ; /games/battlezone.scores
 ; beside this file.
+;
+; ONE KEY IS NOT A PLAYER'S. `D` on the
+; attract screen turns the frame readout
+; on -- BODY, FRAME, the peak of each
+; and the clock, on text rows 25 to 27.
+; It is OFF in a finished game and it is
+; the only development instrument still
+; wired up, because every milestone in
+; this design was closed by a board
+; reading those two numbers while
+; somebody drove, and the next question
+; a board asks should not need a commit
+; to answer. See `hud.tally`.
+;
+; THE MILESTONES, IN ORDER, and each one
+; is a section of the design document.
+; M1 was the projection, M2 the frame
+; budget, M3 the game, M4 the models,
+; M5 the campaign, M6 the ruler that
+; made every number the cabinet's own
+; and M7 the wreck that flies. After M7
+; the disassembly arrived (design
+; section 16.12) and three numbers did
+; not survive it; then the volcano got
+; its sparks (16.13) and the sound was
+; read off the ROM twice over (16.14,
+; 16.15). What is below is the whole of
+; that, and the narrative sections keep
+; the milestone that decided each thing
+; because the reason is usually the more
+; useful half.
 ;
 ; M1 was the plain, the obstacles, the
 ; tread controls, the horizon and the
@@ -960,8 +991,9 @@ make "ms.fin 7
 ; both spawn distances and keeps the
 ; whole model on the glass when it
 ; drifts in. It cannot go much lower:
-; the keel is the floor, and `kind.saucer`
-; promises it clears a cube.
+; the keel is the floor, and the
+; `kind.saucer` case promises it clears
+; a cube.
 ;
 ; Lowering it also makes the edge-on
 ; argument above MORE true, not less --
@@ -2032,12 +2064,16 @@ end
 to project.box
   make "p.zc :p.dz * :cs + :p.dx * :sn
   make "p.xc :p.dx * :cs - :p.dz * :sn
-  if (abs :p.xc) > :vw * :p.zc + 48 [output "false]
+  if (abs :p.xc) > :vw * :p.zc + 48 [
+    output "false
+  ]
   make "p.z1 :p.zc + :a + :b
   make "p.z2 :p.zc - :a + :b
   make "p.z3 :p.zc - :a - :b
   make "p.z4 :p.zc + :a - :b
-  if :near > :p.zc [if near.floor [output "false]]
+  if :near > :p.zc [
+    if near.floor [output "false]
+  ]
   make "p.xa :p.xc + :a
   make "p.xb :p.xc - :a
   make "p.iz :k / :p.z1
@@ -2078,12 +2114,16 @@ end
 to project.pyr
   make "p.zc :p.dz * :cs + :p.dx * :sn
   make "p.xc :p.dx * :cs - :p.dz * :sn
-  if (abs :p.xc) > :vw * :p.zc + 48 [output "false]
+  if (abs :p.xc) > :vw * :p.zc + 48 [
+    output "false
+  ]
   make "p.z1 :p.zc + :a + :b
   make "p.z2 :p.zc - :a + :b
   make "p.z3 :p.zc - :a - :b
   make "p.z4 :p.zc + :a - :b
-  if :near > :p.zc [if near.floor [output "false]]
+  if :near > :p.zc [
+    if near.floor [output "false]
+  ]
   make "p.xa :p.xc + :a
   make "p.xb :p.xc - :a
   make "p.iz :k / :p.z1
@@ -3254,7 +3294,9 @@ end
 
 to project.enemy
   make "p.zc :e.zc
-  if (abs :e.xc) > :vw * :p.zc + 48 [output "false]
+  if (abs :e.xc) > :vw * :p.zc + 48 [
+    output "false
+  ]
   make "p.fx :e.hw * :e.es
   make "p.fz :e.hw * :e.ec
   make "p.px :p.fx * :cs - :p.fz * :sn
@@ -3265,7 +3307,9 @@ to project.enemy
   make "p.z2 :p.za + :p.px
   make "p.z3 :p.zb + :p.px
   make "p.z4 :p.zb - :p.px
-  if :near > :p.zc [if near.floor [output "false]]
+  if :near > :p.zc [
+    if near.floor [output "false]
+  ]
   make "p.xa :e.xc + :p.px
   make "p.xb :e.xc - :p.px
   make "p.iz :k / :p.z1
@@ -3495,7 +3539,9 @@ end
 ; take or dodge.
 to project.missile
   make "p.zc :e.zc
-  if (abs :e.xc) > :vw * :p.zc + 48 [output "false]
+  if (abs :e.xc) > :vw * :p.zc + 48 [
+    output "false
+  ]
   make "p.fx :ms.ln * :e.es
   make "p.fz :ms.ln * :e.ec
   make "p.px :p.fx * :cs - :p.fz * :sn
@@ -3508,7 +3554,9 @@ to project.missile
   make "p.z2 :p.zc - :p.pz
   make "p.z3 :p.zc - :p.za
   make "p.z4 :p.zc + :p.za
-  if :near > :p.zc [if near.floor [output "false]]
+  if :near > :p.zc [
+    if near.floor [output "false]
+  ]
   make "p.iz :k / :p.z1
   make "apx (:e.xc + :p.px) * :p.iz
   make "apy :hz
@@ -3572,14 +3620,18 @@ end
 ; vertices.
 to project.saucer
   make "p.zc :e.zc
-  if (abs :e.xc) > :vw * :p.zc + 48 [output "false]
+  if (abs :e.xc) > :vw * :p.zc + 48 [
+    output "false
+  ]
   make "p.px :sc.r * :cs
   make "p.pz :sc.r * :sn
   make "p.z1 :p.zc + :p.pz
   make "p.z2 :p.zc + :p.px
   make "p.z3 :p.zc - :p.pz
   make "p.z4 :p.zc - :p.px
-  if :near > :p.zc [if near.floor [output "false]]
+  if :near > :p.zc [
+    if near.floor [output "false]
+  ]
   make "p.iz :k / :p.z1
   .setitem 1 :cx (:e.xc + :p.px) * :p.iz
   .setitem 1 :cy1 :hz + :sc.y * :p.iz
@@ -4369,8 +4421,12 @@ end
 ; become forever.
 to next.kind
   make "e.kind 1
-  if :e.ram [if :e.tmr > 0 [make "e.kind 2]]
-  if :e.gun [if 1 > :e.tmr [make "e.kind 2]]
+  if :e.ram [
+    if :e.tmr > 0 [make "e.kind 2]
+  ]
+  if :e.gun [
+    if 1 > :e.tmr [make "e.kind 2]
+  ]
   if 1 = :e.kind [pick.kind]
   make "e.d 513 + random 256
   if 4 = :e.kind [make "e.d 220]
@@ -4764,7 +4820,9 @@ to fire
 end
 
 to step.shell
-  if :sh.cool > 0 [make "sh.cool :sh.cool - 1]
+  if :sh.cool > 0 [
+    make "sh.cool :sh.cool - 1
+  ]
   if not :sh.on [stop]
   make "sh.life :sh.life - 1
   if 1 > :sh.life [
@@ -5645,7 +5703,9 @@ to blip
   make "rd.bx (arctan :e.zc :e.xc)
   make "rd.bx wrap.diff :rd.sw - :rd.bx
   if not 0 > :rd.bx [
-    if :rd.spin > :rd.bx [make "rd.bi 30]
+    if :rd.spin > :rd.bx [
+      make "rd.bi 30
+    ]
   ]
   if 1 > :rd.bi [stop]
   make "rd.bi :rd.bi - 1
@@ -6127,8 +6187,24 @@ end
 ; kills and hits are what a play test
 ; reads to know whether the enemy is
 ; playing the game or standing still.
+;
+; AND IT IS OFF, because the game is
+; finished and a player is not reading
+; milliseconds. `hud.every` is both the
+; period and the switch: zero is off,
+; and the frame asks it rather than a
+; flag of its own, because the global
+; table has seventeen slots left and a
+; second name for a state one number
+; already holds is not what they are
+; for. `D` on the attract screen puts it
+; back at fifteen -- every milestone in
+; this design was closed by a board
+; reading these rows, so the instrument
+; is one keypress away rather than one
+; commit away.
 
-make "hud.every 15
+make "hud.every 0
 
 to hud.tally
   if 2 > :frame.count [stop]
@@ -6276,7 +6352,12 @@ end
 ; numbers, and the recycle because a 4.3
 ; ms spike is exactly what a play test
 ; wants to see rather than have smoothed
-; away.
+; away. The readout is OFF in a shipped
+; game, so what the frame normally pays
+; for it is the one comparison that asks
+; -- and a measurement taken with it on
+; is still honest, because turning it on
+; is what puts its cost back in.
 to play.frame
   make "tk.t0 ticks
   poll.input
@@ -6303,7 +6384,7 @@ to play.frame
     gunsight
     if :cracked [draw.cracks]
     radar
-    hud.tally
+    if :hud.every > 0 [hud.tally]
     reclaim
     make "body.ms ticks - :tk.t0
   ]
@@ -6638,6 +6719,15 @@ end
 ; procedure of its own -- and ESC is the
 ; way OUT of the game, which is the key
 ; that gives the clock back.
+;
+; C and D are the two settings, and only
+; C is on the instructions card. D turns
+; the frame readout on, and it is a
+; DEVELOPER'S key: it is not advertised
+; to a player, it announces itself on
+; this screen only once it is on, and
+; the line it prints is also how you
+; find out it is you who left it there.
 to attract.screen
   local "k
   load.scores
@@ -6652,6 +6742,12 @@ to attract.screen
     ]
     if 99 = :k [
       make "arrows not :arrows
+    ]
+    if 68 = :k [
+      make "hud.every 15 - :hud.every
+    ]
+    if 100 = :k [
+      make "hud.every 15 - :hud.every
     ]
     if 27 = :k [
       make "leaving true
@@ -6689,6 +6785,10 @@ to draw.attract
     print "|C  steering: ARROWS|
   ] [
     print "|C  steering: TREADS|
+  ]
+  if :hud.every > 0 [
+    setcursor [10 31]
+    print "|D  frame readout: ON|
   ]
 end
 
@@ -6940,7 +7040,7 @@ to battlezone
   ct
   settc [7 0]
   ifelse "fast = :cpu.at [
-    print [Battlezone M5]
+    print [Battlezone]
   ] [
     no.clock
   ]
