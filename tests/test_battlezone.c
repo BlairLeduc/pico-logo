@@ -2981,7 +2981,7 @@ void test_the_enemys_shell_hits_the_player_and_pauses_the_tank(void)
 void test_the_players_explosion_draws_its_fragments_and_runs_down(void)
 {
     camera_at(800, 800, 0);
-    run("make \"lives 3  make \"tk.boom 0  make \"es.on false  hit.player");
+    run("make \"lives 3  make \"tk.boom 0  make \"es.on false  hit.player 15");
     TEST_ASSERT_EQUAL_FLOAT(num(":boom.frames"), num(":bm.n"));
 
     mock_device_clear_graphics();
@@ -3634,6 +3634,54 @@ static uint32_t last_freq_on(int voice)
     return 0;
 }
 
+// Loudness and length are the whole vocabulary of the discrete hardware, so
+// they are what the explosion and cannon tests read.
+static int last_vol_on(int voice)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    for (int i = st->sound.gate_count - 1; i >= 0; i--)
+        if (st->sound.gates[i].voice == voice)
+            return st->sound.gates[i].vol;
+    return -1;
+}
+
+static uint32_t last_dur_on(int voice)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    for (int i = st->sound.gate_count - 1; i >= 0; i--)
+        if (st->sound.gates[i].voice == voice)
+            return st->sound.gates[i].dur;
+    return 0;
+}
+
+// `play` goes to the queue rather than the gate log, and the queue keeps no
+// voice with the event -- these count and read what was compiled into it.
+static int queued_count(void)
+{
+    return mock_device_get_state()->sound.queued_count;
+}
+
+static uint16_t queued_freq(int i)
+{
+    return mock_device_get_state()->sound.queued[i].freq_hz;
+}
+
+// The engine CHASES its target now, so a test that wants the pitch for a tread
+// setting has to let it arrive: `eng.slew` is 6 Hz a frame over a 44 Hz range.
+static uint32_t settled(int left, int right)
+{
+    char expr[96];
+    snprintf(expr, sizeof(expr), "make \"left.tread %d  make \"right.tread %d  repeat 19 [engine]",
+             left, right);
+    run(expr);
+    // Nineteen frames to arrive, then the log is emptied and the twentieth is
+    // the one that gets read: the engine is four gates a frame and the log
+    // holds sixty-four.
+    mock_sound_clear_gates();
+    run("engine");
+    return last_freq_on(0);
+}
+
 
 //--------------------------------------------------------------------------
 // The enemy sequence
@@ -3816,7 +3864,7 @@ void test_the_enemy_keeps_score_and_the_difference_is_the_difficulty(void)
 
     // Dying pays the enemy, and the next enemy is easier for it.
     run("make \"score 3000  make \"tk.boom 0  make \"lives 3");
-    run("hit.player");
+    run("hit.player 15");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1000, num(":e.score"), "the enemy scored nothing for killing you");
     run("spawn.cone");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2000, num(":e.diff"), "a death did not cost you daylight");
@@ -4780,7 +4828,7 @@ void test_a_hit_costs_a_tank_and_cracks_the_glass(void)
 {
     new_game();
     run("make \"lives 3  make \"cracked false  make \"tk.boom 0");
-    run("hit.player");
+    run("hit.player 15");
 
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":lives"), "the hit cost no tank");
     TEST_ASSERT_TRUE_MESSAGE(truth(":cracked"), "the glass did not crack");
@@ -4797,7 +4845,7 @@ void test_the_pause_runs_out_into_a_new_tank_and_a_new_enemy(void)
     camera_at(800, 800, 0);
     run("make \"lives 3  make \"tk.boom 0  make \"es.on false");
     enemy_at(800, 900, 180);
-    run("hit.player");
+    run("hit.player 15");
 
     for (int i = 0; i < (int)num(":boom.frames") + 1; i++)
         run("step.tank");
@@ -4845,7 +4893,7 @@ void test_the_last_tank_ends_the_game(void)
     new_game();
     camera_at(800, 800, 0);
     run("make \"lives 1  make \"tk.boom 0");
-    run("hit.player");
+    run("hit.player 15");
     TEST_ASSERT_TRUE_MESSAGE(truth(":playing"), "the game ended before the explosion was over");
 
     for (int i = 0; i < (int)num(":boom.frames") + 1; i++)
@@ -4967,6 +5015,14 @@ void test_the_timbres_are_set_for_every_pair(void)
     // about 7 ms the engine's refill block makes it a step whatever is asked.
     TEST_ASSERT_TRUE_MESSAGE(st->sound.env[0].attack >= 5, "the engine re-gate will click");
     TEST_ASSERT_TRUE_MESSAGE(st->sound.env[1].attack >= 5, "the engine re-gate will click");
+
+    // And the POKEY pair's envelope is FLAT, because POKEY's is: AUDC holds a
+    // volume until something writes another one.  It is not tidiness -- the
+    // effects on that pair step every 25 ms and cannot afford a 40 ms tail
+    // behind each step, which is what the bell M2 put there needed.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(15, st->sound.env[2].sustain, "the POKEY pair decays");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, st->sound.env[2].decay, "the POKEY pair decays");
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.env[2].release <= 25, "a 25 ms step will smear into the next");
 }
 
 // The engine is TWO pairs a few hertz apart, and the beat between them is the
@@ -4990,108 +5046,437 @@ void test_the_engine_is_two_pairs_that_beat(void)
 // and it is the wrong answer for anything with wheels.
 void test_the_engine_pitch_follows_the_treads(void)
 {
-    run("make \"left.tread 0  make \"right.tread 0  engine");
-    const uint32_t idle = last_freq_on(0);
-
-    run("make \"left.tread 1  make \"right.tread 0  engine");
-    const uint32_t one = last_freq_on(0);
-
-    run("make \"left.tread 1  make \"right.tread 1  engine");
-    const uint32_t driving = last_freq_on(0);
-
+    const uint32_t idle = settled(0, 0);
+    const uint32_t one = settled(1, 0);
+    const uint32_t driving = settled(1, 1);
     // A pivot is one tread each way: no ground speed, both treads turning.
-    run("make \"left.tread 1  make \"right.tread -1  engine");
-    const uint32_t pivot = last_freq_on(0);
+    const uint32_t pivot = settled(1, -1);
 
     TEST_ASSERT_TRUE_MESSAGE(one > idle, "the engine does not rev");
     TEST_ASSERT_TRUE_MESSAGE(driving > one, "the second tread adds nothing");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(driving, pivot, "a pivot does not rev like a drive");
 }
 
-// The alarm is a TEMPO as much as a pitch, and the gap closes as the enemy
-// closes -- so a hunting supertank is frightening before it is visible.
-void test_the_alarm_closes_its_gap_as_the_enemy_closes(void)
+// The rev is a RAMP and not a dial.  The discrete hardware has one bit of
+// pitch -- rev up or rev down -- with an analog slope behind it, so the engine
+// chases its speed instead of arriving at it.  A frame that jumped straight to
+// the target would be the one thing the cabinet could not do.
+void test_the_engine_revs_up_and_back_down(void)
 {
-    camera_at(800, 800, 0);
-    enemy_at(800, 1100, 0);
+    const uint32_t idle = settled(0, 0);
+    const uint32_t up = settled(1, 1);
 
-    // Two notes and not one: a single repeated note is a metronome.  This goes
-    // FIRST because the mock's gate log holds 64 entries and a centred pair
-    // spends two of them a note, so the counting below is what fills it.
-    run("make \"au.in 1  make \"au.alt false  alarm");
-    const uint32_t first = last_freq_on(2);
-    run("make \"au.in 1  alarm");
-    TEST_ASSERT_TRUE_MESSAGE(last_freq_on(2) != first, "the alarm is one note, not two");
+    run("make \"au.rev :eng.hz  make \"left.tread 1  make \"right.tread 1");
+    mock_sound_clear_gates();
+    run("engine");
+    const uint32_t first = last_freq_on(0);
+    mock_sound_clear_gates();
+    run("engine");
+    const uint32_t second = last_freq_on(0);
 
-    enemy_at(800, 1450, 0);
-    run("make \"au.in 1");
-    int mark = mock_sound_gate_count();
-    run("repeat 30 [alarm]");
-    const int far_off = notes_on(2, mark);
+    TEST_ASSERT_TRUE_MESSAGE(second > first, "the engine does not ramp -- it arrived at once");
+    TEST_ASSERT_TRUE_MESSAGE(first < up, "the engine reached full rev in one frame");
 
-    enemy_at(800, 900, 0);
-    run("make \"au.in 1");
-    mark = mock_sound_gate_count();
-    run("repeat 30 [alarm]");
-    const int close = notes_on(2, mark);
-
-    char msg[128];
-    snprintf(msg, sizeof(msg), "%d notes in 30 frames at range, %d up close", far_off, close);
-    TEST_ASSERT_TRUE_MESSAGE(far_off > 0, msg);
-    TEST_ASSERT_TRUE_MESSAGE(close > far_off, msg);
-
-    // And the floor holds, which is not tidiness: two 90 ms notes closer than
-    // `al.min` frames apart run together into one tone and lose the tempo that
-    // is the whole point of the sound.
-    enemy_at(800, 805, 0);
-    run("make \"au.in 1  alarm");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":al.min"), num(":au.in"), "the alarm ran past its floor");
+    // And back down again: a released tread is a rev-down and not a cut.
+    settled(1, 1);
+    run("make \"left.tread 0  make \"right.tread 0");
+    mock_sound_clear_gates();
+    run("engine");
+    const uint32_t easing = last_freq_on(0);
+    TEST_ASSERT_TRUE_MESSAGE(easing < up && easing > idle,
+                             "the engine dropped to idle in one frame");
 }
 
-// Only for something IN FRONT of you.  An alarm that sounded for an enemy
-// behind would be telling you to turn round without saying which way, and the
-// radar is what answers that.
-void test_the_alarm_is_silent_for_what_is_behind_you(void)
+//--------------------------------------------------------------------------
+// The POKEY pair
+//
+// The cabinet plays the ping, the alert, the collision, the extra tank, the
+// saucer and the Overture on POKEY channels 1 and 2, one at a time, and starts
+// them all through one routine that asks whether the channel is busy first.
+// `au.busy` is that question and `tone.fx` is that routine.
+//--------------------------------------------------------------------------
+
+// The sound you remember, and the ROM plays it where the blip FLARES: once a
+// revolution as the sweep crosses the bearing, and only for an enemy that is
+// on the glass at all.
+void test_the_radar_pings_when_the_sweep_crosses_the_blip(void)
 {
     camera_at(800, 800, 0);
-    enemy_at(800, 500, 0);          // 300 steps behind
-    run("make \"au.in 1");
-    int mark = mock_sound_gate_count();
-    run("repeat 30 [alarm]");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "the alarm sounded for an enemy behind you");
-
-    // And nothing at all when there is no enemy: a dead one is not a threat.
     enemy_at(800, 1100, 0);
-    run("make \"e.alive false  make \"au.in 1");
+    run("make \"e.known true  make \"au.busy 0  make \"rd.bi 0");
+
+    // The sweep one degree past the enemy's bearing: inside `rd.spin`, so this
+    // is the frame it crossed.
+    run("make \"rd.sw (arctan :e.zc :e.xc) + 1");
+    int mark = mock_sound_gate_count();
+    run("blip");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(2, mark) > 0, "the sweep crossed the blip in silence");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(6, mark) > 0, "the ping is only in one ear");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(750, last_freq_on(2), "the ping is not the cabinet's 750 Hz");
+
+    // The frames after it: the sweep has moved on, the blip is still drawn,
+    // fading, and silent.  `radar` is what advances the sweep, so a test that
+    // calls `blip` on its own has to do it -- and a sweep parked on the
+    // bearing would re-flare every frame in the ROM as well.
+    run("make \"au.busy 0  make \"rd.sw :rd.sw + 40");
     mark = mock_sound_gate_count();
-    run("repeat 30 [alarm]");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "the alarm sounded for a dead enemy");
+    run("repeat 8 [blip]");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "the radar pings every frame");
+
+    // And an enemy off the face of the radar does not ping at all, however
+    // often the sweep goes past it.
+    enemy_at(800, 1600, 0);
+    run("make \"au.busy 0  make \"rd.bi 0");
+    run("make \"rd.sw (arctan :e.zc :e.xc) + 1");
+    mark = mock_sound_gate_count();
+    run("blip");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "an enemy off the glass pinged");
+}
+
+// Three rising boops, ONCE for each enemy -- the ROM's `enemy_known_flag`,
+// cleared at the spawn and set the first time the blip is drawn.  A second
+// alert for the same tank would say a second tank had arrived.
+void test_the_enemy_alert_sounds_once_for_each_enemy(void)
+{
+    camera_at(800, 800, 0);
+    enemy_at(800, 1100, 0);
+    run("make \"e.known false  make \"au.busy 0  make \"rd.bi 0");
+    run("make \"rd.sw (arctan :e.zc :e.xc) + 1");
+
+    int qmark = queued_count();
+    run("blip");
+    const int notes = queued_count() - qmark;
+    TEST_ASSERT_TRUE_MESSAGE(notes > 0, "a new enemy arrived in silence");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":e.known"), "the alert did not mark the enemy known");
+
+    // It RISES, which is the whole shape of it: the cabinet sweeps 415 Hz up
+    // to 659 and does it three times over.
+    TEST_ASSERT_TRUE_MESSAGE(queued_freq(qmark + 1) > queued_freq(qmark),
+                             "the alert does not rise");
+
+    run("make \"au.busy 0");
+    qmark = queued_count();
+    run("repeat 20 [blip]");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, queued_count() - qmark, "the alert sounded twice for one enemy");
+
+    // A fresh enemy is a fresh alert.
+    run("spawn.enemy");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":e.known"), "the spawn did not clear the alert flag");
+}
+
+// ONE AT A TIME.  An effect that arrives while another is sounding is DROPPED
+// and not queued behind it, because the cabinet had one channel for all six of
+// them and checked it before it started anything.
+void test_the_pokey_pair_carries_one_sound_at_a_time(void)
+{
+    run("make \"au.busy 0");
+    int qmark = queued_count();
+    run("bonus");
+    const int first = queued_count() - qmark;
+    TEST_ASSERT_TRUE_MESSAGE(first > 0, "the extra tank was silent");
+    TEST_ASSERT_TRUE_MESSAGE(num(":au.busy") > 0, "the effect did not claim the pair");
+
+    qmark = queued_count();
+    run("saucer.hit  alert  bumped.sound");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, queued_count() - qmark,
+                                  "three effects played over the top of a fourth");
+
+    // And the pair comes free on its own: `voices` is what counts it down.
+    run("make \"e.alive false  repeat 30 [voices]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":au.busy"), "the pair never came free");
+    qmark = queued_count();
+    run("bonus");
+    TEST_ASSERT_TRUE_MESSAGE(queued_count() - qmark > 0, "nothing could be played again");
+}
+
+// The missile's buzz is two tones a hertz apart and its volume is RANGE and
+// nothing else -- the ROM shifts the distance right and subtracts, a straight
+// line to silence at the far plane.  So a missile you cannot see is one you
+// cannot hear, and it arrives with the thing.
+void test_the_missile_buzzes_and_the_buzz_follows_the_range(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(2, 800, 1000, 180);          // kind 2 is the missile
+    run("make \"au.busy 0");
+
+    int mark = mock_sound_gate_count();
+    run("voices");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(2, mark) > 0, "the missile made no sound");
+    const int close = last_vol_on(2);
+
+    // The two halves are a hertz apart, which is the beat and is why they are
+    // in different ears: one pair cannot hold two frequencies any other way.
+    TEST_ASSERT_TRUE_MESSAGE(last_freq_on(6) > last_freq_on(2),
+                             "both halves of the buzz are the same pitch -- there is no beat");
+
+    enemy_at(800, 1300, 180);
+    run("make \"au.busy 0  voices");
+    TEST_ASSERT_TRUE_MESSAGE(last_vol_on(2) < close, "the buzz does not fade with range");
+
+    // Past the far plane it is gone entirely.
+    enemy_at(800, 1560, 180);
+    run("make \"au.busy 0");
+    mark = mock_sound_gate_count();
+    run("voices");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "a missile beyond the far plane was audible");
+
+    // And it holds off while the pair is spoken for, rather than cutting the
+    // effect that owns it short.
+    enemy_at(800, 1000, 180);
+    run("make \"au.busy 4");
+    mark = mock_sound_gate_count();
+    run("voices");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "the buzz talked over an effect");
+}
+
+// Once per arrival and not once per frame: a player leaning on a cube would
+// otherwise retrigger the warble fifteen times a second.
+void test_running_into_an_obstacle_sounds_once(void)
+{
+    run("make \"ox [800 800 800 800]  make \"ox se :ox [800 800 800 800]");
+    run("make \"oz [200 200 200 200]  make \"oz se :oz [200 200 200 200]");
+    run("make \"okind [1 1 1 1]  make \"okind se :okind [1 1 1 1]");
+    // Through `camera_at`, which rescans the wrapped obstacle table: a
+    // placement made by hand leaves `blocked?` reading the previous test's
+    // field, and the first frame reports a bump that is not there.
+    camera_at(800, 150, 0);
+    run("make \"au.busy 0  make \"au.bumped false");
+
+    press_forward();
+    int qmark = queued_count();
+    int arrived = -1;
+    for (int i = 0; i < 10 && arrived < 0; i++)
+    {
+        run("pollkeys  step.tank  make \"au.busy 0");
+        if (truth(":bumped"))
+            arrived = i;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(arrived >= 0, "the tank never reached the obstacle");
+    TEST_ASSERT_TRUE_MESSAGE(queued_count() - qmark > 0, "running into a cube was silent");
+
+    // And then leaning on it, which is the frame after and the fourteen after
+    // that: silence, or the warble runs fifteen times a second.
+    qmark = queued_count();
+    for (int i = 0; i < 15; i++)
+        run("pollkeys  step.tank  make \"au.busy 0");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":bumped"), "the tank came free of the obstacle");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, queued_count() - qmark, "leaning on the cube sounded again");
+
+    // Backing off and driving in again is a second arrival and a second
+    // warble -- the flag is about leaning, not about the obstacle.
+    run("make \"au.bumped false  make \"au.busy 0");
+    qmark = queued_count();
+    run("pollkeys  step.tank");
+    release_forward();
+    TEST_ASSERT_TRUE_MESSAGE(queued_count() - qmark > 0, "arriving a second time was silent");
+}
+
+// THE SOUND OF BEING STUCK.  `recent_coll_flag` does two things in the ROM and
+// we had only one of them: it flashes MOTION BLOCKED BY OBJECT, and it loops
+// sound $04 -- 1588 Hz, volume 1, 64 ms on and 64 off -- for as long as you
+// lean on the cube.  The warble says you HIT something; this says you are
+// still against it.
+void test_leaning_on_an_obstacle_loops_the_merp(void)
+{
+    run("make \"au.busy 0  make \"au.bumped true  make \"e.alive false");
+    int mark = mock_sound_gate_count();
+    run("voices");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(2, mark) > 0, "leaning on the cube is silent");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(6, mark) > 0, "the merp is only in one ear");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1588, last_freq_on(2), "the merp is not the cabinet's 1588 Hz");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(64, last_dur_on(2), "the merp is not 64 ms long");
+
+    // It holds the pair for a frame, so it re-arms every second one: 134 ms
+    // against the cabinet's 128, which is as near as a 67 ms frame gets.
+    mark = mock_sound_gate_count();
+    run("voices");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "the merp sounded every frame");
+    mark = mock_sound_gate_count();
+    run("voices");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(2, mark) > 0, "the merp did not come back");
+
+    // Coming free of the cube stops it.
+    run("make \"au.bumped false  make \"au.busy 0");
+    mark = mock_sound_gate_count();
+    run("voices");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, notes_on(2, mark), "the merp outlived the obstacle");
+
+    // And it takes the pair off the saucer, which is $55c7's order: a dying
+    // saucer, then the merp, then the hum.
+    run("make \"au.bumped true  make \"au.busy 0");
+    foe_at(3, 800, 1000, 180);          // kind 3 is the saucer
+    int qmark = queued_count();
+    mark = mock_sound_gate_count();
+    run("voices");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, queued_count() - qmark, "the saucer hummed over the merp");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1588, last_freq_on(2), "the merp lost the pair to the saucer");
+}
+
+// EVERY SWEEP IN THIS FILE IS LINEAR IN POKEY'S DIVISOR AND NOT IN PITCH, and
+// the saucer is where it shows: half way up AUDF 64 to 32 is AUDF 48, which is
+// 551 Hz -- a fifth above the bottom, where an ear expects the sixth.
+void test_the_saucer_sweeps_through_the_divisor_and_not_the_scale(void)
+{
+    run("make \"au.busy 0");
+    int qmark = queued_count();
+    run("saucer.hum");
+    TEST_ASSERT_TRUE_MESSAGE(queued_count() - qmark >= 4, "the saucer hum is not a sweep");
+
+    // 415, 551, 831 -- the cabinet's 64, 48 and 32 read through 27000/(n+1).
+    TEST_ASSERT_UINT32_WITHIN_MESSAGE(6, 415, queued_freq(qmark),
+                                      "the hum does not start at the cabinet's 415 Hz");
+    TEST_ASSERT_UINT32_WITHIN_MESSAGE(10, 554, queued_freq(qmark + 1),
+                                      "the middle of the sweep is not the divisor's midpoint");
+    TEST_ASSERT_UINT32_WITHIN_MESSAGE(14, 831, queued_freq(qmark + 2),
+                                      "the hum does not reach the cabinet's 818 Hz");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(queued_freq(qmark + 1), queued_freq(qmark + 3),
+                                     "the sweep does not come back down the way it went up");
+}
+
+// A SWEEP IS A SWEEP, and the cabinet's is 24 steps of its counter.  28.5 ms
+// is the shortest note this sequencer will hold, so a 192 ms sweep is seven of
+// them and they are the ROM's counter read at seven even places -- a chromatic
+// run, which is what the three-boop alert is, and not a chord.
+void test_the_enemy_alert_is_a_chromatic_run(void)
+{
+    run("make \"au.busy 0");
+    int qmark = queued_count();
+    run("alert");
+    // Twenty-one notes into each half of the pair, and the pair's two halves
+    // are queued one after the other rather than interleaved.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(42, queued_count() - qmark,
+                                  "the alert is not three sweeps of seven");
+
+    // Each sweep starts at the cabinet's 415 and climbs without repeating.
+    for (int sweep = 0; sweep < 3; sweep++)
+    {
+        const int base = qmark + sweep * 7;
+        TEST_ASSERT_UINT32_WITHIN_MESSAGE(6, 415, queued_freq(base),
+                                          "a sweep does not start at 415 Hz");
+        for (int i = 1; i < 7; i++)
+            TEST_ASSERT_TRUE_MESSAGE(queued_freq(base + i) > queued_freq(base + i - 1),
+                                     "the alert does not climb the whole way");
+    }
+}
+
+// THE POKEY PAIR RELEASES IN ZERO, which is a TEMPO decision and not a timbre
+// one: the sequencer starts the next queued note only after the current one
+// has finished releasing, so any release at all stretches every sequence in
+// the file past the millisecond counts the ROM was read for.  POKEY has no
+// envelope -- a sequence there is a register written and written again.
+void test_the_pokey_pair_has_no_release_to_stretch_a_sequence(void)
+{
+    run("setup.sound");
+    const MockDeviceState *st = mock_device_get_state();
+    for (int v = 2; v <= 6; v += 4)
+    {
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, st->sound.env[v].release,
+                                         "the POKEY pair releases, and every sequence runs long");
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, st->sound.env[v].attack,
+                                         "the POKEY pair ramps in, and POKEY steps");
+    }
+
+    // The engine and the noise pair keep theirs: they are gated, not queued,
+    // and the tail is the sound.
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.env[0].release > 0, "the engine lost its release");
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.env[3].release > 0, "the explosion lost its tail");
 }
 
 // The cannon and both explosions are noise, on the pair that is allowed to
-// carry it.  Pitch says WHAT died: an enemy is a sharp crack and your own tank
-// is a low crump, so you never have to look to know which of you it was.
-void test_the_cannon_and_the_explosions_are_noise_and_differ_in_pitch(void)
+// carry it.  LOUDNESS AND LENGTH say what happened and pitch says nothing:
+// the cabinet has one noise circuit, a gate bit and a volume bit, and M7's
+// sharp crack against a low crump was an invention.
+//
+// AND THE LOUD ONE IS NOT YOURS.  $6027 hands the $ff counter and the loud
+// bit to the unit that was HIT and the $70 and the soft bit to the one that
+// fired, so a tank you kill and a shell you put into a wall are the SAME
+// sound, and the only long loud explosion in the game is your own death.
+void test_the_explosions_differ_in_loudness_and_length(void)
 {
     new_game();
-    run("make \"sh.on false  make \"tk.boom 0");
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 1100, 180);
+    run("make \"au.busy 0");
+    int mark = mock_sound_gate_count();
+    run("kill.enemy");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(3, mark) > 0, "the enemy blew up in silence");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(7, mark) > 0, "the explosion is only in one ear");
+    const int tank = last_vol_on(3);
+    const uint32_t tank_ms = last_dur_on(3);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(448, tank_ms, "a tank you kill is not the ROM's $70");
+
+    // A shell that hit a wall is the same $70 and the same soft bit: the
+    // cabinet cannot tell the two apart and neither can this.
+    run("make \"sh.on true  make \"sh.life 20  make \"e.alive false");
+    run("make \"px 800  make \"pz 150  make \"ph 0  make \"sh.x 800  make \"sh.z 195");
+    run("make \"sh.vx 0  make \"sh.vz 5  cam.offsets  ob.scan");
+    run("make \"ox [800 800 800 800]  make \"ox se :ox [800 800 800 800]");
+    run("make \"oz [200 200 200 200]  make \"oz se :oz [200 200 200 200]");
+    run("ob.scan");
+    mark = mock_sound_gate_count();
+    run("step.shell");
+    TEST_ASSERT_FALSE_MESSAGE(truth(":sh.on"), "the shell did not strike the obstacle");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(3, mark) > 0, "the shell struck the wall in silence");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(tank, last_vol_on(3), "a wall is not as loud as a tank");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(tank_ms, last_dur_on(3), "a wall is not as long as a tank");
+
+    // Your own death is the $ff, and it is NOT told apart by pitch: the
+    // cabinet says which of you it was with the volume and the length, and had
+    // no way of saying it any other way.
+    const uint32_t shell_hz = last_freq_on(3);
+    run("make \"lives 3  make \"tk.boom 0");
+    mark = mock_sound_gate_count();
+    run("hit.player 15");
+    TEST_ASSERT_TRUE_MESSAGE(notes_on(3, mark) > 0, "the player blew up in silence");
+    TEST_ASSERT_TRUE_MESSAGE(last_vol_on(3) > tank, "your death is no louder than theirs");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1020, last_dur_on(3), "your death is not the ROM's $ff");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(shell_hz, last_freq_on(3), "pitch is being used to say what died");
+
+    // A missile that RAMS you is the same $ff with the loud bit cleared: as
+    // long, and quieter.  It is the one place the two deaths are told apart.
+    run("make \"lives 3  make \"tk.boom 0");
+    mark = mock_sound_gate_count();
+    run("hit.player 8");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1020, last_dur_on(3), "a ram is shorter than a shell");
+    TEST_ASSERT_TRUE_MESSAGE(last_vol_on(3) < 15, "a ram is as loud as a shell");
+}
+
+// The soft cannon is not a detail.  It is how you hear the ENEMY shoot, and it
+// is the only warning you get.
+void test_the_cannon_is_softer_when_the_enemy_fires(void)
+{
+    new_game();
+    run("make \"sh.on false  make \"sh.cool 0  make \"tk.boom 0");
     int mark = mock_sound_gate_count();
     run("fire");
     TEST_ASSERT_TRUE_MESSAGE(notes_on(3, mark) > 0, "the cannon made no sound");
+    const int mine = last_vol_on(3);
 
     camera_at(800, 800, 0);
-    foe_at(1, 800, 1100, 180);
-    mark = mock_sound_gate_count();
-    run("kill.enemy");
-    TEST_ASSERT_TRUE_MESSAGE(notes_on(3, mark) > 0, "the enemy blew up in silence");
-    const uint32_t theirs = last_freq_on(3);
+    enemy_at(800, 1100, 180);
+    run("make \"es.on false  enemy.fires");
+    TEST_ASSERT_TRUE_MESSAGE(truth(":es.on"), "the enemy did not fire");
+    TEST_ASSERT_TRUE_MESSAGE(last_vol_on(3) < mine, "the enemy's shot is as loud as your own");
+}
 
-    run("make \"lives 3  make \"tk.boom 0");
-    mark = mock_sound_gate_count();
-    run("hit.player");
-    TEST_ASSERT_TRUE_MESSAGE(notes_on(3, mark) > 0, "the player blew up in silence");
-    TEST_ASSERT_TRUE_MESSAGE(theirs > last_freq_on(3),
-                             "your death and theirs sound the same");
+// Nine notes of the 1812 Overture over the game-over card, doubled an octave
+// up as the ROM doubles them across channels 1 and 2.  It takes the pair
+// whatever is on it: the frame loop has stopped by then.
+void test_the_game_over_card_plays_the_overture(void)
+{
+    run("make \"au.busy 30");
+    int qmark = queued_count();
+    run("overture");
+    const int notes = queued_count() - qmark;
+    TEST_ASSERT_TRUE_MESSAGE(notes >= 18, "the Overture is not both halves of nine notes");
+
+    // The doubling: the second voice starts an octave above the first, and the
+    // first note of the phrase is the cabinet's B.
+    const uint16_t low = queued_freq(qmark);
+    const uint16_t high = queued_freq(qmark + notes / 2);
+    char msg[128];
+    snprintf(msg, sizeof(msg), "the two halves open on %u Hz and %u Hz", low, high);
+    TEST_ASSERT_TRUE_MESSAGE(high >= low * 2 - 2 && high <= low * 2 + 2, msg);
 }
 
 //--------------------------------------------------------------------------
@@ -5431,7 +5816,7 @@ void test_the_game_fits_the_global_table_with_room_to_spare(void)
     // reaches the names it mints.  That is the §16.12.4 gap -- a count that is
     // not under budget but under-MEASURED -- so face each of them once.
     run("make \"ph 300  moon  make \"ph 144  volcano");
-    run("engine  alarm  hit.player");
+    run("engine  voices  hit.player 15");
 
     const int peak = var_global_count(true);
 
@@ -5966,9 +6351,19 @@ int main(void)
     RUN_TEST(test_the_timbres_are_set_for_every_pair);
     RUN_TEST(test_the_engine_is_two_pairs_that_beat);
     RUN_TEST(test_the_engine_pitch_follows_the_treads);
-    RUN_TEST(test_the_alarm_closes_its_gap_as_the_enemy_closes);
-    RUN_TEST(test_the_alarm_is_silent_for_what_is_behind_you);
-    RUN_TEST(test_the_cannon_and_the_explosions_are_noise_and_differ_in_pitch);
+    RUN_TEST(test_the_engine_revs_up_and_back_down);
+    RUN_TEST(test_the_radar_pings_when_the_sweep_crosses_the_blip);
+    RUN_TEST(test_the_enemy_alert_sounds_once_for_each_enemy);
+    RUN_TEST(test_the_pokey_pair_carries_one_sound_at_a_time);
+    RUN_TEST(test_the_missile_buzzes_and_the_buzz_follows_the_range);
+    RUN_TEST(test_running_into_an_obstacle_sounds_once);
+    RUN_TEST(test_leaning_on_an_obstacle_loops_the_merp);
+    RUN_TEST(test_the_saucer_sweeps_through_the_divisor_and_not_the_scale);
+    RUN_TEST(test_the_enemy_alert_is_a_chromatic_run);
+    RUN_TEST(test_the_pokey_pair_has_no_release_to_stretch_a_sequence);
+    RUN_TEST(test_the_explosions_differ_in_loudness_and_length);
+    RUN_TEST(test_the_cannon_is_softer_when_the_enemy_fires);
+    RUN_TEST(test_the_game_over_card_plays_the_overture);
     RUN_TEST(test_the_score_lists_are_as_long_as_the_table);
     RUN_TEST(test_the_table_ranks_a_score_against_what_is_already_there);
     RUN_TEST(test_inserting_a_score_slides_the_rest_down);

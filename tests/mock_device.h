@@ -672,6 +672,7 @@ extern "C"
     // recorded gate log to assert toot/sound sequences.
     void mock_sound_set_status(int voice, bool sounding, int free_slots);
     int mock_sound_gate_count(void);
+    void mock_sound_clear_gates(void);
 
 #ifdef __cplusplus
 }

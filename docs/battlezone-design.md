@@ -833,12 +833,20 @@ height and so appears at y = `hz`, dead centre when aimed, which is on the
 horizon and is exactly where the target is. The middle thirty rows are left
 empty, so the sight frames what it is pointing at without ever covering it.
 
-**Sound** on the PSG: a two-voice engine idle whose pitch follows tread speed,
-a noise burst for the cannon, a pitched explosion, and the rising two-tone
-alarm when an enemy is in front of you. The arrangement follows
-[sound-design.md](sound-design.md) and P11 §11's lesson — the alarm is a
-*tempo* as much as a pitch, and that is what makes a hunting supertank
-frightening. Budgeted inside the 3.0 ms line below.
+**Sound** on the PSG, and since §16.14 **every frequency and duration in it is
+the cabinet's**, read off the disassembly rather than invented. A two-pair
+engine idle that revs with the treads; the radar ping, the enemy alert, the
+collision warble, the extra tank, the saucer and the Overture on one shared
+pair, one at a time; the missile's beating buzz; and the cannon and the
+explosions on the noise pair, told apart by loudness and length rather than by
+pitch — and since §16.15 the loud one is **your own death** and nothing else,
+which is what `$6027` does. The blocked-by-obstacle blip is there too. The
+arrangement follows [sound-design.md](sound-design.md). Budgeted inside the
+3.0 ms line below.
+
+The proximity alarm M2 built — two notes whose gap closed as the enemy closed —
+is **gone**, because the cabinet has nothing of the kind. §16.14 has the table
+it was replaced from.
 
 ## 12. Frame budget — measured on two boards
 
@@ -3368,6 +3376,174 @@ side — so `moon` was minting `mt.m` on every frame of it but `draw.moon` never
 ran, and a volcano that never fires never reaches a name either. The test now
 faces each of them once before it reads the peak. The count was never wrong
 about what it counted; it was wrong about what it had run.
+
+### 16.14 The sound is read off the disassembly, and the alarm does not survive it
+
+§16.12 took three numbers out of the game because the ROM disagreed with them.
+This does the same to the sound, and it turns out the ROM has more to say about
+sound than about anything else it has been asked so far: **AUDCTL is written
+`$00`**, which leaves POKEY's base clock at 1.512 MHz / 28 = 54 kHz, so every
+channel in the machine sounds at
+
+```
+f = 27000 / (AUDF + 1)
+```
+
+and every counter in the sound data is ticked by the 250 Hz NMI, four
+milliseconds apiece. **The check on that arithmetic is the 1812 Overture at
+`$7933`**: it decodes to B2, E3, F♯3 and G♯3, each inside half a percent of
+equal temperament, which no wrong clock would produce. With the clock pinned,
+the whole of `sfx_audio_data` reads out as music.
+
+The cabinet makes noise in three places, and the split is why the voices here
+are laid out the way they are. **POKEY channels 1 and 2** carry six effects,
+one at a time — `StartSoundEffect` is one routine, and its callers ask whether
+the channel is busy before they use it. **POKEY channels 3 and 4** carry the
+missile's buzz and nothing else. **Discrete analog hardware at `$1840`** carries
+the engine, the cannon and the explosion: a gate bit and a loud/soft bit each,
+and no pitch anywhere in any of the three.
+
+| Effect | The cabinet | Here |
+|---|---|---|
+| Radar ping (`$01`) | 750 Hz, 64 ms, vol 3 — on the frame the sweep crosses the blip | 750 Hz, 64 ms, in `blip` at max flare |
+| Enemy alert (`$10`) | three sweeps 415 → 659 Hz, 192 ms each, once per enemy | three sweeps, seven steps of 28.5 ms each (§16.15) |
+| Collision (`$02`) | damped warble 110–200 Hz, 456 ms, vol 11 decaying to 2 in the first 144 ms | sixteen notes off the ROM's ten chunks, with its volume shape (§16.15) |
+| Extra tank (`$08`) | 1588 Hz, 128 ms on / 128 off, ×4, **vol 2** | 1568 Hz (G6), 128 ms on / 128 off, ×4, vol 6 |
+| Blocked (`$04`) | 1588 Hz, vol 1, 64 ms on / 64 off, looped while you lean on a cube | 1588 Hz, vol 5, 64 ms, re-armed every second frame (§16.15) |
+| Saucer alive (`$40`) | 415 ↔ 818 Hz, 64 ms a sweep, vol 1, looped on an idle channel | 415 / **551** / 830, 32 ms a step, re-armed by `voices` (§16.15) |
+| Saucer hit (`$20`) | 551 Hz zipping up over 48 ms — off the top of the counter — twice | two zips, 554 Hz to 1568 (§16.15) |
+| Game over (`$80`) | nine notes of the 1812 Overture, 192 ms unit, doubled an octave up, ~2.5 s | 123/165/185/208 Hz over 192 ms units, doubled, 2.5 s |
+| Missile buzz (ch 3/4) | AUDF `$ff` and `$fe` — **105.5 Hz against 105.9** — volume ∝ proximity | 105 against 106, volume to zero at the far plane |
+| Cannon (discrete) | **loud when you fire, soft when the enemy fires** | vol 14 and vol 8 on the noise pair |
+| Explosion (discrete) | `$ff` = 1020 ms **to whoever was hit**, `$70` = 448 ms to whoever fired, `$a0` = 640 for a saucer | 1020 / 448 / 640, loud only on your own death (§16.15) |
+| Engine (discrete) | enable, plus **one bit** of pitch: rev up or rev down, with an analog ramp | the tread count is still the target; `au.rev` chases it at 6 Hz a frame |
+
+**The missile buzz is the finding.** Channels 3 and 4 are initialised to AUDF
+`$ff` and `$fe` and never touched again: two tones four tenths of a hertz apart,
+beating against each other, with the volume the only thing that moves. M2
+argued the engine's beating pair out from first principles — one tone at 96 Hz
+is a hum — and the cabinet turns out to have done the same thing in the one
+other place it needed a low continuous sound. That is the strongest
+confirmation this design has had of a number it invented.
+
+**And the alarm does not survive.** M2 built a proximity alarm: two notes whose
+gap closed as the enemy closed, on the argument that a hunting supertank should
+be frightening before it is visible. The cabinet has no such sound. What it has
+is the radar ping — once a revolution, as the sweep crosses the blip, and only
+for an enemy that is on the glass — and a **single** three-boop alert the first
+time an enemy is drawn there, gated by `enemy_known_flag`. The tempo was
+telling the player a distance the cabinet only ever *showed* them, on the
+radar, which is what the radar is for. Both are now where the ROM puts them,
+inside `blip`.
+
+**What could not be matched, and why.** Three things.
+
+- **The beat.** `sound` takes whole hertz, so 105.5 against 105.9 becomes 105
+  against 106: the buzz throbs once a second where the cabinet throbs once
+  every two and a half.
+- **The sweeps.** POKEY steps its frequency counter every 8 ms and this frame
+  is 67 ms long, so nothing gated once a frame can rise or warble. `play`
+  is what buys them: the sequencer runs in the driver and holds 25 ms to the
+  note, so the alert becomes four steps instead of twenty-four and the
+  collision ten instead of fifty. The ends of every sweep are the ROM's.
+  **§16.15 revisits this** — 25 ms was not the floor it was taken for, and the
+  ends were the only part of a sweep that was the ROM's.
+- **The Overture's octave.** The ROM doubles the melody across channels 1 and 2
+  into one speaker. Two lines cannot both be centred on one pair, so the low
+  line goes to voice 2 and the high to voice 6 — a stereo spread where the
+  cabinet had none, which is the cheaper of the two ways to lose it. Dropping
+  the doubling would have cost the sound itself.
+
+**The volumes are the ROM's plus four.** POKEY's volume is linear in amplitude
+over 0–15 and so is this synthesizer's, so the *ordering* in the table is
+meaningful and is kept: the saucer under the ping under the Overture. The
+offset is this speaker's — a volume of 1 through a PicoCalc is not a quiet
+sound, it is no sound.
+
+**And the global table paid for it.** The tuning block's habit is that every
+number is a named global with the reasoning above it, and there were ten slots
+left. The slew and the missile's three numbers are literals in the one
+statement that reads each, with the reasoning still above them; `rd.hit` was
+dropped for the ROM's own test — the blip is at max flare on exactly the frame
+it was set — and `au.v` folded into `au.d`. The peak is back inside the budget
+with the sixteen spare the game reserves for whatever else is in the workspace.
+
+**Not measured on hardware yet.** `voices` is four statements on a frame with a
+tank on it, and two gates on a frame with a missile; the one recurring cost
+that is new is a saucer's hum, which compiles eight notes every four frames.
+The board has not seen any of it.
+
+### 16.15 The second pass: a release that was costing tempo, and the loud explosion that was not ours
+
+§16.14 read every frequency and duration off the disassembly and then spent
+them through a sequencer whose behaviour had not been read as carefully. This
+pass fixes that, and four of the six findings are things the ROM had already
+said.
+
+**The release was a tempo bug, not a timbre one.** The driver starts the next
+queued note only when the current one has finished *releasing*
+(`voice_advance_block` pops the queue at `ENV_IDLE`), so the POKEY pair's
+`[0 0 15 15]` envelope added 15 ms to every note in every sequence in the file.
+The alert ran 780 ms against the cabinet's 576, the collision 650 against 456 —
+each sequence about a third long, and each one measured as correct because the
+note lengths were correct. POKEY has no envelope at all; a sequence there is a
+register written and written again. The pair is now `[0 0 15 0]`, which leaves
+the one refill block the driver cannot go below: **28.5 ms is the floor, not
+25**, and every sequence below is cut against that number.
+
+**A sweep is linear in the divisor, not in pitch.** `f = 27000 / (AUDF + 1)`,
+and the ROM ramps `AUDF`. Half way up the saucer's 64 → 32 is AUDF 48 = 551 Hz —
+a *fifth* above the bottom, where the ear (and §16.14's transcription) expects
+the sixth. The saucer's middle note was E5 and is now C♯5; the same correction
+runs through the alert and the saucer's death.
+
+**So the sweeps got their steps back.** At 28.5 ms the alert's 192 ms sweep is
+**seven** notes, not four — the ROM's counter sampled at seven even places, AUDF
+64, 61, 57, 54, 50, 47, 43, which is a chromatic run from G♯4 and not the
+arpeggio M7 spelled. The collision is **sixteen** notes read off the ten chunks
+at `$78b3` at the middle of each window, and — the half that was missing — the
+volume shape from `$78dd`: 11 down to 2 in the first **144 ms** and then a flat
+tail for the remaining 312. The warble runs *out* rather than fading, and an
+even fade across the whole 456 ms was making it a different sound.
+
+**The loud explosion is not yours.** `$6027` hands the `$ff` counter and the
+loud bit to the unit that was **hit**, and the `$70` and the soft bit to the one
+that **fired**. So a tank you kill and a shell you put into a wall are the same
+sound — 448 ms, soft — and the only long loud explosion in the game is your own
+death. M7 had it the other way round, and the effect of fixing it is that the
+game stops congratulating you and starts telling you when you have been hit.
+The two deaths are told apart the same way: a shell is `$ff` loud, a missile
+that rams you is `$676d`'s `$ff` with the bit cleared, so one is a bang and the
+other a rumble.
+
+**The sound of being stuck was missing.** `recent_coll_flag` does two things at
+`$55d3` and we had one of them. It flashes MOTION BLOCKED BY OBJECT, and it
+loops sound `$04` — 1588 Hz at volume 1, 64 ms on and 64 off — for as long as
+you lean on the cube. The warble says you *hit* something; this says you are
+still against it, which is the thing a player needs to know and is the reason
+the flag exists. It goes through `tone.fx`'s counter like everything else and
+so re-arms every second frame: 134 ms against the cabinet's 128. Its priority
+is `$55c7`'s — a dying saucer, then this, then the live saucer's hum — so
+**being stuck silences the saucer**, there as here.
+
+**And one number.** The extra tank is AUDC `$a2`, volume 2, so it is 6 here and
+was 7.
+
+What is still not matched is what §16.14 said was not matched: the buzz's
+four-tenths-of-a-hertz beat, which needs a fractional frequency `sound` does not
+take, and the Overture's octave, which needs one pair to carry two lines. The
+28.5 ms floor is now a *stated* floor rather than an assumed one — the sweeps
+are sampled against it rather than rounded to it.
+
+Four tests carry it: `test_leaning_on_an_obstacle_loops_the_merp`,
+`test_the_saucer_sweeps_through_the_divisor_and_not_the_scale`,
+`test_the_enemy_alert_is_a_chromatic_run` and
+`test_the_pokey_pair_has_no_release_to_stretch_a_sequence`. The explosion test
+was rewritten: it had been asserting the hierarchy M7 invented.
+
+**Not measured on hardware.** Nothing here changes the statement count in a
+frame except the merp, which is one gate on frames where the tank is already
+refusing to move.
 
 ## 17. Tests
 

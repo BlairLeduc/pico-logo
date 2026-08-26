@@ -1277,32 +1277,101 @@ make "sight.colour 248
 ;--------------------------------------
 ; Sound
 ;
-; Design section 11's four: an engine
-; idle whose pitch follows the treads, a
-; noise burst for the cannon, a pitched
-; explosion, and the rising two-tone
-; alarm. Four voice-pairs, one each, and
-; a pair is one sound centred across
-; both ears -- Asteroids' arrangement,
-; and the timbres are set once because
-; `stopsound` preserves them.
+; EVERY NUMBER BELOW IS THE CABINET'S,
+; read off the disassembly rather than
+; guessed at. POKEY's AUDCTL is written
+; zero, which leaves the base clock at
+; 1.512 MHz / 28 = 54 kHz, so a channel
+; sounds at
+;
+;   f = 27000 / (AUDF + 1)
+;
+; and every duration is counted by the
+; 250 Hz NMI, four milliseconds a tick.
+; The check on that arithmetic is the
+; 1812 Overture at $7933: it comes out
+; B2 E3 F#3 G#3, every one of them
+; inside half a percent of equal
+; temperament, which no wrong clock
+; would do.
+;
+; THE CABINET MAKES ITS NOISE IN THREE
+; PLACES and the split is the reason the
+; voices are laid out the way they are:
+;
+;   POKEY channels 1 and 2 -- the radar
+;   ping, the enemy alert, the collision
+;   warble, the extra life, the saucer,
+;   and the Overture. ONE AT A TIME: the
+;   ROM starts them all through one
+;   routine and asks whether the channel
+;   is busy first.
+;
+;   POKEY channels 3 and 4 -- the
+;   missile's buzz, and nothing else.
+;
+;   Discrete analog hardware at $1840 --
+;   the engine, the cannon and the
+;   explosion. A gate bit and a loud/
+;   soft bit each, and no pitch anywhere
+;   in any of them.
+;
+; Four pairs is what we have, and a pair
+; is one sound centred across both ears,
+; so:
 ;
 ;   [0 4] engine, lower half
 ;   [1 5] engine, upper half
-;   [2 6] the alarm
-;   [3 7] the cannon and both explosions
+;   [2 6] the whole POKEY 1/2 line, AND
+;         the missile buzz, which the
+;         cabinet had a pair of its own
+;         for and we do not
+;   [3 7] the cannon and the explosions
 ;
 ; THE WAVEFORM RULE: 3 and 7 are the
 ; NOISE voices and 0-2 / 4-6 are the
 ; tone voices, and asking for the wrong
 ; family is an error rather than a
-; shrug. So the cannon and the
-; explosions share [3 7] -- everything
-; in this game that wants noise is
-; something blowing up or going off, and
-; the two can only ever interrupt each
-; other, which is what they should do.
+; shrug. It costs nothing here: the
+; discrete cannon and explosion are both
+; noise through a filter, and everything
+; POKEY plays is a pure tone, which is a
+; square wave.
 ;
+; WHY [2 6] CARRIES TWO THINGS. The buzz
+; wants a pair to itself and there is
+; not one, so `au.busy` arbitrates: it
+; counts the frames an effect owns the
+; pair for, the buzz holds off while it
+; is nonzero, and an effect that arrives
+; while it is nonzero is DROPPED rather
+; than queued behind. That is the ROM's
+; own rule for channel 1 -- its
+; `audio_indices` is this counter --
+; applied to one more sound than the ROM
+; applied it to.
+;
+; THE VOLUMES ARE THE ROM'S PLUS FOUR.
+; POKEY's volume is linear in amplitude
+; over 0-15 and so is ours, so the
+; ORDERING is meaningful and is kept:
+; the saucer under the ping under the
+; Overture. The offset is this speaker's
+; and not the cabinet's -- a volume of 1
+; through a PicoCalc is not a quiet
+; sound, it is no sound at all.
+;
+; THERE IS NO PROXIMITY ALARM. M2 built
+; one -- two notes whose gap closed as
+; the enemy closed -- and the cabinet
+; has nothing of the kind. What it has
+; is the radar ping, once a revolution
+; as the sweep crosses the blip, and one
+; three-note alert the first time an
+; enemy is drawn on the glass. The
+; tempo told you a distance the cabinet
+; only ever showed you.
+
 ; THE ENGINE IS TWO PAIRS AND THAT IS
 ; THE WHOLE POINT OF IT. One tone at 96
 ; Hz is a hum. Two a few hertz apart
@@ -1310,12 +1379,23 @@ make "sight.colour 248
 ; wobble that produces is what a diesel
 ; sounds like -- so `eng.beat` is not a
 ; detune to be tidied away, it is the
-; sound. It is a narrow pulse for
-; Asteroids' reason: a small speaker
-; cannot move air at 96 Hz on a
-; fundamental and reproduces the note
-; through its harmonics, which a 12 %
-; pulse has and a triangle does not.
+; sound.
+;
+; AND THE CABINET AGREES, in the one
+; place it can be checked. The missile
+; buzz is channels 3 and 4 initialised
+; to AUDF $ff and $fe -- 105.5 Hz
+; against 105.9, a beating pair and
+; nothing else. M2 argued that out from
+; first principles and the disassembly
+; came back with the same answer.
+;
+; It is a narrow pulse for Asteroids'
+; reason: a small speaker cannot move
+; air at 96 Hz on a fundamental and
+; reproduces the note through its
+; harmonics, which a 12 % pulse has and
+; a triangle does not.
 ;
 ; Re-gated on EVERY frame rather than
 ; started and stopped, which is
@@ -1326,46 +1406,81 @@ make "sight.colour 248
 ; gate-off statement anywhere to get
 ; wrong. The attack of 5 ms is what
 ; keeps the re-gate from clicking.
-; The rise is per unit of tread, and
-; both treads turning is two units: 96
-; Hz idling to 140 driving.
+;
+; A REV AND NOT A DIAL. The discrete
+; hardware has exactly one bit of pitch
+; -- $10, rev up or rev down -- with an
+; analog ramp behind it, so the engine
+; CHASES its speed instead of arriving
+; at it, and that ramp is what the slew
+; below is. The target is still the
+; tread count, per unit of tread and
+; both treads turning being two units,
+; because a pivot has to rev as hard as
+; a drive does; what
+; changed is that 96 Hz idling to 140
+; driving now takes half a second in
+; each direction, at six hertz a frame.
+;
+; THE SLEW IS A LITERAL and so are the
+; missile's three numbers below, which
+; is against this file's habit and is
+; the global table talking: there are
+; ten slots left in it. A number read by
+; exactly one statement, with that
+; statement in view, is the cheapest
+; thing here to spend them on.
 make "eng.hz 96
 make "eng.up 22
 
-; The alarm is a TEMPO as much as a
-; pitch (design section 11, and P11
-; section 11's lesson): two notes
-; alternating with the gap between them
-; closing as the enemy closes, so a
-; hunting supertank is frightening
-; before it is visible. The gap is the
-; enemy's own diamond distance divided
-; down, clamped at both ends -- the
-; floor because two 90 ms notes less
-; than three frames apart run together
-; into one tone and lose the tempo that
-; is the whole point, and the ceiling so
-; that an enemy at the far plane still
-; ticks rather than falling silent.
-make "al.min 2
-make "al.max 9
+; The missile's buzz, and the one number
+; here that could not be matched. The
+; cabinet's pair is 0.4 Hz apart and
+; throbs once every two and a half
+; seconds; `sound` takes whole hertz, so
+; 105 against 106 is the nearest there
+; is and it throbs once a second.
+;
+; Volume is range and nothing else. The
+; ROM shifts the distance three places
+; right and subtracts it from full,
+; which is a straight line to silence at
+; the far plane -- so a missile you
+; cannot see is a missile you cannot
+; hear, and the buzz arrives with it as
+; it crosses the plane. `ms.fade` is
+; that line: far / 15, one step of
+; volume per 47 steps of plain, and
+; `far` divided by 15 is where the 47
+; comes from.
 
-; The cannon, and the two explosions.
-; PITCH SAYS WHAT DIED: an enemy going
-; up is a sharp crack at 3,200 Hz and
-; your own tank is a low crump at 900,
-; so you never have to look at the
-; screen to know which of you it was.
-
-; The bonus tank's bell takes the
-; ALARM's pair and not the engine's. The
-; engine re-gates on every frame, so a
-; 245 ms bell put there would be cut off
-; after one; the alarm is intermittent
-; by construction and takes its pair
-; back on its next note, which is a bite
-; out of a bell rather than the end of
-; one.
+; The cannon, and the explosions. PITCH
+; SAYS NOTHING -- M7 made an enemy a
+; sharp crack and the player a low
+; crump, and the cabinet cannot do that
+; at all: one noise circuit, one gate
+; bit, one volume bit. LOUDNESS AND
+; LENGTH ARE THE WHOLE VOCABULARY, and
+; there are exactly two counters in the
+; ROM: $70 and $ff, 448 ms and 1020 ms
+; at four milliseconds a tick.
+;
+; AND THE LOUD ONE IS NOT YOURS. The
+; routine at $6027 gives the $ff and the
+; loud bit to the unit that was HIT and
+; the $70 and the soft bit to the one
+; that fired -- so a tank you kill is a
+; short soft crump and the shell that
+; kills YOU is a long loud one, which is
+; the opposite of the way M7 had it and
+; is the cabinet telling you whose
+; explosion this was. The saucer is the
+; third number, $a0 for 640 ms, and its
+; volume bit is never written at all.
+;
+; The soft cannon is not a detail. It is
+; how you hear the ENEMY shoot, and it
+; is the only warning you get.
 
 
 ;======================================
@@ -1614,13 +1729,27 @@ make "extra.due 15000
 make "playing false
 make "leaving false
 
-; Sound state: the alternating alarm's
-; countdown and which of its two notes
-; is next.
-make "au.in 0
-make "au.alt false
+; Sound state. `au.busy` is the frames
+; the POKEY pair is spoken for; the rest
+; are scratch -- the engine's current
+; pitch, which chases its target, and
+; the range and the volume the missile
+; buzz works out from it.
+make "au.busy 0
 make "au.hz 0
 make "au.d 0
+make "au.rev 96
+
+; Two flags the ROM keeps, for the
+; ROM's reasons: whether the alert has
+; been played for this enemy, and
+; whether we were already up
+; against the obstacle last frame --
+; without which a player leaning into a
+; cube retriggers the collision warble
+; fifteen times a second.
+make "e.known false
+make "au.bumped false
 
 ; What the readout tallies besides the
 ; milliseconds.
@@ -3021,9 +3150,14 @@ to move.tank
   make "tk.dx :tk.s * :sn
   make "tk.dz :tk.s * :cs
   make "tk.guard :coll.r
-  ifelse blocked? [make "bumped true] [
+  ifelse blocked? [
+    make "bumped true
+    if not :au.bumped [bumped.sound]
+    make "au.bumped true
+  ] [
     make "px wrap.world :px + :tk.dx
     make "pz wrap.world :pz + :tk.dz
+    make "au.bumped false
   ]
 end
 
@@ -3897,6 +4031,7 @@ to enemy.fires
   make "es.dz :e.dz
   make "es.y :e.te
   make "es.life :sh.frames
+  cannon 8
 end
 
 ; A new one appears at one of TWO
@@ -4414,6 +4549,7 @@ to set.kind
 end
 
 to spawn.enemy
+  make "e.known false
   next.kind
   repeat 4 [
     place.enemy
@@ -4557,7 +4693,7 @@ to enemy.rams
     if :tk.hit > abs :e.dz [
       make "e.alive false
       make "e.boom :boom.frames
-      hit.player
+      hit.player 8
     ]
   ]
 end
@@ -4624,7 +4760,7 @@ to fire
   make "sh.dx 0
   make "sh.dz 0
   make "sh.life :sh.frames
-  (sound [3 7] 5200 70 12)
+  cannon 14
 end
 
 to step.shell
@@ -4661,6 +4797,7 @@ to step.shell
   if blocked? [
     make "sh.on false
     make "sh.cool 4
+    boom 8 448
   ]
 end
 
@@ -4684,7 +4821,7 @@ to step.eshell
         make "es.d :es.dx * :es.vz - :es.d
         if :ehalf * :sh.step / 2 > abs :es.d [
           make "e.cool 6
-          hit.player
+          hit.player 15
           stop
         ]
       ]
@@ -4696,6 +4833,7 @@ to step.eshell
   if blocked? [
     make "es.on false
     make "e.cool 4
+    boom 8 448
   ]
 end
 
@@ -4885,8 +5023,13 @@ to kill.enemy
   make "e.alive false
   make "e.boom :boom.frames
   make "kills :kills + 1
-  (sound [3 7] 3200 220 12)
   add.score :e.pts
+  ifelse :e.drift [
+    saucer.hit
+    boom 8 640
+  ] [
+    boom 8 448
+  ]
   make "e.h random 360
   make "e.t :e.te - :e.hw * 0.3
   make "wr.n :boom.frames - 1
@@ -4928,7 +5071,7 @@ to add.score :n
   make "score :score + :n
   if not :score < :extra.due [
     make "lives :lives + 1
-    (sound [2 6] 1760 245 11)
+    bonus
     make "extra.due 100000
     if :score > 99999 [
       make "extra.due 9999999
@@ -4964,14 +5107,24 @@ end
 ; jumps straight to the high-score
 ; screen; here the cheapest equivalent
 ; is to say so where the life is spent.
-to hit.player
+; :vol IS THE ONE THING THE TWO DEATHS
+; DO NOT SHARE. A shell that hits you is
+; $6027's victim -- $ff and the loud bit
+; -- and a missile that rams you is
+; $676d, which is the same $ff with the
+; bit cleared. So the shell kills you
+; with a bang and the missile kills you
+; with a rumble, and the difference is
+; the only way the cabinet tells you
+; which one it was.
+to hit.player :vol
   if 1 > :lives [stop]
   make "es.on false
   make "hits :hits + 1
   make "e.score :e.score + 1000
   make "lives :lives - 1
   make "tk.boom :boom.frames
-  (sound [3 7] 900 220 13)
+  boom :vol 1020
   make "bm.x 0
   make "bm.y :hz
   make "bm.n :boom.frames
@@ -5500,6 +5653,11 @@ to blip
   make "rd.by :e.zc * :rd.sc
   make "rd.d (abs :rd.bx) + (abs :rd.by)
   if :rd.r > :rd.d [
+    if not :e.known [
+      make "e.known true
+      alert
+    ]
+    if 29 = :rd.bi [ping]
     make "rd.d 1 + :rd.bi / 10
     make "rd.bx :rd.x + :rd.bx
     make "rd.by :rd.y + :rd.by
@@ -5550,13 +5708,32 @@ end
 ; is a ramp and the cannon's 0 is a step
 ; on purpose -- a gun is nothing but its
 ; onset.
+;
+; THE POKEY PAIR RELEASES IN ZERO, which
+; is not a timbre decision, it is a
+; TEMPO one. The sequencer starts the
+; next queued note only after the
+; current one has finished releasing, so
+; a release of 15 ms added 15 ms to
+; every note in every sequence below and
+; ran the alert three-fifths of a frame
+; long. POKEY has no envelope at all --
+; a sequence there is a register written
+; and written again -- so zero is both
+; the faithful number and the one that
+; makes the millisecond counts opposite
+; each sequence true. What is left is
+; the one refill block the driver cannot
+; go below, which is why the note
+; lengths below are cut against 28.5 ms
+; and not 25.
 to setup.sound
   (setwave [0 4] "pulse 12)
   setenv [0 4] [5 0 12 40]
   (setwave [1 5] "pulse 12)
   setenv [1 5] [5 0 12 40]
   setwave [2 6] "square
-  setenv [2 6] [0 20 11 40]
+  setenv [2 6] [0 0 15 0]
   setwave [3 7] "white
   setenv [3 7] [0 0 15 200]
 end
@@ -5576,49 +5753,270 @@ to engine
   make "au.hz abs :left.tread
   make "au.hz :au.hz + abs :right.tread
   make "au.hz :eng.hz + :eng.up * :au.hz
-  (sound [0 4] :au.hz 110 8)
-  make "au.hz :au.hz + 5
+  ifelse :au.hz > :au.rev [
+    make "au.rev :au.rev + 6
+    if :au.rev > :au.hz [
+      make "au.rev :au.hz
+    ]
+  ] [
+    make "au.rev :au.rev - 6
+    if :au.hz > :au.rev [
+      make "au.rev :au.hz
+    ]
+  ]
+  (sound [0 4] :au.rev 110 8)
+  make "au.hz :au.rev + 5
   (sound [1 5] :au.hz 110 8)
 end
 
-; A TEMPO AND NOT A PITCH. The two notes
-; never change; what changes is the gap
-; between them, and it closes with the
-; enemy's own diamond distance -- the
-; number `hunt` computes anyway.
+; ONE AT A TIME, and the counter is the
+; ROM's. `au.busy` is frames where
+; `audio_indices` was a pointer, but it
+; answers the same question in the same
+; place: an effect that arrives while
+; another is sounding is dropped, not
+; queued behind it. Everything on the
+; POKEY pair goes through here, so that
+; rule is written once.
 ;
-; Only when the enemy is IN FRONT of
-; you, which is one comparison against
-; the camera-frame z the projection and
-; the radar have both already read. An
-; alarm that sounded for something
-; behind you would be telling you to
-; turn round without saying which way,
-; and the radar is what answers that.
+; `play` and not `sound` because these
+; are SEQUENCES and a frame is 67 ms:
+; nothing gated once a frame can rise,
+; warble or play a tune. The sequencer
+; runs in the driver and holds 25 ms to
+; the note, which is fine enough for all
+; four of them.
+to tone.fx :notes :frames
+  if :au.busy > 0 [stop]
+  make "au.busy :frames
+  (play [2 6] :notes)
+end
+
+; The radar ping, and it is the sound
+; you remember. 750 Hz for 64 ms, once
+; a revolution as the sweep crosses the
+; blip -- not once a frame, and not at
+; all for an enemy off the glass, which
+; is why it is called from inside
+; `blip`'s drawing guard and not from
+; the flare above it.
+to ping
+  if :au.busy > 0 [stop]
+  make "au.busy 1
+  (sound [2 6] 750 64 7)
+end
+
+; Three rising boops, ONCE per enemy,
+; the first time its blip is drawn --
+; the ROM's `enemy_known_flag` exactly,
+; cleared at the spawn and set here.
 ;
-; A countdown rather than a remainder,
-; because the period moves underneath
-; it: a remainder against a shrinking
-; divisor either double-beats or skips.
-to alarm
-  if not :e.alive [stop]
-  if 0 > :e.zc [stop]
-  make "au.in :au.in - 1
-  if 0 < :au.in [stop]
+; The cabinet sweeps 415 Hz to 659 over
+; 192 ms and does it three times over.
+; A sweep is a sweep because POKEY's
+; counter is stepped every 8 ms -- 24
+; steps -- and the shortest note this
+; sequencer will hold is 28.5, so a
+; sweep is SEVEN notes and they are the
+; ROM's counter sampled at seven even
+; places: AUDF 64, 61, 57, 54, 50, 47,
+; 43, which is 415 Hz, 438, 464, 494,
+; 527, 564, 608, and which is a
+; chromatic run and not an arpeggio.
+; M7's four notes spelled a chord the
+; cabinet never plays.
+to alert
+  tone.fx [t300 v7 l32 g#4 a4 a#4 b4 c5
+    c#5 d#5 g#4 a4 a#4 b4 c5 c#5 d#5
+    g#4 a4 a#4 b4 c5 c#5 d#5] 9
+end
+
+; Running into a cube. TEN CHUNKS AT
+; $78b3, each one a half cycle of the
+; warble and each one narrower than the
+; last: AUDF swings 192 down to 132 and
+; back past 240, then 144 to 228, and so
+; on inward until the tenth is 180 to
+; 192 -- 456 ms closing on 140 Hz. It is
+; a warble that RUNS OUT rather than one
+; that fades.
+;
+; Sixteen notes is what 456 ms buys at
+; 28.5, and each is the ROM's counter
+; read at the middle of the window it
+; covers. THE VOLUME IS THE OTHER HALF
+; OF IT: $78dd steps 11 down to 2 in the
+; first 144 ms and then holds -- so the
+; sound is nearly over before it is half
+; over, and the rest is a tail. Even
+; steps down the whole length, which is
+; what M7 had, made it a fade instead.
+to bumped.sound
+  tone.fx [t300 l32 v15 f3 v13 d#3
+    v11 a2 v9 d3 v7 e3
+    v6 c3 c3 e3 c#3 c3 d3
+    v5 d3 c3 c#3 d3 d3] 8
+end
+
+; The extra tank: four beeps at 1588 Hz,
+; 128 ms on and 128 off. A bell was M2's
+; invention and this is the cabinet's,
+; and the difference matters because the
+; bell needed a long release and these
+; need none -- which is the whole reason
+; the pair's envelope is now flat.
+to bonus
+  tone.fx [t234 v6 l8 g6 r g6 r g6 r
+    g6] 14
+end
+
+; The saucer, which is quieter than
+; anything else on the plain: 415 Hz
+; against 818, back and forth every
+; 64 ms, at the bottom of the volume
+; range. `voices` re-arms it the frame
+; the pair falls idle, which is the ROM
+; restarting the loop on an idle channel
+; 1 and is why it has no length of its
+; own.
+;
+; THE MIDDLE NOTE IS 551 AND NOT 659.
+; The ramp is linear in POKEY's DIVISOR,
+; not in pitch, so half way up AUDF 64
+; to 32 is AUDF 48 -- C#5, a fifth above
+; the bottom, not the sixth an ear
+; expects. Every sweep in this file has
+; the same trap in it. The tempo is 264
+; so that four notes come to the
+; cabinet's 128 ms once the block the
+; sequencer cannot go below is counted.
+to saucer.hum
+  tone.fx [t264 v5 l32 g#4 c#5 g#5 c#5
+    g#4 c#5 g#5 c#5] 4
+end
+
+; And killing one: two zips upward from
+; 551 Hz, and OFF THE TOP is literal --
+; AUDF runs 48 down to 0 in 48 ms, and
+; the last three steps are 3375 Hz, 6750
+; and a divisor of one. Two notes is
+; what 48 ms buys; they are the bottom
+; of the ramp and the middle of what is
+; left of it, and E6 was M7 stopping
+; short of a sweep that does not stop.
+to saucer.hit
+  tone.fx [t300 v7 l32 c#5 g6 c#5 g6] 2
+end
+
+; Nine notes of the 1812 Overture over
+; the game-over card, doubled an octave
+; up as the ROM doubles them across
+; channels 1 and 2.
+;
+; THE OCTAVE IS THE ONE PLACE A PAIR IS
+; SPLIT. Two lines cannot both be
+; centred on one pair, and of the two
+; ways to lose that -- drop the doubling
+; or spread it -- spreading it keeps the
+; sound and costs a stereo image that a
+; cabinet with one speaker never had.
+; The pair is free by then in any case:
+; the frame loop has stopped and
+; `one.game` has already called
+; `stopsound`.
+to overture
+  make "au.busy 0
+  (play 2 [t156 v11 o3 8b2 8e 8f# 8g#
+    8f# 8e 8f# 4g# 2e])
+  (play 6 [t156 v11 o4 8b3 8e 8f# 8g#
+    8f# 8e 8f# 4g# 2e])
+end
+
+; The discrete pair. Both are the same
+; circuit in the cabinet and both are
+; the same noise voice here; what says
+; which is which is how loud it is and
+; how long it lasts.
+to cannon :vol
+  (sound [3 7] 800 200 :vol)
+end
+
+; 448 ms is the ROM's $70 and 1020 its
+; $ff; 640 is the saucer's $a0. Nothing
+; else has a length.
+to boom :vol :ms
+  (sound [3 7] 400 :ms :vol)
+end
+
+; The missile's buzz: channels 3 and 4
+; in the cabinet, borrowed from [2 6]
+; here, so it holds off whenever the
+; pair is spoken for and comes back the
+; frame it is free. The beat is across
+; the ears rather than inside one, for
+; the reason `overture` splits its
+; octave -- a beat has to be between two
+; different frequencies and there is
+; only one pair left to put them in.
+to buzz
   make "au.d (abs :e.dx) + (abs :e.dz)
-  make "au.in intquotient :au.d 70
-  if :au.in > :al.max [
-    make "au.in :al.max
+  make "au.d 15 - intquotient :au.d 47
+  if 1 > :au.d [stop]
+  (sound 2 105 70 :au.d)
+  (sound 6 106 70 :au.d)
+end
+
+; THE SOUND OF BEING STUCK, and it was
+; missing. `recent_coll_flag` does two
+; things in the ROM and we had only one
+; of them: it flashes MOTION BLOCKED BY
+; OBJECT on the glass, and it loops
+; sound $04 -- 1588 Hz at volume 1 for
+; 64 ms, then 64 ms of nothing -- for as
+; long as you lean on the cube. The
+; warble tells you that you HIT
+; something; this tells you that you are
+; still against it, which is the thing a
+; player needs to know and the reason
+; the flag exists.
+;
+; The ROM plays it through the same
+; idle-channel test as the saucer, so it
+; goes through `tone.fx`'s counter like
+; everything else and holds the pair for
+; one frame -- which re-arms it every
+; second frame, or 134 ms against the
+; cabinet's 128.
+to merp
+  if :au.busy > 0 [stop]
+  make "au.busy 1
+  (sound [2 6] 1588 64 5)
+end
+
+; The POKEY pair, once a frame: the
+; counter comes down, and whatever is
+; left holds the pair. A saucer re-arms
+; its hum, a missile buzzes, and
+; anything else leaves the pair silent
+; until something asks for it -- which
+; is most of the game, and is what the
+; cabinet sounds like.
+;
+; THE ORDER IS $55c7's: a dying saucer
+; first (it is holding the counter by
+; then), the merp next, the live
+; saucer's hum after that. Being stuck
+; against a cube SILENCES the saucer,
+; and it does so in the cabinet too.
+to voices
+  if :au.busy > 0 [
+    make "au.busy :au.busy - 1
+    stop
   ]
-  if :al.min > :au.in [
-    make "au.in :al.min
-  ]
-  make "au.alt not :au.alt
-  ifelse :au.alt [
-    (sound [2 6] 440 90 9)
-  ] [
-    (sound [2 6] 587 90 9)
-  ]
+  if :au.bumped [merp stop]
+  if not :e.alive [stop]
+  if :e.drift [saucer.hum stop]
+  if :e.ram [buzz]
 end
 
 ;======================================
@@ -5889,7 +6287,7 @@ to play.frame
     step.shell
     step.eshell
     engine
-    alarm
+    voices
     clean
     setpc :world.colour
     ground
@@ -6369,6 +6767,7 @@ end
 to show.game.over
   local "r
   local "who
+  overture
   textscreen
   ct
   setcursor [15 10]
@@ -6442,7 +6841,9 @@ to init.game
   make "e.gun false
   make "e.ram false
   make "e.drift false
-  make "au.in 0
+  make "au.busy 0
+  make "au.bumped false
+  make "au.rev :eng.hz
   spawn.enemy
   make "paused false
   make "quit false
