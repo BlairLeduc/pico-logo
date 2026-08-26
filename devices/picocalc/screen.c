@@ -79,7 +79,6 @@ static uint64_t last_blit_time_us = 0;
 
 // Text state
 static const font_t *screen_font = &logo_font;       // Default font for text mode
-static uint16_t text_row = 0;                        // The last row written to in text mode
 static uint8_t foreground = TXT_DEFAULT_FOREGROUND; // Default fg text palette index (0-15)
 static uint8_t background = TXT_DEFAULT_BACKGROUND; // Default bg text palette index (0-15)
 static uint8_t cursor_column = 0;                    // Cursor x position for text mode
@@ -178,47 +177,41 @@ static void screen_txt_scroll_up(void)
     screen_txt_mark_all_dirty();
 }
 
-// Get the location for the cursor in TXT or SPLIT mode
-// Return true is location visible, false if not
+// Is this line of the text buffer on the panel right now?
+//
+// In split mode the text screen is the BOTTOM EIGHT LINES of the buffer --
+// lines SCREEN_SPLIT_TXT_ROW..SCREEN_ROWS-1 -- and each is shown on the LCD
+// text row of the same number. Nothing floats: `setcursor` addresses lines
+// 0 to 31 and the eight you can see are always the same eight, which is what
+// the reference has always said and what B49 fixed. A line above the band is
+// kept in the buffer and simply not drawn; `textscreen` shows it.
+static bool txt_row_visible(uint16_t row)
+{
+    if (row >= SCREEN_ROWS)
+    {
+        return false;
+    }
+    if (screen_mode == SCREEN_MODE_TXT)
+    {
+        return true;
+    }
+    return screen_mode == SCREEN_MODE_SPLIT && row >= SCREEN_SPLIT_TXT_ROW;
+}
+
+// Get the location for the cursor in TXT or SPLIT mode.
+// The LCD text row is the buffer line itself in both modes.
+// Returns true if the location is visible, false if it is not.
 static bool screen_txt_map_location(uint8_t *column, uint8_t *row)
 {
-    if (screen_mode == SCREEN_MODE_GFX || screen_mode == SCREEN_MODE_TXT)
+    if (column)
     {
-        // Get the current cursor position in text mode
-        if (column)
-        {
-            *column = cursor_column;
-        }
-
-        if (row)
-        {
-            *row = cursor_row;
-        }
-
-        return screen_mode == SCREEN_MODE_TXT;
+        *column = cursor_column;
     }
-
-    // Check if the cursor is within the visible text area
-    int16_t start_row = text_row - (SCREEN_SPLIT_TXT_ROWS - 1);
-    if (start_row < 0)
+    if (row)
     {
-        start_row = 0;
+        *row = cursor_row;
     }
-
-    if (cursor_row >= start_row && cursor_row < start_row + SCREEN_SPLIT_TXT_ROWS)
-    {
-        if (column)
-        {
-            *column = cursor_column;
-        }
-        if (row)
-        {
-            *row = SCREEN_SPLIT_TXT_ROW + cursor_row - start_row;
-        }
-        return true; // Cursor is visible
-    }
-
-    return false; // Cursor is not visible
+    return txt_row_visible(cursor_row);
 }
 
 //
@@ -284,8 +277,17 @@ void screen_set_mode(uint8_t mode)
             lcd_define_scrolling(SCREEN_SPLIT_GFX_HEIGHT, 0); // Set scrolling area for text at the bottom
             screen_gfx_mark_all_dirty();  // Force full blit on mode switch
             screen_gfx_present();         // Present even in manual refresh mode
+            // Bring the caret into the visible band if it was above it, or
+            // typing would go to lines the split screen does not show. The
+            // text above stays in the buffer and `textscreen` still shows it;
+            // only the cursor moves.
+            if (cursor_row < SCREEN_SPLIT_TXT_ROW)
+            {
+                cursor_row = SCREEN_SPLIT_TXT_ROW;
+            }
             screen_txt_mark_all_dirty();         // Ensure first refresh fully syncs
             screen_txt_update();
+            screen_txt_set_cursor(cursor_column, cursor_row);
         }
     }
 }
@@ -1286,7 +1288,6 @@ uint16_t *screen_txt_frame()
 // Clear the text buffer
 void screen_txt_clear(void)
 {
-    text_row = 0;                                 // Reset the text row to the top
     uint16_t space = TXT_PACK(foreground, background, ' ');
     for (int i = 0; i < SCREEN_COLUMNS * SCREEN_ROWS; i++)
     {
@@ -1303,10 +1304,11 @@ void screen_txt_clear(void)
         lcd_clear_screen(background);                       // Clear the entire LCD screen in text mode
     }
     
-    // Always set cursor to row 0 in the text buffer.
-    // screen_txt_map_location will map this to the correct LCD row
-    // (row 0 in text mode, row 24 in split mode).
-    screen_txt_set_cursor(0, 0);
+    // Home the cursor to the top-left of whatever is on the screen: line 0 in
+    // text mode, and the first line of the visible band in split mode. Homing
+    // to line 0 in split mode would put the caret seventeen lines above
+    // anything the panel shows (B49).
+    screen_txt_set_cursor(0, screen_mode == SCREEN_MODE_SPLIT ? SCREEN_SPLIT_TXT_ROW : 0);
 }
 
 // Update the text display
@@ -1377,6 +1379,36 @@ void screen_txt_erase_cursor(void)
     }
 }
 
+// The cursor has just moved onto a new line. If that ran off the end of the
+// text screen, scroll the buffer up one and keep the cursor on the last line.
+//
+// One rule for all three modes, which is the other half of B49. The panel is
+// scrolled in TXT and SPLIT alike -- in split mode the LCD's scrolling region
+// is the text area, so `lcd_scroll_up` moves exactly the eight visible rows,
+// and they stay in step with the buffer because both drop their top line. GFX
+// keeps the buffer up to date and touches nothing on the panel.
+//
+// What this does NOT do any more is scroll when the cursor passes the top of
+// the visible band: in split mode lines 24 to 31 are all addressable and only
+// line 31 is the end of the screen.
+static void screen_txt_scroll_if_past_the_end(bool *scrolled)
+{
+    if (cursor_row >= SCREEN_ROWS)
+    {
+        screen_txt_scroll_up();
+        if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_SPLIT)
+        {
+            lcd_scroll_up(background);
+        }
+        cursor_row = SCREEN_ROWS - 1;
+        *scrolled = true;
+    }
+    if (screen_mode != SCREEN_MODE_GFX)
+    {
+        screen_txt_set_cursor(cursor_column, cursor_row);
+    }
+}
+
 // Function to put a character at the current cursor position
 // Returns true if the screen scrolled up
 bool screen_txt_putc(uint8_t c)
@@ -1388,57 +1420,7 @@ bool screen_txt_putc(uint8_t c)
         cursor_column = 0;
         cursor_row++;
 
-        // GFX mode is included here to maintain text buffer state for when
-        // switching back to TXT or SPLIT mode. The LCD is only updated in TXT mode.
-        if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_GFX)
-        {
-            if (cursor_row >= SCREEN_ROWS)
-            {
-                // Scroll the text buffer up one line
-                screen_txt_scroll_up();
-                if (screen_mode == SCREEN_MODE_TXT)
-                {
-                    lcd_scroll_up(background); // Scroll the LCD display up one line in TXT mode
-                }
-                cursor_row = SCREEN_ROWS - 1;
-                scrolled = true;
-                screen_txt_set_cursor(cursor_column, cursor_row);
-            }
-        }
-        else
-        {
-            // Calculate the starting row in the buffer to display
-            int16_t start_row = text_row - (SCREEN_SPLIT_TXT_ROWS - 1);
-            if (start_row < 0)
-            {
-                start_row = 0;
-            }
-
-            // In split mode, we need to check the text area height
-            if (cursor_row >= start_row + SCREEN_SPLIT_TXT_ROWS)
-            {
-                // Scroll the text buffer up one line
-                if (text_row == SCREEN_ROWS - 1)
-                {
-                    // If we are at the last row, scroll the text area up
-                    screen_txt_scroll_up();
-                }
-                else
-                {
-                    // Just increment the text row
-                    text_row++;
-                    start_row++;
-                }
-
-                lcd_scroll_up(background); // Scroll the LCD display up one line in split mode
-                cursor_row = start_row + SCREEN_SPLIT_TXT_ROWS - 1;
-                scrolled = true;
-                screen_txt_set_cursor(cursor_column, cursor_row);
-            }
-        }
-
-        // Update the last row written to
-        text_row = cursor_row;
+        screen_txt_scroll_if_past_the_end(&scrolled);
     }
     else if (c == '\b') // Backspace
     {
@@ -1459,31 +1441,10 @@ bool screen_txt_putc(uint8_t c)
 
         txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column] = TXT_PACK(foreground, background, ' '); // Clear the character (space)
         txt_mark_dirty_row(cursor_row);
-        if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_SPLIT)
+        if (txt_row_visible(cursor_row))
         {
-            if (screen_mode == SCREEN_MODE_SPLIT)
-            {
-                // Calculate the starting row in the buffer to display
-                int16_t start_row = text_row - (SCREEN_SPLIT_TXT_ROWS - 1);
-                if (start_row < 0)
-                {
-                    start_row = 0;
-                }
-                if (cursor_row >= start_row && cursor_row < start_row + SCREEN_SPLIT_TXT_ROWS)
-                {
-                    // Redraw the character at the cursor position
-                    uint16_t bs_packed = TXT_PACK(foreground, background, ' ');
-                    lcd_putc_attr(cursor_column, SCREEN_SPLIT_TXT_ROW + cursor_row - start_row, bs_packed);
-                    lcd_set_cursor_char(bs_packed);
-                    lcd_move_cursor(cursor_column, SCREEN_SPLIT_TXT_ROW + cursor_row - start_row);
-                }
-            }
-            else
-            {
-                // In text mode, we can simply clear the character
-                lcd_putc_attr(cursor_column, cursor_row, TXT_PACK(foreground, background, ' '));
-                screen_txt_set_cursor(cursor_column, cursor_row);
-            }
+            lcd_putc_attr(cursor_column, cursor_row, TXT_PACK(foreground, background, ' '));
+            screen_txt_set_cursor(cursor_column, cursor_row);
         }
     }
 
@@ -1495,31 +1456,12 @@ bool screen_txt_putc(uint8_t c)
             uint16_t packed = TXT_PACK(foreground, background, c);
             txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column] = packed;
             txt_mark_dirty_row(cursor_row);
-            if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_SPLIT)
+            if (txt_row_visible(cursor_row))
             {
-                if (screen_mode == SCREEN_MODE_SPLIT)
-                {
-                    // Calculate the starting row in the buffer to display
-                    int16_t start_row = text_row - (SCREEN_SPLIT_TXT_ROWS - 1);
-                    if (start_row < 0)
-                    {
-                        start_row = 0;
-                    }
-                    if (cursor_row >= start_row && cursor_row < start_row + SCREEN_SPLIT_TXT_ROWS)
-                    {
-                        // Redraw the character at the cursor position
-                        lcd_putc_attr(cursor_column, SCREEN_SPLIT_TXT_ROW + cursor_row - start_row, packed);
-                        lcd_set_cursor_char(txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column + 1]);
-                        lcd_move_cursor(cursor_column + 1, SCREEN_SPLIT_TXT_ROW + cursor_row - start_row);
-                    }
-                }
-                else
-                {
-                    // In text mode, render the character immediately
-                    lcd_putc_attr(cursor_column, cursor_row, packed);
-                    lcd_set_cursor_char(txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column + 1]);
-                    lcd_move_cursor(cursor_column + 1, cursor_row);
-                }
+                // Render the character immediately
+                lcd_putc_attr(cursor_column, cursor_row, packed);
+                lcd_set_cursor_char(txt_buffer[cursor_row * SCREEN_COLUMNS + cursor_column + 1]);
+                lcd_move_cursor(cursor_column + 1, cursor_row);
             }
             cursor_column++;
 
@@ -1529,57 +1471,7 @@ bool screen_txt_putc(uint8_t c)
                 cursor_column = 0;
                 cursor_row++;
 
-                // GFX mode is included here to maintain text buffer state for when
-                // switching back to TXT or SPLIT mode. The LCD is only updated in TXT mode.
-                if (screen_mode == SCREEN_MODE_TXT || screen_mode == SCREEN_MODE_GFX)
-                {
-                    if (cursor_row >= SCREEN_ROWS)
-                    {
-                        // Scroll the text buffer up one line
-                        screen_txt_scroll_up();
-                        if (screen_mode == SCREEN_MODE_TXT)
-                        {
-                            lcd_scroll_up(background); // Scroll the LCD display up one line in TXT mode
-                        }
-                        cursor_row = SCREEN_ROWS - 1;
-                        scrolled = true;
-                    }
-                    screen_txt_set_cursor(cursor_column, cursor_row);
-                }
-                else
-                {
-                    // Calculate the starting row in the buffer to display
-                    int16_t start_row = text_row - (SCREEN_SPLIT_TXT_ROWS - 1);
-                    if (start_row < 0)
-                    {
-                        start_row = 0;
-                    }
-
-                    // In split mode, we need to check the text area height
-                    if (cursor_row >= start_row + SCREEN_SPLIT_TXT_ROWS)
-                    {
-                        // Scroll the text buffer up one line
-                        if (text_row == SCREEN_ROWS - 1)
-                        {
-                            // If we are at the last row, scroll the text area up
-                            screen_txt_scroll_up();
-                        }
-                        else
-                        {
-                            // Just increment the text row
-                            text_row++;
-                            start_row++;
-                        }
-
-                        lcd_scroll_up(background); // Scroll the LCD display up one line in split mode
-                        cursor_row = start_row + SCREEN_SPLIT_TXT_ROWS - 1;
-                        scrolled = true;
-                    }
-
-                    // Update the last row written to
-                    text_row = cursor_row;
-                    screen_txt_set_cursor(cursor_column, cursor_row);
-                }
+                screen_txt_scroll_if_past_the_end(&scrolled);
             }
         }
     }
@@ -1635,33 +1527,20 @@ void screen_txt_update(void)
     }
     else if (screen_mode == SCREEN_MODE_SPLIT)
     {
-        // In split screen mode, redraw only dirty rows that are currently visible.
-        // Visible rows are buffer rows [start_row, start_row + SCREEN_SPLIT_TXT_ROWS).
-
-        // Calculate the starting row in the buffer to display
-        int16_t start_row = text_row - (SCREEN_SPLIT_TXT_ROWS - 1);
-        if (start_row < 0)
+        // In split screen mode, redraw only the dirty rows that are visible --
+        // the bottom SCREEN_SPLIT_TXT_ROWS lines, each on the LCD text row of
+        // the same number. Rows above the band stay dirty, so `textscreen`
+        // paints them when it marks all dirty and repaints.
+        for (uint8_t row = SCREEN_SPLIT_TXT_ROW; row < SCREEN_ROWS; row++)
         {
-            start_row = 0;
-        }
-
-        // Display the visible rows
-        for (uint8_t display_row = 0; display_row < SCREEN_SPLIT_TXT_ROWS; display_row++)
-        {
-            int16_t buffer_row = start_row + display_row;
-
-            if (buffer_row >= SCREEN_ROWS)
-                continue;  // No buffer content for this display row
-
-            if (!txt_dirty_rows[buffer_row])
+            if (!txt_dirty_rows[row])
                 continue;
 
-            // Copy this row from the buffer to the display
             for (uint8_t col = 0; col < SCREEN_COLUMNS; col++)
             {
-                lcd_putc_attr(col, SCREEN_SPLIT_TXT_ROW + display_row, txt_buffer[buffer_row * SCREEN_COLUMNS + col]);
+                lcd_putc_attr(col, row, txt_buffer[row * SCREEN_COLUMNS + col]);
             }
-            txt_dirty_rows[buffer_row] = false;
+            txt_dirty_rows[row] = false;
         }
     }
     // else for full-screen graphics mode, we do not update the text display

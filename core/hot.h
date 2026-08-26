@@ -26,10 +26,21 @@
 //  so this is applied function by function with the memory report checked,
 //  never wholesale.
 //
-//  Off by default so the host and test builds never see it; the `pico2w` and
-//  `pico+2w` presets ask for it. `pico2` does not -- not because it cannot
-//  afford it (its 21 KB is a 108 KB op stack left at 768 from the
-//  single-board era, not the board) but because no one here has one to boot.
+//  Off by default so the host and test builds never see it; all three device
+//  presets ask for it.
+//
+//  `pico2` did not, "because no one here has one to boot" -- and P13 M0 booted
+//  one on 2026-08-23. Without the tiering that board runs an arithmetic
+//  statement at 113 us against a Pico 2 W's 48.5, 2.33x, while the two controls
+//  in the same run are identical on both: a bare `repeat` iteration is 4.5 us
+//  and the present is 19.8 ms. So the whole difference sits in exactly the
+//  paths this macro moves, which is the cleanest confirmation of P10 M5's
+//  diagnosis anyone has taken. Enabled on `pico2` the same day; RAM goes
+//  86.16 % -> 88.89 % (+14.3 KB), against the Plus 2 W's 91.29 %.
+//
+//  Its op stack is still 768 -- 108 KB left over from the single-board era
+//  against the other presets' 256 -- which is where the headroom would come
+//  from if this board ever needs some. Not touched here.
 //
 
 #ifndef LOGO_HOT_H

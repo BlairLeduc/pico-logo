@@ -2473,6 +2473,8 @@ setcursor [_columnnumber_ _linenumber_]
 
 `setcursor` sets the cursor to the position indicated by _columnnumber_ and _linenumber_. Lines on the screen are numbered from 0 to 31. Character positions (columns) are numbered from 0 to 39.
 
+In [`splitscreen`](#splitscreen-ss) only the bottom eight lines of the text screen are visible, which are **lines 24 to 31**. Text you put on a line above those is kept and shown the next time you use [`textscreen`](#textscreen-ts), but it does not appear while the split screen is up. A status line under a picture therefore goes on lines 24 to 31, and a line printed on line 31 scrolls the text screen as it does anywhere else.
+
 **Example**:
 
 ```logo
@@ -2546,7 +2548,7 @@ ss
 
 `command`
 
-`splitscreen` devotes the top 24 lines of the screen to graphics and the bottom eight lines to text.
+`splitscreen` devotes the top 24 lines of the screen to graphics and the bottom eight lines to text. The eight are lines 24 to 31 of the text screen; see [`setcursor`](#setcursor) for putting text on them.
 
 **Example**:
 
@@ -8172,6 +8174,58 @@ hw.temperature
 ?pr se [Chip:] hw.temperature
 Chip: 26.9
 ?if hw.temperature > 60 [pr [The processor is running hot]]
+```
+
+
+## hw.cpu
+
+hw.cpu
+
+`operation`
+
+`hw.cpu` outputs the speed the processor is running at, as the word `normal` or the word `fast`. It reads the hardware rather than remembering what was last set, so it still answers correctly after anything else has retuned the clock. On a device whose clock cannot be read, an error is displayed.
+
+`normal` is 150 MHz, which is the stock speed on every board Pico Logo runs on. `fast` is 300 MHz.
+
+**Example**:
+
+```logo
+?show hw.cpu
+normal
+?if "fast = hw.cpu [pr [running hot]]
+```
+
+
+## hw.setcpu
+
+hw.setcpu _speed_
+
+`command`
+
+`hw.setcpu` sets the speed of the processor. _speed_ is the word `normal` for 150 MHz or the word `fast` for 300 MHz; any other input is an error, and so is asking on a device whose clock cannot be set.
+
+> **`fast` is overclocking.** 150 MHz is the speed the RP2350 is specified for and tested at; 300 is outside the manufacturer's ratings, and whether a particular chip will run there is a property of that chip rather than of the design. A speed that is too high does not usually give you a wrong answer - it stops the machine, and you get it back by unplugging it and plugging it in again. Nothing is damaged by trying, but a program that is part-way through writing a file may lose what it had not written yet, so write your results out before you speed the machine up rather than after.
+>
+> The processor also gets hotter the faster it runs. [`hw.temperature`](#hw.temperature) is worth reading before and after anything long.
+
+**Why two speeds and not a number.** The display is driven over a wire whose speed is divided down from the processor's, and the divider is coarse: only a processor speed that divides to the panel's own 75 MHz exactly keeps the display running at full speed. 150 and 300 both do. Speeds in between do not - at 200 MHz the display runs at 50 and at 250 it runs at 62.5 - so they make Logo faster and drawing slower, and on the whole they make a program that draws *slower*. There is no third speed worth having, so there is no third speed to ask for.
+
+Two things are briefly disturbed by the change, and both settle by the time it returns. Sound is silenced, because notes already queued were built for the old speed and would play at the wrong pitch. And on a board with wireless, the connection to the wireless chip is taken down and rebuilt at the new speed - it too is derived from the processor's clock. Anything the radio was doing carries on afterwards: a network connection is not dropped and a running server keeps listening, though a message in flight during the change may need to be sent again.
+
+**Example**:
+
+```logo
+; How much faster does the work go?
+?make "t ticks
+?repeat 20000 [make "x 1]
+?pr ticks - :t
+1080
+?hw.setcpu "fast
+?make "t ticks
+?repeat 20000 [make "x 1]
+?pr ticks - :t
+540
+?hw.setcpu "normal
 ```
 
 

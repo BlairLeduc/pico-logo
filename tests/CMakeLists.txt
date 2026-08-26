@@ -126,6 +126,18 @@ add_logo_test(test_p11rocks)
 target_compile_definitions(test_p11rocks PRIVATE
     P11ROCKS_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p11rocks")
 
+add_logo_test(test_p13m0)
+target_compile_definitions(test_p13m0 PRIVATE
+    P13M0_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p13m0")
+
+# Battlezone (P13), M1: the world, the camera, the treads, the horizon and the
+# gunsight. The game is pure Logo -- what the host can check is that the
+# projection is RIGHT, which is the half of this milestone a board cannot see.
+# The frame budget itself needs a board (tests/logo/p13m0).
+add_logo_test(test_battlezone)
+target_compile_definitions(test_battlezone PRIVATE
+    BATTLEZONE_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/battlezone")
+
 # P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
 # regression guard on relative numbers (interpreter-throughput-design.md §6).
 add_logo_test(test_bench_throughput)
@@ -221,6 +233,26 @@ target_include_directories(test_screen_refresh PRIVATE
 # screen.c rounds with floorf; glibc keeps that in libm (macOS does not).
 target_link_libraries(test_screen_refresh PRIVATE m)
 add_test(NAME test_screen_refresh COMMAND test_screen_refresh)
+
+# Where the text screen's lines are in split mode (B49). Same shape as
+# test_screen_refresh: the real screen.c against fake_lcd.c, which records the
+# text plane so a test can see which LCD row a write landed on.
+add_executable(test_screen_split_text
+    test_screen_split_text.c
+    fake_lcd.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/screen.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/dirty_tiles.c
+    ${CMAKE_SOURCE_DIR}/devices/stream.c
+    unity.c
+)
+target_include_directories(test_screen_split_text PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+target_link_libraries(test_screen_split_text PRIVATE m)
+add_test(NAME test_screen_split_text COMMAND test_screen_split_text)
 
 # LCD scroll mapping test — the pure arithmetic behind the panel's vertical
 # scroll, shared by the console, split mode and the editor.

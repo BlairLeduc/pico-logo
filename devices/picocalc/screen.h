@@ -23,7 +23,7 @@
 #define SCREEN_ROWS (SCREEN_HEIGHT / GLYPH_HEIGHT)                                    // Number of text rows that fit on the screen
 #define SCREEN_SPLIT_GFX_HEIGHT (240)                                                 // Height of the graphics area in split mode
 #define SCREEN_SPLIT_TXT_HEIGHT (SCREEN_HEIGHT - SCREEN_SPLIT_GFX_HEIGHT)             // Height of the text area in split mode
-#define SCREEN_SPLIT_TXT_ROW (SCREEN_HEIGHT - SCREEN_SPLIT_TXT_HEIGHT) / GLYPH_HEIGHT // Start row of text rows in split mode
+#define SCREEN_SPLIT_TXT_ROW ((SCREEN_HEIGHT - SCREEN_SPLIT_TXT_HEIGHT) / GLYPH_HEIGHT) // First text row shown in split mode
 #define SCREEN_SPLIT_TXT_ROWS (SCREEN_SPLIT_TXT_HEIGHT / GLYPH_HEIGHT)                // Number of text rows in split mode
 
 // Text palette defaults (indices into slots 0-15)

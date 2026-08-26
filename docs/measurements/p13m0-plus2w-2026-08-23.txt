@@ -1,0 +1,67 @@
+P13 M0 what a Battlezone frame costs, before any game code exists
+Board: Pimoroni Pico Plus 2 W.  Run 2026-08-23.
+
+NOTE: the `body` column reads 0.00 ms in every point and is WRONG.  `measure`'s
+accumulator was called `b` and `cam.setup` writes a global `b`; Logo is
+dynamically scoped, so the callee overwrote the caller's local once a frame.
+Fixed the same day (accumulators prefixed `m.`).  The series in
+battlezone-design.md section 12 is recovered from the `min` and `max` columns,
+which are computed from the same per-frame total and are correct.
+
+frames per point 200 in splitscreen, present with refresh
+
+Q3 does the 180x ratio hold
+arithmetic statement 53.5 us, P11 M0 measured 42 to 44.5
+bare repeat iteration 5 us, P11 M0 measured 4.5 to 7
+
+Q1 what a long line costs
+200 step edge 0.13 ms each
+17 step edge 0.0659999 ms each, P11 M0 measured 0.060 for fd 17
+if these are close, section 10 is right and length is nearly free
+
+Q2 what the present costs
+splitscreen 19.2 ms, section 6 predicts 19.7
+fullscreen 27.25 ms, P11 M0 measured 26.3
+the split saving is 8.05 ms
+
+Q4 and Q5 what the objects cost to project
+one box 3.145 ms, the design predicts 2.16
+the enemy 5.18 ms, the design predicts 6.0
+one box drawn, 12 edges in 20 statements 3.82 ms
+the horizon, 32 points scanned 13.845 ms, the design predicts 3.9 culled
+of 32 points, 7 were on screen
+the design assumed about 12 of them, which is the number to check
+
+the series
+1 objects plus the enemy
+body 0 ms present 19.785 ms
+of the body, projection 9.135 ms and drawing 23.46 ms
+the phase timers cost 34.36 ms and are not in the body figure
+frame 19.785 ms min 49 ms max 57 ms
+2 objects plus the enemy
+body 0 ms present 19.79 ms
+of the body, projection 12.865 ms and drawing 27.775 ms
+the phase timers cost 42.58 ms and are not in the body figure
+frame 19.79 ms min 56 ms max 69 ms
+4 objects plus the enemy
+body 0 ms present 19.81 ms
+of the body, projection 19.98 ms and drawing 35.955 ms
+the phase timers cost 58.445 ms and are not in the body figure
+frame 19.81 ms min 71 ms max 84 ms
+8 objects plus the enemy
+body 0 ms present 19.83 ms
+of the body, projection 34.8 ms and drawing 52.43 ms
+the phase timers cost 90.42 ms and are not in the body figure
+frame 19.83 ms min 105 ms max 112 ms
+
+what the design predicts, from docs/battlezone-design.md section 12
+51.2 ms total at 3 obstacles and 1 enemy, against 66.7 at 15 fps
+present 19.7, horizon 3.9, cull 3.3, boxes 6.5, enemy 6.0, edges 4.0
+
+the gate, from section 16
+under 66.7 ms build the game at L0
+66.7 to 71.4 spend the two gameplay levers in section 14
+over 71.4 stop and take L4, the drawmodel family
+
+nodes at start 28333 at end 27943 after recycle 27943
+word bytes free 25984 at start, 24268 at end, 25484 after recycle

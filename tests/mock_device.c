@@ -1393,6 +1393,14 @@ void mock_sound_set_status(int voice, bool sounding, int free_slots)
     mock_state.sound.free_slots[voice] = free_slots;
 }
 
+// The log holds 64 gates and stops recording when it is full, so a test that
+// drives a re-gated voice for more than a handful of frames -- the engine is
+// four gates a frame -- has to empty it before the part it means to read.
+void mock_sound_clear_gates(void)
+{
+    mock_state.sound.gate_count = 0;
+}
+
 int mock_sound_gate_count(void)
 {
     return mock_state.sound.gate_count;

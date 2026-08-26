@@ -2,10 +2,12 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Hardware primitives: hw.battery, hw.temperature, hw.light?, hw.setlight
+//  Hardware primitives: hw.battery, hw.temperature, hw.light?, hw.setlight,
+//                       hw.cpu, hw.setcpu
 //
 
 #include "primitives.h"
+#include "core/limits.h"
 #include "procedures.h"
 #include "memory.h"
 #include "format.h"
@@ -66,6 +68,83 @@ static Result prim_temperature(Evaluator *eval, int argc, Value *args)
     {
         float celsius = io->hardware->ops->get_temperature();
         return result_ok(value_number(roundf(celsius * 10.0f) / 10.0f));
+    }
+
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+}
+
+// hw.cpu
+// Which of the two clocks is running, read from the HARDWARE rather than
+// remembered -- so it still answers after anything else has retuned it, and a
+// `hw.setcpu` the board refused cannot read back as an overclock that bought
+// nothing.
+static Result prim_cpu(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->get_cpu_khz)
+    {
+        uint32_t khz = io->hardware->ops->get_cpu_khz();
+        Node word = mem_atom_cstr(khz >= LOGO_CPU_KHZ_FAST ? "fast" : "normal");
+        if (word == NODE_NIL)
+        {
+            return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+        }
+        return result_ok(value_word(word));
+    }
+
+    return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+}
+
+// hw.setcpu
+//
+// TWO CLOCKS, NAMED RATHER THAN NUMBERED, because there are only two worth
+// having. The RP2350 is rated to 150 MHz; `fast` is 300 and is an overclock,
+// which is why `hw.temperature` is worth reading after a long run at one. Every
+// clock in between is a net LOSS on this board -- the LCD's SPI prescaler is
+// coarse, so 200 and 250 MHz slow the display by more than they speed the
+// interpreter (see LOGO_CPU_KHZ_NORMAL in core/limits.h). A number would have
+// invited those; a word cannot express them.
+//
+// The device layer is what makes the change survivable: the core rail, the
+// LCD's SPI divisor, the sound engine's mix rate and the wireless chip's PIO
+// bus all have to be dealt with. See devices/picocalc/picocalc_hardware.c.
+static Result prim_setcpu(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc);
+
+    const char *str = value_to_string(args[0]);
+    uint32_t khz;
+
+    if (str == NULL)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, NULL);
+    }
+    if (strcasecmp(str, "normal") == 0)
+    {
+        khz = LOGO_CPU_KHZ_NORMAL;
+    }
+    else if (strcasecmp(str, "fast") == 0)
+    {
+        khz = LOGO_CPU_KHZ_FAST;
+    }
+    else
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, str);
+    }
+
+    LogoIO *io = primitives_get_io();
+    if (io && io->hardware && io->hardware->ops && io->hardware->ops->set_cpu_khz)
+    {
+        if (!io->hardware->ops->set_cpu_khz(khz))
+        {
+            // The board would not take it, and nothing moved. Reported rather
+            // than swallowed: a program that went on measuring against a clock
+            // it did not have would be measuring nothing.
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, str);
+        }
+        return result_none();
     }
 
     return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
@@ -295,6 +374,8 @@ void primitives_hardware_init(void)
     primitive_register("hw.temperature", 0, prim_temperature);
     primitive_register("hw.light?", 0, prim_lightp);
     primitive_register("hw.setlight", 1, prim_setlight);
+    primitive_register("hw.cpu", 0, prim_cpu);
+    primitive_register("hw.setcpu", 1, prim_setcpu);
     primitive_register("goodbye", 0, prim_goodbye);
     primitive_register(".bootsel", 0, prim_bootsel);
     primitive_register("toot", 2, prim_toot);

@@ -41,21 +41,47 @@ extern "C" {
 // Maximum global variable slots.
 //
 // COST: one slot is a 16-byte `Variable` (name pointer, Value, three
-// flags) in .bss, so this table is 3 KB on the target. Raising it does
-// not slow *reads* down: `find_global` scans `global_count`, not this
-// bound, so a lookup costs what the workspace actually holds. The two
-// paths that do walk the whole array are `variables_init` (once, at
-// startup) and creating a global that does not exist yet (once per
-// name) -- neither is on a frame loop's path.
+// flags) in .bss, so this table is 4 KB on the target -- 992 B more
+// than the 192 it was, measured as +0.19 points of SRAM on all three
+// boards (88.89/86.38/91.29 % to 89.08/86.57/91.48). That is the
+// whole cost: raising it does NOT slow reads down, because
+// `find_global` goes through the hash index in variables.c and a
+// lookup is a hash and a probe whatever the table holds. (A line
+// that used to stand here said a big workspace is a linear scan on
+// every read. It predates that index and was wrong when M3 raised
+// this.) The two paths that do walk the whole array are
+// `variables_init` (once, at startup) and creating a global that does
+// not exist yet (once per name) -- neither is on a frame loop's path.
 //
-// A big workspace is still a linear scan on every global read, so this
-// is not free to keep raising -- 192 is what lets a game (Turtle Trails
-// is the fattest at ~119) load with the frame profiler or a second
-// program on top, which 128 no longer did.
+// 254 is what BATTLEZONE NEEDS, and it is the first program in this
+// tree to come anywhere near the bound. Its P13 M2 -- the plain, the
+// obstacles, the enemy, both shells and the radar -- already stood at
+// 189 of the old 192, because the design pays for a 1.31x faster
+// frame by putting every hot-path temporary in the flat global
+// namespace (docs/battlezone-design.md section 13, L0.5). M3's lives,
+// score, four enemy kinds, two models, cracked screen, sound and high
+// score table add more and it does not fit. Turtle Trails, the
+// fattest game before it, is ~119.
+//
+// MEASURED, AND THE PEAK IS NOT THE LOAD-TIME COUNT: battlezone is 186
+// entries after `load` and 229 once a game has been played, because
+// fifty of its names are minted the first time a procedure that uses
+// them runs rather than by a top-level `make`. A board reported exactly
+// that gap -- on firmware built at 192 the file loads and the attract
+// screen runs, then the first spawn fails with `Out of space`. So the
+// number to check a program against is the one it reaches in play, and
+// `test_the_game_fits_the_global_table_with_room_to_spare` measures it
+// by playing rather than by reading the source.
+//
+// 254 IS THE CEILING OF THE CURRENT REPRESENTATION and not a round
+// number: `global_hash` holds slot + 1 in a `uint8_t`, which the
+// static assert below pins. Going further means widening those
+// entries, which is a real change and should be made by whatever
+// needs it rather than in advance.
 //
 // OVERFLOW: `var_set` returns `false` when the table is full; callers
 // surface this as `ERR_OUT_OF_SPACE`.
-#define MAX_GLOBAL_VARIABLES 192
+#define MAX_GLOBAL_VARIABLES 254
 
 // Maximum depth of the "currently executing procedure" name stack used
 // for the pause prompt and trace output. This is independent of the
@@ -363,6 +389,27 @@ extern "C" {
 // where there is nothing to be won by bounding it tighter.
 #define LOGO_EDITOR_PROC_BUFFER_SIZE 4096
 
+// The two clocks `hw.setcpu` selects, in kHz.
+//
+// `fast` is an overclock outside the RP2350's datasheet -- 150 MHz is its rated
+// maximum -- and 300 is here because that is what has been reported working on
+// this silicon, not because anything guarantees it. The failure modes are a
+// hang at the moment of the switch (the PLL or the flash timing), a corrupted
+// display (the LCD's SPI divisor, see devices/hardware.h), and heat, which is
+// why `hw.temperature` is worth reading either side of a long run.
+//
+// THERE IS NO THIRD CLOCK, and that is measured rather than a simplification.
+// The LCD's SPI prescaler divides clk_peri by an even number, so only clocks
+// that reach the panel's 75 MHz EXACTLY keep the display at full speed: 150
+// gives 75 (/2)
+// and 300 gives 75 (/4), while 200 gives 50 and 250 gives 62.5. An overclock to
+// 200 makes the interpreter 1.33x faster and the display 1.5x slower and is
+// worth 0.3 ms a frame; 300 is worth 17.5 and leaves the display where it
+// started. See battlezone-design.md section 12.3.1a for the measurements.
+#define LOGO_CPU_KHZ_NORMAL  150000u
+#define LOGO_CPU_KHZ_FAST    300000u
+
 #ifdef __cplusplus
 }
+
 #endif

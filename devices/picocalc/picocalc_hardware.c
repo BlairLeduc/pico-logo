@@ -22,10 +22,38 @@
 #include <pico/rand.h>
 #include <pico/bootrom.h>
 #include <hardware/adc.h>
+#include <hardware/clocks.h>
+#include <hardware/spi.h>
+#include <hardware/vreg.h>
+#ifdef PICO_PSRAM_CS_PIN
+#include <hardware/psram.h>
+#include <hardware/structs/qmi.h>
+#include <hardware/regs/qmi.h>
+#endif
+#include "lcd.h"
 #include <pico/status_led.h>
 
 #ifdef LOGO_HAS_WIFI
 #include <pico/cyw43_arch.h>
+// For CYW43_PIO_CLOCK_DIV_INT/_FRAC8 and cyw43_set_pio_clkdiv_int_frac8, which
+// `picocalc_set_cpu_khz` scales with the system clock. The setter exists only
+// when CYW43_PIO_CLOCK_DIV_DYNAMIC is on, which CMakeLists.txt does for every
+// WiFi build.
+#include <pico/cyw43_driver.h>
+// The bus half of the cyw43 driver, on its own. Taking it down and putting it
+// back is what lets an overclock retune the wireless SPI without disturbing the
+// driver, lwIP or an association -- see picocalc_set_cpu_khz.
+//
+// Declared here rather than by including <cyw43_spi.h>, which needs
+// <cyw43_internal.h> for `cyw43_int_t` -- a private type that is a reinterpret
+// of the public `cyw43_ll_t` (the driver's own CYW_INT_FROM_LL casts one to the
+// other, and a static_assert holds their sizes equal). Spelling the two
+// prototypes in terms of the public type is less reach than pulling the private
+// header in, and the cast the driver performs is the one performed here.
+struct _cyw43_int_t;
+extern int cyw43_spi_init(struct _cyw43_int_t *self);
+extern void cyw43_spi_deinit(struct _cyw43_int_t *self);
+#define CYW43_BUS_SELF ((struct _cyw43_int_t *)&cyw43_state.cyw43_ll)
 #include <lwip/ip4_addr.h>
 #include <lwip/icmp.h>
 #include <lwip/raw.h>
@@ -186,6 +214,242 @@ static bool ensure_status_led_initialized(void)
 #endif
     }
     return led_ready;
+}
+
+// The system clock.
+//
+// EVERYTHING ABOVE 150 MHz IS OUTSIDE THE RP2350'S DATASHEET. The bounds a
+// program may ask for are the core's (LOGO_CPU_MHZ_MIN..MAX); this function's
+// job is to make the change survivable, and there are three parts to that.
+//
+//   * VOLTAGE. The stock core rail is 1.10 V, which is what 150 MHz is rated
+//     against. Anything faster is raised to 1.20 V BEFORE the PLL moves and
+//     lowered again AFTER it comes back down, so the rail is never the lower of
+//     the two while the clock is the higher.
+//   * THE LCD, and this one bit twice. `spi_init` fixed the divisor once at
+//     startup against a 150 MHz clk_peri -- LCD_BAUDRATE is 75 MHz, clk_peri/2 --
+//     so the divisor has to be re-applied at the new clock. But `clk_peri` does
+//     NOT follow `clk_sys` by default: `set_sys_clock_pll` parks it on the USB
+//     PLL at 48 MHz whenever the system PLL moves, so `spi_set_baudrate(75 MHz)`
+//     could only deliver 24 and the present went from 19.6 ms to 58, flat across
+//     every overclock because 48 MHz does not care what clk_sys is doing.
+//     `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1` (CMakeLists.txt) keeps
+//     clk_peri attached; `spi_set_baudrate` then finds a real divisor.
+//
+//     NOTE THAT THE DIVIDERS ARE COARSE. The SPI divides clk_peri by an even
+//     prescale times a post-divider, so only clocks that reach 75 MHz exactly
+//     keep the display at full speed: 150 gives 75 (/2) and 300 gives 75 (/4),
+//     but 200 gives 50 and 250 gives 62.5. An overclock to 200 makes the
+//     interpreter 1.33x faster and the display 1.5x SLOWER.
+//   * THE SOUND ENGINE. The PWM slice takes its carrier straight from clk_sys,
+//     so the mix rate and the sequencer's block period both move with it. See
+//     sound_reclock().
+//   * THE WIRELESS CHIP, on a W board. The cyw43 driver talks to the CYW43439
+//     over a PIO SPI whose divider is 2 against clk_sys -- so at 250 MHz the bus
+//     runs at 62 MHz instead of 37 and the chip answers with garbage headers
+//     ("hdr mismatch", observed 2026-08-23). The divider is only read when the
+//     bus is brought up, so a running radio cannot simply be retuned.
+//
+//     IT CAN, HOWEVER, BE REBUILT. `cyw43_spi_init`/`cyw43_spi_deinit` are the
+//     BUS half of the driver on its own: deinit unclaims the PIO state machine
+//     and the two DMA channels and nulls `bus_data`, init claims them again and
+//     applies the current divider. Neither touches the chip, the firmware, the
+//     driver's state or lwIP -- so the association survives, the HTTP server's
+//     PCBs survive, and nothing dangles. That is why this no longer has to
+//     refuse while the radio is up, and why tearing down `cyw43_arch` (the
+//     first design, which would have taken lwIP with it) was the wrong seam.
+//
+//     The swap is done under the driver's own lock, with the bus down across
+//     the clock switch so nothing can transact at a rate that is briefly
+//     wrong.
+//
+//   * THE PSRAM, on a board that has any. `set_sys_clock_khz` leaves QMI timing
+//     alone, and the SDK computed the PSRAM window's divider, rx delay and
+//     deselect from clk_sys ONCE, before main. At 300 MHz all three are wrong in
+//     the unsafe direction at the same time and the part returns occasional bad
+//     data rather than failing -- B50, found as scattered corruption in the
+//     editor, whose buffers are what this project puts in PSRAM. See
+//     picocalc_retune_psram.
+//
+// What this can do LESS about is flash. The same is true of QMI M0 -- XIP runs
+// at the new clock too -- but the bootrom's divider there is conservative enough
+// that 300 MHz has run whole play tests on every board, and if flash could not
+// keep up the failure would be a hang at the moment of the switch rather than
+// quiet corruption. That is still worth trying from a script that has already
+// written its results to a file.
+#ifdef PICO_PSRAM_CS_PIN
+// B50. The QMI's timing for the PSRAM window is computed from `clk_sys` ONCE,
+// by the SDK's `psram_configure_params` during `runtime_init_setup_psram`,
+// before `main`. Move clk_sys afterwards and every field is wrong -- and at 300
+// MHz three of them are wrong in the unsafe direction at the same time: the
+// divider drives a 133 MHz part at 150, the rx delay samples a full cycle
+// early, and the minimum deselect halves in wall-clock to about 10 ns against
+// tCPH's 18. None of those faults; each returns occasional bad data, which is
+// how this was found -- scattered corruption in the editor, whose buffers are
+// the things this project puts in PSRAM (`primitives_editor_init`).
+//
+// Only the four timing values depend on the clock. The format, command and
+// quad-enable configuration `psram_initialize_internal` also writes do not, and
+// they are already in place -- so this is ONE REGISTER WRITE and deliberately
+// not `psram_reinitialize()`, which re-issues QUAD_ENABLE and calls
+// `flash_start_xip()`. An XIP teardown is not the way to change a timing field.
+//
+// The arithmetic is `psram_configure_params`'s, reproduced because it keeps its
+// results in statics the SDK does not expose. `psram_set_params` is still
+// called so the SDK's own copy agrees with the hardware, in case anything later
+// goes through `psram_reinitialize`.
+//
+// It writes M1 only, so flash XIP is untouched and this need not run from RAM.
+static void picocalc_retune_psram(void)
+{
+    if (!psram_is_available())
+    {
+        return;
+    }
+
+    const uint32_t clock_hz = clock_get_hz(clk_sys);
+    const uint32_t max_freq = PICO_DEFAULT_PSRAM_MAX_FREQ;
+
+    uint32_t divisor = (clock_hz + max_freq - 1u) / max_freq;
+    if (divisor == 1u && clock_hz > 100000000u)
+    {
+        divisor = 2u;
+    }
+    uint32_t rxdelay = divisor;
+    if (clock_hz / divisor > 100000000u)
+    {
+        rxdelay += 1u;
+    }
+
+    const uint32_t period_fs = (uint32_t)(1000000000000000ull / clock_hz);
+    const uint32_t max_select =
+        (uint32_t)(((uint64_t)PICO_DEFAULT_PSRAM_MAX_SELECT * 1000000ull) /
+                   (64ull * (uint64_t)period_fs));
+    const uint32_t min_deselect =
+        (uint32_t)((PICO_DEFAULT_PSRAM_MIN_DESELECT * 1000000u + (period_fs - 1u)) /
+                   period_fs) -
+        (divisor + 1u) / 2u;
+
+    qmi_hw->m[1].timing =
+        1u << QMI_M1_TIMING_COOLDOWN_LSB |
+        QMI_M1_TIMING_PAGEBREAK_VALUE_1024 << QMI_M1_TIMING_PAGEBREAK_LSB |
+        max_select << QMI_M1_TIMING_MAX_SELECT_LSB |
+        min_deselect << QMI_M1_TIMING_MIN_DESELECT_LSB |
+        rxdelay << QMI_M1_TIMING_RXDELAY_LSB |
+        divisor << QMI_M1_TIMING_CLKDIV_LSB;
+
+    (void)psram_set_params(divisor, rxdelay, max_select, min_deselect);
+}
+#endif
+
+static uint32_t picocalc_get_cpu_khz(void)
+{
+    return clock_get_hz(clk_sys) / 1000u;
+}
+
+static bool picocalc_set_cpu_khz(uint32_t khz)
+{
+    const uint32_t stock_khz = 150000u;
+    const uint32_t current = clock_get_hz(clk_sys) / 1000u;
+
+    if (khz == current)
+    {
+        return true;
+    }
+
+
+    // Up: raise the rail first. `set_sys_clock_khz` needs a settled voltage,
+    // and the SDK's own overclock examples allow a millisecond for it. Done
+    // before the lock below, so nothing is held across the settle.
+    const bool going_up = khz > current;
+    if (going_up && khz > stock_khz)
+    {
+        vreg_set_voltage(VREG_VOLTAGE_1_20);
+        sleep_ms(1);
+    }
+
+#ifdef LOGO_HAS_WIFI
+    // The radio comes up lazily, and not only for networking: the status LED
+    // lives on the wireless chip, so `hw.setlight` brings it up too. Whatever
+    // raised it, take its bus down for the duration -- a transaction at the
+    // wrong rate does not fail cleanly, it returns garbage.
+    const bool radio_up = wifi_initialized;
+    if (radio_up)
+    {
+        cyw43_arch_lwip_begin();    // the driver's own lock in this arch mode
+        cyw43_spi_deinit(CYW43_BUS_SELF);
+    }
+#endif
+
+    // `false` is the SDK's `required` flag: return false if the PLL cannot make
+    // this frequency, rather than panicking. It has nothing to do with
+    // peripherals -- those are this function's problem, and the comment that
+    // used to be here claiming otherwise is why clk_peri went unchecked.
+    if (!set_sys_clock_khz(khz, false))
+    {
+        // Nothing moved. Put the bus back exactly as it was and undo the rail.
+#ifdef LOGO_HAS_WIFI
+        if (radio_up)
+        {
+            cyw43_spi_init(CYW43_BUS_SELF);
+            cyw43_arch_lwip_end();
+        }
+#endif
+        if (going_up && khz > stock_khz)
+        {
+            vreg_set_voltage(VREG_VOLTAGE_1_10);
+        }
+        return false;
+    }
+
+#ifdef PICO_PSRAM_CS_PIN
+    // FIRST, before anything else and before any of the code below can touch a
+    // buffer that lives out there. Going UP is the dangerous direction -- the
+    // old divider drives the part above its rating -- so the window between the
+    // PLL moving and this write is the whole of the exposure, and it is a few
+    // instructions long. See picocalc_retune_psram (B50).
+    picocalc_retune_psram();
+#endif
+
+    // clk_peri moved with clk_sys (see the build define), so the panel is being
+    // driven at the wrong rate until this line runs. First thing to fix, before
+    // anything tries to present.
+    spi_set_baudrate(LCD_SPI, LCD_BAUDRATE);
+
+    sound_reclock();
+
+#ifdef LOGO_HAS_WIFI
+    // Hold the wireless bus at the rate it runs at when clk_sys is 150 MHz, by
+    // scaling its divider with the clock. The SDK reads this only when the bus
+    // is brought up -- which is the next line if the radio was already going,
+    // and `cyw43_arch_init` otherwise.
+    //
+    // 8.8 fixed point. The default divider is 2, so the widest case is
+    // 2 * 256 * 300000 / 150000 = 1024, comfortably inside the field.
+    {
+        const uint32_t base_q8 = (uint32_t)CYW43_PIO_CLOCK_DIV_INT * 256u +
+                                 (uint32_t)CYW43_PIO_CLOCK_DIV_FRAC8;
+        const uint32_t div_q8 = (base_q8 * khz) / stock_khz;
+        cyw43_set_pio_clkdiv_int_frac8(div_q8 / 256u, (uint8_t)(div_q8 % 256u));
+    }
+
+    if (radio_up)
+    {
+        // Can only fail by not finding a PIO state machine or two DMA channels,
+        // and it is claiming back the ones released a few microseconds ago, so
+        // there is nothing to recover from and nothing useful to report.
+        (void)cyw43_spi_init(CYW43_BUS_SELF);
+        cyw43_arch_lwip_end();
+    }
+#endif
+
+    // Down: drop the rail only once the clock is already slow.
+    if (!going_up && khz <= stock_khz)
+    {
+        vreg_set_voltage(VREG_VOLTAGE_1_10);
+    }
+
+    return true;
 }
 
 static bool picocalc_get_status_led(bool *on)
@@ -2198,6 +2462,8 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .get_temperature = picocalc_get_temperature,
     .get_status_led = picocalc_get_status_led,
     .set_status_led = picocalc_set_status_led,
+    .get_cpu_khz = picocalc_get_cpu_khz,
+    .set_cpu_khz = picocalc_set_cpu_khz,
     .power_off = picocalc_power_off,
     .reboot_bootloader = picocalc_reboot_bootloader,
     .check_user_interrupt = picocalc_check_user_interrupt,
