@@ -1258,6 +1258,18 @@ make "rd.bi 0
 
 ; Green as the cabinet's vectors were,
 ; red as its overlay band was.
+;
+; THE OVERLAY IS WHY THERE ARE TWO. The
+; cabinet's screen is a green tube with
+; a red band of plastic across the top
+; of it, so the radar and the cracked
+; glass are red and everything inside
+; the view -- the plain, and the sight
+; standing in front of it -- is green.
+; The sight borrows `world.colour` when
+; it is resting for exactly that reason,
+; and spends the red only on the frames
+; it has something in it. See the sight.
 make "world.colour 249
 make "moon.colour 254
 make "sight.colour 248
@@ -2390,11 +2402,37 @@ end
 ; IT AT ALL, exactly as P11 section 6.1
 ; writes an outline: eight edges in
 ; sixteen statements, every one of them
-; a literal, in the cabinet's red rather
-; than the world's green. Drawn after
-; the whole plain so that it sits over
-; anything the world put in the middle
-; of the view.
+; a literal. Drawn after the whole plain
+; so that it sits over anything the
+; world put in the middle of the view.
+;
+; THE CABINET HAS TWO OF THEM AND THE
+; SHAPE IS THE MESSAGE. The ROM keeps
+; `vg_reticle1` for "no target" and
+; `vg_reticle2` for "target", picks
+; between them every frame at $50f3, and
+; the second is the first with its four
+; teeth swung round to 45 degrees so
+; they point INTO the middle. Nothing
+; else in the game tells you the gun is
+; on something before you fire, so this
+; is a MECHANIC and not a decoration --
+; the shot is taken on the shape of the
+; sight, not on a guess about the range.
+;
+; RESTING IT IS THE WORLD'S GREEN AND
+; LOCKED IT IS THE OVERLAY'S RED, which
+; is our reading of the cabinet's glass
+; rather than its ROM's: the tube is
+; green and the plastic band is red, so
+; a reticle down in the view was always
+; green there and could never change.
+; This display has colour where the
+; cabinet had a sheet of plastic, so the
+; lock says itself twice -- once in the
+; teeth, once in the colour -- and a
+; player watching the middle of the
+; screen sees the second one first.
 ;
 ; TWO BRACKETS FACING EACH OTHER, with a
 ; stalk running outward from each. The
@@ -2435,7 +2473,9 @@ end
 ; stroke but that no stroke lies on `hz`
 ; or crosses it, which is what the test
 ; checks and why it has no opinion about
-; the shape.
+; the shape. IT HOLDS FOR BOTH FORMS:
+; the locked teeth reach in to +/-14 of
+; the aiming point and stop there.
 ;
 ; THE GAP IS THE POINT OF THE SHAPE. The
 ; aiming point is (0, 40) -- a shell
@@ -2448,8 +2488,46 @@ end
 ; frame that says where the gun is
 ; pointing without ever covering what it
 ; is pointing at.
+
+; THE ROM'S TEST IS A BEARING AND
+; NOTHING ELSE. $50e7 compares the
+; player-to-enemy angle against 2/256ths
+; of a turn -- 2.8125 degrees, tangent
+; 0.0491 -- and range does not enter it,
+; so a tank on the horizon locks the
+; sight as readily as one about to run
+; you down. The camera-frame pair
+; `step.enemy` already computed is all
+; it takes, which is the same saving the
+; blip makes: no arctangent and no
+; distance.
+;
+; AND IT NEEDS NO "IS IT IN FRONT" TEST,
+; because `:e.zc * 0.0491` goes negative
+; behind you and no absolute value is
+; ever less than a negative number. The
+; enemy 2.8 degrees off your BACK does
+; not light the sight.
+;
+; At k = 260 that half-angle is 12.8
+; pixels of screen, which is inside the
+; gap: the thing the sight has locked is
+; always in the clear air it frames.
+to in.sights
+  if not :e.alive [output "false]
+  output (abs :e.xc) < :e.zc * 0.0491
+end
+
 to gunsight
-  setpc :sight.colour
+  if in.sights [sight.lock stop]
+  sight.free
+end
+
+; The teeth stand out from the bars,
+; parallel to the stalks: an empty frame
+; and no direction in it.
+to sight.free
+  setpc :world.colour
   pu (setpos 0 70) pd (setpos 0 100)
   pu (setpos 0 10) pd (setpos 0 -20)
   pu (setpos -30 70) pd (setpos 30 70)
@@ -2458,6 +2536,26 @@ to gunsight
   pu (setpos 30 70) pd (setpos 30 55)
   pu (setpos -30 10) pd (setpos -30 25)
   pu (setpos 30 10) pd (setpos 30 25)
+  pu
+end
+
+; The same eight edges with the teeth
+; swung to 45 degrees, each running from
+; the end of its bar back in to (+/-14,
+; 40 +/-14) -- and the stalks lengthened
+; to those same rows, so the four teeth
+; and the two stalks all point at the
+; one spot the shell is going to.
+to sight.lock
+  setpc :sight.colour
+  pu (setpos 0 54) pd (setpos 0 100)
+  pu (setpos 0 26) pd (setpos 0 -20)
+  pu (setpos -30 70) pd (setpos 30 70)
+  pu (setpos -30 10) pd (setpos 30 10)
+  pu (setpos -30 70) pd (setpos -14 54)
+  pu (setpos 30 70) pd (setpos 14 54)
+  pu (setpos -30 10) pd (setpos -14 26)
+  pu (setpos 30 10) pd (setpos 14 26)
   pu
 end
 

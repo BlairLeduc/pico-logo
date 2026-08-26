@@ -778,6 +778,33 @@ you can see on the glass.
 procedure with no arithmetic in it at all, exactly as P11 §6.1 writes an
 outline. ~1.5 ms with the HUD text.
 
+**The cabinet has two of them and the shape is the message.** The ROM keeps
+`vg_reticle1` for "no target" and `vg_reticle2` for "target", picks between
+them every frame at $50f3, and the second is the first with its four teeth
+swung round to 45° so that they point *into* the middle — with the stalks
+lengthened to the same rows, so teeth and stalks all aim at the one spot the
+shell is going to. Nothing else in the game tells the player the gun is on
+something before they fire, so this is a **mechanic and not a decoration**.
+`sight.free` and `sight.lock` are the two forms and `gunsight` picks.
+
+**The test is a bearing and nothing else.** $50e7 compares the player-to-enemy
+angle against 2/256ths of a turn — 2.8125°, tangent 0.0491 — and the range does
+not enter it, so a tank on the horizon locks as readily as one about to run you
+down. `in.sights` is two statements over the camera-frame `(xc, zc)`
+`step.enemy` already computed: the same saving the blip makes, no arctangent and
+no distance. **It needs no "is it in front of you" test**, because `zc × 0.0491`
+goes negative behind you and no absolute value is less than a negative number.
+At k = 260 the half-angle is 12.8 px, so what the sight has locked is always
+inside the gap it frames.
+
+**Resting it is the world's green and locked it is the overlay's red**, which is
+our reading of the cabinet's *glass* rather than of its ROM: the tube is green
+and the band of plastic across the top is red, so a reticle down in the view was
+always green there and could never change. This display has colour where the
+cabinet had a sheet of plastic, so the lock says itself twice — once in the
+teeth, once in the colour — and a player watching the middle of the screen sees
+the second one first.
+
 **It has no horizontal line in it, and §8.3a is why.** It was two long arms at
 y = 40 with the verticals hanging off them — and 40 is `hz`, so the arms lay
 exactly along the ground line. Two things drawn on the same row of pixels in two
@@ -790,12 +817,16 @@ bar 30 below with its ends turning *up*, and a stalk leaving outward along the
 centreline from each. Every number is mirrored about y = 40 — bars at ±30, teeth
 reaching back in to ±15, stalks from ±30 out to ±60, ±30 of width — and that
 symmetry is the part to preserve if it is redrawn, because a sight that is not
-symmetric about its aiming point says the gun is somewhere it is not.
+symmetric about its aiming point says the gun is somewhere it is not. The locked
+form keeps every one of those numbers and turns only the teeth, so the frame
+does not jump between the two: a sight whose bars moved would read as two
+sights rather than as one changing.
 
 **The bars are horizontal, and that was never the problem.** What matters is not
 the direction of a stroke but that no stroke lies on `hz` or crosses it — which
-is what `test_no_part_of_the_gunsight_lies_along_the_horizon` checks, and why it
-has no opinion about the shape. **The gap is the point**: a shell flies at eye
+is what `test_no_part_of_the_gunsight_lies_along_the_horizon` checks for **both
+forms**, and why it has no opinion about the shape — the locked teeth reach in
+to ±14 of the aiming point and stop there. **The gap is the point**: a shell flies at eye
 height and so appears at y = `hz`, dead centre when aimed, which is on the
 horizon and is exactly where the target is. The middle thirty rows are left
 empty, so the sight frames what it is pointing at without ever covering it.

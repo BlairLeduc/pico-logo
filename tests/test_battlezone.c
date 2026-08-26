@@ -753,6 +753,7 @@ void test_a_pyramid_draws_eight_edges(void)
 
 void test_the_gunsight_is_a_fixed_overlay(void)
 {
+    run("make \"e.alive false");
     mock_device_clear_graphics();
     run("gunsight");
     TEST_ASSERT_EQUAL_INT(EDGES_SIGHT, mock_device_line_count());
@@ -780,31 +781,238 @@ void test_the_gunsight_is_a_fixed_overlay(void)
 // a horizon at y = 40.  What has to hold is that no stroke lies ON `hz`, and
 // that the aiming point stays in clear air -- so this checks those two things
 // and leaves the shape free to change.
+//
+// IT HOLDS FOR BOTH FORMS.  The locked sight swings its teeth in toward the
+// middle, which is exactly the direction the horizon is, so it is the form
+// most able to break this and the one worth naming in the loop.
 void test_no_part_of_the_gunsight_lies_along_the_horizon(void)
 {
     const float hz = num(":hz");
-    mock_device_clear_graphics();
-    run("gunsight");
-    TEST_ASSERT_EQUAL_INT(EDGES_SIGHT, mock_device_line_count());
+    static const char *const forms[] = {"sight.free", "sight.lock"};
 
-    for (int i = 0; i < mock_device_line_count(); i++)
+    for (int f = 0; f < 2; f++)
     {
-        const MockLine *l = mock_device_get_line(i);
-        const float lo = l->y1 < l->y2 ? l->y1 : l->y2;
-        const float hi = l->y1 < l->y2 ? l->y2 : l->y1;
+        mock_device_clear_graphics();
+        run(forms[f]);
+        TEST_ASSERT_EQUAL_INT(EDGES_SIGHT, mock_device_line_count());
 
-        // Not lying along the horizon, and not crossing it either: a stroke
-        // through `hz` is a stroke through the target and through the shell.
-        TEST_ASSERT_FALSE_MESSAGE(lo <= hz && hz <= hi,
-                                  "a gunsight segment sits on the horizon");
+        for (int i = 0; i < mock_device_line_count(); i++)
+        {
+            const MockLine *l = mock_device_get_line(i);
+            const float lo = l->y1 < l->y2 ? l->y1 : l->y2;
+            const float hi = l->y1 < l->y2 ? l->y2 : l->y1;
+
+            // Not lying along the horizon, and not crossing it either: a stroke
+            // through `hz` is a stroke through the target and through the shell.
+            char msg[80];
+            snprintf(msg, sizeof(msg), "a %s segment sits on the horizon", forms[f]);
+            TEST_ASSERT_FALSE_MESSAGE(lo <= hz && hz <= hi, msg);
+        }
     }
 }
 
-// A drawn obstacle is worth nothing if it is drawn in the wrong colour, and the
-// cabinet's overlay is the reason the sight is not the world's green.
-void test_the_sight_and_the_world_are_different_colours(void)
+// A drawn object is worth nothing if it is drawn in the wrong colour, and the
+// cabinet's glass is the reason there are two.  The tube is green and the band
+// of plastic across the top of it is red, so the sight standing down in the
+// view is the world's green while it is resting -- and the red, which the
+// cabinet spends on the radar, is what this display has left to say "locked"
+// with.
+void test_the_resting_sight_is_the_world_and_the_locked_one_is_not(void)
 {
     TEST_ASSERT_TRUE(num(":sight.colour") != num(":world.colour"));
+
+    mock_device_clear_graphics();
+    run("sight.free");
+    for (int i = 0; i < mock_device_line_count(); i++)
+        TEST_ASSERT_EQUAL_INT_MESSAGE((int)num(":world.colour"), mock_device_get_line(i)->colour,
+                                      "the resting sight is not the world's green");
+
+    mock_device_clear_graphics();
+    run("sight.lock");
+    for (int i = 0; i < mock_device_line_count(); i++)
+        TEST_ASSERT_EQUAL_INT_MESSAGE((int)num(":sight.colour"), mock_device_get_line(i)->colour,
+                                      "the locked sight is not the overlay's red");
+}
+
+// The ROM picks between `vg_reticle1` and `vg_reticle2` at $50f3, and the
+// second is the first with its four teeth swung round to 45 degrees so that
+// they point INTO the middle.  That is the whole difference and it is the
+// message: the shape says the gun is on something before you fire.
+//
+// The bars do not move -- a sight whose frame jumped would read as two sights
+// rather than as one changing -- so this checks that the four horizontals are
+// identical between the forms and that the teeth are not.
+void test_the_locked_sight_turns_its_teeth_toward_the_middle(void)
+{
+    const float hz = num(":hz");
+
+    mock_device_clear_graphics();
+    run("sight.lock");
+    TEST_ASSERT_EQUAL_INT(EDGES_SIGHT, mock_device_line_count());
+
+    int teeth = 0;
+    for (int i = 0; i < mock_device_line_count(); i++)
+    {
+        const MockLine *l = mock_device_get_line(i);
+        const bool horizontal = fabsf(l->y1 - l->y2) < 0.01f;
+        const bool vertical = fabsf(l->x1 - l->x2) < 0.01f;
+        if (horizontal || vertical)
+            continue;
+        teeth++;
+
+        // A tooth runs from the end of a bar back in toward the aiming point,
+        // in both axes at once: nearer the centreline AND nearer the eye line
+        // at the inner end than at the outer one.
+        const bool a_is_outer = fabsf(l->x1) > fabsf(l->x2);
+        const float xo = a_is_outer ? l->x1 : l->x2, xi = a_is_outer ? l->x2 : l->x1;
+        const float yo = a_is_outer ? l->y1 : l->y2, yi = a_is_outer ? l->y2 : l->y1;
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(xi) < fabsf(xo), "a tooth does not turn in");
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(yi - hz) < fabsf(yo - hz),
+                                 "a tooth does not reach back toward the eye line");
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, fabsf(xo - xi), fabsf(yo - yi),
+                                         "a tooth is not at 45 degrees");
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, teeth, "the locked sight is not four teeth and four straights");
+
+    // The resting sight has none of them: its teeth stand out from the bars,
+    // parallel to the stalks.
+    mock_device_clear_graphics();
+    run("sight.free");
+    for (int i = 0; i < mock_device_line_count(); i++)
+    {
+        const MockLine *l = mock_device_get_line(i);
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(l->x1 - l->x2) < 0.01f || fabsf(l->y1 - l->y2) < 0.01f,
+                                 "the resting sight has a diagonal in it");
+    }
+}
+
+// Two strokes are the same stroke if they join the same two points, whichever
+// end the pen started at.
+static bool same_segment(float x1, float y1, float x2, float y2, const MockLine *m)
+{
+    const bool fwd = fabsf(x1 - m->x1) < 0.01f && fabsf(y1 - m->y1) < 0.01f &&
+                     fabsf(x2 - m->x2) < 0.01f && fabsf(y2 - m->y2) < 0.01f;
+    const bool rev = fabsf(x1 - m->x2) < 0.01f && fabsf(y1 - m->y2) < 0.01f &&
+                     fabsf(x2 - m->x1) < 0.01f && fabsf(y2 - m->y1) < 0.01f;
+    return fwd || rev;
+}
+
+// Both forms are mirrored about the aiming point, which is the property a sight
+// cannot lose: one that is not symmetric says the gun is somewhere it is not.
+void test_both_sights_are_symmetric_about_the_aiming_point(void)
+{
+    static const char *const forms[] = {"sight.free", "sight.lock"};
+    const float hz = num(":hz");
+
+    for (int f = 0; f < 2; f++)
+    {
+        mock_device_clear_graphics();
+        run(forms[f]);
+        const int n = mock_device_line_count();
+
+        // Every stroke has its mirror image in x, and its mirror in y about hz.
+        for (int i = 0; i < n; i++)
+        {
+            const MockLine *l = mock_device_get_line(i);
+            // Endpoint ORDER is not part of the shape: a bar drawn left to
+            // right is its own mirror image, drawn in the same direction.
+            bool mx = false, my = false;
+            for (int j = 0; j < n; j++)
+            {
+                const MockLine *m = mock_device_get_line(j);
+                mx = mx || same_segment(-l->x1, l->y1, -l->x2, l->y2, m);
+                my = my || same_segment(l->x1, 2 * hz - l->y1, l->x2, 2 * hz - l->y2, m);
+            }
+            char msg[96];
+            snprintf(msg, sizeof(msg), "%s is not symmetric about its aiming point", forms[f]);
+            TEST_ASSERT_TRUE_MESSAGE(mx && my, msg);
+        }
+    }
+}
+
+//--------------------------------------------------------------------------
+// What the sight locks on
+//--------------------------------------------------------------------------
+
+// The ROM's test is a bearing and nothing else: $50e7 compares the angle to the
+// enemy against 2/256ths of a turn -- 2.8125 degrees -- and the range does not
+// enter it.  So the same bearing locks at any distance, and this checks it at
+// two that differ by more than three times.
+void test_the_sight_locks_on_a_bearing_and_not_a_range(void)
+{
+    // tan 2.8125 degrees is 0.0491, so at z the sight holds out to 0.0491 z.
+    // The plain wraps at `half.world`, so both distances stay inside it or the
+    // enemy comes round behind the camera.
+    static const float z[] = {200.0f, 700.0f};
+
+    for (int i = 0; i < 2; i++)
+    {
+        char msg[96];
+        camera_at(800, 800, 0);
+
+        foe_at(1, 800 + z[i] * 0.03f, 800 + z[i], 180);
+        snprintf(msg, sizeof(msg), "1.7 degrees off at %g steps did not lock the sight", z[i]);
+        TEST_ASSERT_TRUE_MESSAGE(truth("in.sights"), msg);
+
+        foe_at(1, 800 + z[i] * 0.07f, 800 + z[i], 180);
+        snprintf(msg, sizeof(msg), "4 degrees off at %g steps locked the sight", z[i]);
+        TEST_ASSERT_FALSE_MESSAGE(truth("in.sights"), msg);
+    }
+}
+
+// And what it locks is always in the clear air the sight frames.  At k = 260
+// the half-angle is 12.8 pixels of screen against a gap of 30, so a sight that
+// has locked has never covered the thing it locked on to.
+void test_what_the_sight_locks_is_inside_its_gap(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(1, 800 + 34.0f, 800 + 700.0f, 180);
+    TEST_ASSERT_TRUE_MESSAGE(truth("in.sights"), "the edge of the lock is not locked");
+
+    const float x = num(":e.xc") * num(":k") / num(":e.zc");
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(x) < 30.0f, "a locked target is under the sight's own frame");
+}
+
+// It needs no "is it in front of you" test, because the threshold it compares
+// against goes negative behind you and no absolute value is less than a
+// negative number.  The enemy 2.8 degrees off your BACK does not light the
+// sight, and that is worth a test because it is an absence in the code.
+void test_the_sight_does_not_lock_on_what_is_behind_you(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(1, 800 + 10.0f, 800 - 400.0f, 0);
+    TEST_ASSERT_TRUE_MESSAGE(0 > num(":e.zc"), "the enemy is not behind the camera");
+    TEST_ASSERT_FALSE_MESSAGE(truth("in.sights"), "the sight locked on something behind you");
+}
+
+// A wreck is not a target.  `e.alive` goes false the moment the shell lands,
+// and a sight still locked on the explosion would be telling the player to
+// spend a round on it.
+void test_a_dead_enemy_does_not_lock_the_sight(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 800 + 500.0f, 180);
+    TEST_ASSERT_TRUE(truth("in.sights"));
+    run("make \"e.alive false");
+    TEST_ASSERT_FALSE_MESSAGE(truth("in.sights"), "a dead enemy still locks the sight");
+}
+
+// And the frame draws whichever form the bearing asks for, which is the only
+// thing that joins the two halves of this section.
+void test_the_frame_draws_the_form_the_bearing_asks_for(void)
+{
+    camera_at(800, 800, 0);
+    foe_at(1, 800, 800 + 500.0f, 180);
+    mock_device_clear_graphics();
+    run("gunsight");
+    TEST_ASSERT_EQUAL_INT_MESSAGE((int)num(":sight.colour"), mock_device_get_line(0)->colour,
+                                  "an enemy dead ahead did not draw the locked sight");
+
+    foe_at(1, 800 + 400.0f, 800 + 500.0f, 180);
+    mock_device_clear_graphics();
+    run("gunsight");
+    TEST_ASSERT_EQUAL_INT_MESSAGE((int)num(":world.colour"), mock_device_get_line(0)->colour,
+                                  "an enemy 39 degrees off drew the locked sight");
 }
 
 //==========================================================================
@@ -5374,7 +5582,14 @@ int main(void)
     RUN_TEST(test_a_pyramid_draws_eight_edges);
     RUN_TEST(test_the_gunsight_is_a_fixed_overlay);
     RUN_TEST(test_no_part_of_the_gunsight_lies_along_the_horizon);
-    RUN_TEST(test_the_sight_and_the_world_are_different_colours);
+    RUN_TEST(test_the_resting_sight_is_the_world_and_the_locked_one_is_not);
+    RUN_TEST(test_the_locked_sight_turns_its_teeth_toward_the_middle);
+    RUN_TEST(test_both_sights_are_symmetric_about_the_aiming_point);
+    RUN_TEST(test_the_sight_locks_on_a_bearing_and_not_a_range);
+    RUN_TEST(test_what_the_sight_locks_is_inside_its_gap);
+    RUN_TEST(test_the_sight_does_not_lock_on_what_is_behind_you);
+    RUN_TEST(test_a_dead_enemy_does_not_lock_the_sight);
+    RUN_TEST(test_the_frame_draws_the_form_the_bearing_asks_for);
     RUN_TEST(test_the_field_is_on_the_plain_and_clear_of_the_start);
     RUN_TEST(test_nothing_in_view_is_culled_by_distance);
     RUN_TEST(test_obstacles_behind_the_camera_do_not_crowd_out_the_one_in_front);
