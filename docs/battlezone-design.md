@@ -92,7 +92,9 @@ The arcade rules, kept:
   movement and block shots, and can be hidden behind.
 - The horizon carries a **mountain range**, a **volcano** and a **crescent
   moon**. They are at infinity: they scroll with your heading and never with
-  your position. They are the only way to tell that you are turning.
+  your position. They are the only way to tell that you are turning. The
+  volcano **throws sparks** out of its crater, and they are the one thing on
+  the backdrop that moves (§16.13).
 - One enemy at a time: a **tank** (hunts you), a **supertank** (faster,
   smarter), a **missile** (flies straight at you, dodgeable), or a **saucer**
   (drifts, harmless, worth points). **Which one, and how hard it plays, is the
@@ -3233,6 +3235,140 @@ that has to be looked for — and **whether your own gun at seven steps rewards
 closing or just frustrates**, since halving the enemy's corridor halved yours by
 the same argument.
 
+### 16.13 The volcano throws sparks, and the backdrop moves for the first time
+
+The board's list had one more thing on it than §16.12 answered: the cabinet's
+volcano *erupts*. Everything else on this horizon is a silhouette that scrolls
+with the heading and is otherwise still, and the ROM keeps exactly one moving
+thing out there — five points arcing out of the crater and falling back.
+
+**`UpdateVolcano` (`$58ba`) and `DrawVolParts` (`$5824`) are 90 bytes and this
+is a conversion of both.** Five slots; a 1-in-8 roll fills a free one on any
+frame; a new particle gets a sideways velocity of 1–5 and an upward one of
+5–12; the upward one is decremented every frame, which is gravity; the particle
+dies when it falls back to the ground. It is drawn as a **point** whose
+intensity is the top three bits of its own countdown, so a spark leaves the vent
+bright and dims as it flies.
+
+**One conversion carries all of it, and it is the vent.** The ROM's source point
+is 94 units above the horizon and a particle dies at −94, so the fall is exactly
+the height of the cone. Here the crater notch is `item 17 :mtn` = 56 above `hz`,
+which makes the ratio 56/94 = 0.6, and it is spent on the upward velocity and on
+gravity: 5–12 up becomes 6–14 and gravity 1 becomes 2.4 — each **doubled
+again** because the cabinet updates at 30 Hz and this frame is 15, and gravity
+twice because it is an acceleration. The spawn roll doubles the same way:
+1-in-8 a frame there is 1-in-4 here, so the vent throws the same number of
+sparks *a second*.
+
+That arithmetic is checkable rather than plausible: a spark thrown at 14 tops
+out 41 above the notch and is back on the ground in 15 frames, which is where
+the countdown is set — so **both limits fire**, the way the ROM's 31 and its
+−94 both do. Neither is decoration for the other. And 41 is checked against the
+glass as well: §6 leaves 120 steps of sky above the horizon, the lip takes 66 of
+them, so the cone's height and the height of its own throw are one number
+against one ceiling.
+
+**The sideways velocity is the one thing not converted, and the crater is why.**
+1–5 through the same ratio and doubling is 1.2–6, and a spark thrown at 6
+clears the lip in seven frames and falls down the *outside* of the cone, where
+it reads as coming off the ridge rather than out of the vent. The mouth is 18°
+wide — about 82 steps at `k` — so the drift has to stay inside 41, and 0.5–2
+over a flight of at most 15 frames reaches 30. A thinner volcano is a tighter
+fountain, and that is the trade the shape asks for.
+
+**The bearing is the table's, not a new number.** The volcano is already in
+`mtn`: §9's silhouette puts the crater notch at its 17th point and the points
+are 9 degrees apart, so the vent is at 16 · 9 = **144**, and the sparks are
+placed through the same `k · tan` the ridge line's own vertex is drawn through.
+That is what puts them *in* the crater instead of near it, and
+`test_the_vent_is_the_craters_own_notch` re-derives the index from `mn.step`,
+checks that the point it lands on is a notch between two higher lips, and reads
+the height a fresh spark starts at back out of the particle list — so the table
+and the vent cannot drift apart.
+
+#### 16.13.1 The one deviation is the update, not the draw
+
+The ROM steps its particles on **every** frame and culls only the drawing
+(`$5819`'s `$39`–`$87` facing window). Here the cull covers both, because five
+sparks stepped and drawn is about **2.7 ms** — eleven statements a spark at
+§16.2's 48.5 µs — and every millisecond of it would otherwise be spent on
+frames where the volcano is behind you. Three quarters of headings pay nothing
+at all.
+
+What it costs is that a spark **hangs where it was** while you look away and
+resumes its arc when you look back. Nothing on screen can show that, because
+looking away is what makes it true — and it is worth saying plainly that this
+is the argument, since "the player cannot see it" is the reasoning that has to
+be checked hardest. `test_a_volcano_behind_you_costs_nothing` pins both halves:
+no dots, and no state moved either.
+
+The window is **45 degrees** either side rather than the ROM's 27. A spark
+drifts up to 25 steps off the vent and the view already ends at 31.6, so 27
+would let one pop in at the edge; at 45 the vent is 260 steps out, well past the
+frame, and an off-screen dot costs nothing but the arithmetic that placed it.
+
+#### 16.13.2 White, and two levels where the cabinet ramps eight
+
+Intensity is the one thing the vector cabinet has that this display does not.
+The blip already trades it for length (§10) and the sparks trade it for
+**colour**: white while the countdown is above 7, the palette's neutral grey
+below it. It is the countdown that picks, not the height — a spark cools as it
+flies, whichever way it is going — and it is one `if` and one `setpc` a spark
+rather than a ramp, because a ramp is a divide and an `item` on every one of
+them.
+
+**White is a deviation and it is deliberate.** The cabinet had one phosphor and
+no choice; this display has colour, and the sparks are the one thing in the
+scene that is not a wireframe *object* — they are hot rock, and white is what
+hot reads as against a green ridge. Same argument the locked reticle makes for
+its red (§11): a colour the tube could not have is spent where it says
+something. They borrow `moon.colour` rather than minting a name, because the
+moon is already the white thing on this horizon.
+
+#### 16.13.3 The cone is thin and tall, and the two go together
+
+The first cut drew the volcano as a broad rise — six points from 22 up to 52
+and back down over 63° — and at this scale that is a **hill**. A silhouette has
+no shading to say which of two slopes is the steep one, so width is the only
+cue a wireframe cone has, and 63° of it is most of a 63° view. Half the width
+and a third more height: `mtn` 15–19 now runs 18, 62, 56, 66, 20, which is one
+steep flank up, the lip–notch–lip the vent sits in, and one steep flank down,
+inside 36°. It reads as a volcano in one frame instead of in the turn that
+reveals its shape.
+
+The height is bounded by the glass rather than by taste, which is what makes
+the number defensible: §6's presented band is y ∈ [−79, 160] with the horizon
+at 40, so there are 120 steps of sky, the lip takes 66 and the sparks want 41
+of what is left. A taller cone throws its own sparks off the top of the
+screen.
+
+#### 16.13.4 The global table had no room, and the moon paid for it
+
+§16.12.4 left the peak at **238 of 254** with 16 budgeted for whatever else is
+in the workspace, so the honest answer to "where does the particle list go" was
+*nowhere*. Three things got it in at 238:
+
+- **The state is one name.** Five fields a spark — countdown, sideways
+  velocity, upward velocity, screen offset, screen y — in one flat 25-member
+  list, walked by a base index and mutated with `.setitem`, which allocates
+  nothing. Five parallel lists would have been five slots.
+- **Every temporary is `local`.** L0.5 (§13) puts hot-path temporaries in the
+  global namespace for a 1.31× frame, and the volcano declines it: seven names
+  scoped instead, at a read cost that is 1.5× of nearly nothing on a procedure
+  that runs on a quarter of frames.
+- **The moon gave up both of its names.** `mt.m2` was only ever the first
+  centre plus ten, and the first arc is finished before the offset is taken, so
+  `mt.m` now carries both; and `mt.m` itself is `local` to `moon`, which
+  `draw.moon` reads through the same dynamic scope that makes a bare temporary
+  dangerous elsewhere.
+
+**And the budget test was under-measuring, which is §16.12.4's own lesson
+again.** It plays at heading 0, where the moon and the volcano are both off the
+side — so `moon` was minting `mt.m` on every frame of it but `draw.moon` never
+ran, and a volcano that never fires never reaches a name either. The test now
+faces each of them once before it reads the peak. The count was never wrong
+about what it counted; it was wrong about what it had run.
+
 ## 17. Tests
 
 `tests/test_battlezone.c` on the mock device, mirroring `test_asteroids.c`'s
@@ -3257,6 +3393,12 @@ are specific to this game:
   The test comes back the moment a `p13m*` script spells a frame out again.
 - **The horizon cull keeps the visible points.** Off-by-one at the field-of-view
   edge is a mountain that flicks in and out as you turn.
+- **The volcano's sparks come out of the crater and land on the ground.** The
+  vent bearing is re-derived from the horizon table rather than repeated, the
+  arc is stepped by hand for one spark so that it is checked rather than
+  sampled, and the frame a spark reaches the ground is a frame it is killed on
+  and not drawn on — a point drawn *at* the horizon reads as a hole in the
+  ridge line (§16.13).
 
 M2's additions, and the failure each exists for:
 

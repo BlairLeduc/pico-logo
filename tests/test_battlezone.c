@@ -1392,6 +1392,237 @@ void test_the_moon_appears_only_when_it_is_in_view(void)
 }
 
 //==========================================================================
+// The volcano
+//==========================================================================
+
+// Five particle slots, five fields each: countdown, sideways velocity, upward
+// velocity, screen offset, screen y.
+#define VP_SLOTS 5
+#define VP_FIELDS 5
+
+// The crater notch is the horizon table's 17th point, and the vent bearing is
+// read off the table rather than written down twice: the points are `mn.step`
+// degrees apart starting at azimuth 0, so point 17 is at 16 * 9 = 144.
+static int vent_index(void)
+{
+    return (int)(144.0f / num(":mn.step")) + 1;
+}
+
+// Field `f` (1-5) of slot `s` (1-5) of the particle list.
+static float vp_field(int s, int f)
+{
+    return item_of("vp", (s - 1) * VP_FIELDS + f);
+}
+
+// Face the vent, so that its screen x is `k * tan 0` = 0 and every dot's x is
+// the sideways drift alone.
+static void face_the_volcano(void)
+{
+    // The mock's hardware random source is a constant (`mock_random` returns
+    // 42), so a 1-in-4 roll would never come up and the vent would never
+    // throw.  `rerandom` puts the seeded generator in front of it, which is
+    // what every other test in this file that needs a roll does.
+    run("rerandom");
+    run("make \"ph 144");
+}
+
+// The sparks come out of the CRATER and not out of the ridge beside it: the
+// vent bearing and the height a new one starts at are both the horizon table's
+// own notch, so this re-derives them from `mtn` rather than repeating the two
+// numbers the game writes down.
+void test_the_vent_is_the_craters_own_notch(void)
+{
+    const int v = vent_index();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(17, v, "azimuth 144 is not a point in the table");
+
+    const float notch = item_of("mtn", v);
+    TEST_ASSERT_TRUE_MESSAGE(item_of("mtn", v - 1) > notch && item_of("mtn", v + 1) > notch,
+                             "the vent bearing is not the notch between the two lips");
+
+    // Empty every slot, then run frames until the 1-in-4 roll fills one, and
+    // read the height it started at back out.
+    for (int s = 1; s <= VP_SLOTS; s++)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), ".setitem %d :vp 0", (s - 1) * VP_FIELDS + 1);
+        run(expr);
+    }
+    face_the_volcano();
+
+    int born = 0;
+    for (int i = 0; i < 200 && !born; i++)
+    {
+        run("volcano");
+        for (int s = 1; s <= VP_SLOTS; s++)
+            if (vp_field(s, 1) == 15.0f)   // the countdown, at its full value
+                born = s;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(born, "no spark was thrown in 200 frames");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":hz") + notch, vp_field(born, 5),
+                                    "a new spark does not start at the crater notch");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, vp_field(born, 4),
+                                    "a new spark does not start at the vent");
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(vp_field(born, 2)) >= 0.5f && fabsf(vp_field(born, 2)) <= 2.0f,
+                             "the sideways velocity is outside the ROM's converted range");
+    TEST_ASSERT_TRUE_MESSAGE(vp_field(born, 3) >= 6.0f && vp_field(born, 3) <= 14.0f,
+                             "the upward velocity is outside the ROM's converted range");
+}
+
+// What the cabinet shows: a handful of sparks over the crater, none of them
+// below the ground and none of them anywhere but the crater.
+void test_the_volcano_throws_sparks_out_of_its_crater(void)
+{
+    const float hz = num(":hz");
+    const float vent = hz + item_of("mtn", vent_index());
+    face_the_volcano();
+
+    int seen = 0;
+    float highest = hz;
+    float widest = 0;
+    for (int i = 0; i < 150; i++)
+    {
+        mock_device_clear_graphics();
+        run("volcano");
+        const int n = mock_device_dot_count();
+        TEST_ASSERT_TRUE_MESSAGE(n <= VP_SLOTS, "more than five sparks were in the air");
+        seen += n;
+        for (int j = 0; j < n; j++)
+        {
+            const MockDot *d = mock_device_get_dot(j);
+            TEST_ASSERT_TRUE_MESSAGE(d->y >= hz, "a spark was drawn below the ground");
+            if (d->y > highest) highest = d->y;
+            if (fabsf(d->x) > widest) widest = fabsf(d->x);
+        }
+    }
+
+    TEST_ASSERT_TRUE_MESSAGE(seen > 0, "the volcano threw nothing in 150 frames");
+    TEST_ASSERT_TRUE_MESSAGE(highest > vent, "no spark ever cleared the crater");
+    // The throw is bounded at both ends by things outside itself: it has to
+    // clear the lips to be seen, and it has to stay inside the 120 steps of
+    // sky §6 leaves above the horizon.
+    TEST_ASSERT_TRUE_MESSAGE(highest > hz + item_of("mtn", vent_index() + 1),
+                             "no spark ever cleared the lip beside the vent");
+    TEST_ASSERT_TRUE_MESSAGE(highest < hz + 120.0f, "a spark went off the top of the band");
+    TEST_ASSERT_TRUE_MESSAGE(widest > 0.0f, "every spark went straight up");
+    // Half the crater mouth: a spark that drifts further than this falls down
+    // the OUTSIDE of the cone and reads as coming off the ridge.
+    TEST_ASSERT_TRUE_MESSAGE(widest < 41.0f, "a spark drifted clear of the crater");
+}
+
+// The cull covers the update as well as the draw (design section 16.13), which
+// is the one place this differs from the ROM -- so a volcano behind you costs
+// nothing at all, and this pins BOTH halves of that: no dots, and no state
+// moved either.
+void test_a_volcano_behind_you_costs_nothing(void)
+{
+    face_the_volcano();
+    for (int i = 0; i < 40; i++)
+        run("volcano");
+
+    float before[VP_SLOTS * VP_FIELDS];
+    for (int i = 0; i < VP_SLOTS * VP_FIELDS; i++)
+        before[i] = item_of("vp", i + 1);
+
+    run("make \"ph 324");   // 144 + 180, the far side of the plain
+    mock_device_clear_graphics();
+    for (int i = 0; i < 40; i++)
+        run("volcano");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_dot_count(),
+                                  "the volcano was drawn from behind the camera");
+    for (int i = 0; i < VP_SLOTS * VP_FIELDS; i++)
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(before[i], item_of("vp", i + 1),
+                                        "a spark moved while the volcano was out of view");
+}
+
+// One spark, stepped by hand, so that the arc is checked rather than sampled:
+// it rises, it turns over, it comes down, and the frame it reaches the ground
+// is the frame it is killed on and not drawn on.
+void test_a_spark_arcs_over_and_dies_on_the_ground(void)
+{
+    const float hz = num(":hz");
+
+    // `vp.b`, `vp.t` and `vp.x` are `volcano`'s locals; setting them as globals
+    // here lets one slot be stepped on its own, with the other four empty.
+    for (int s = 2; s <= VP_SLOTS; s++)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), ".setitem %d :vp 0", (s - 1) * VP_FIELDS + 1);
+        run(expr);
+    }
+    char expr[160];
+    snprintf(expr, sizeof(expr),
+             ".setitem 1 :vp 15  .setitem 2 :vp 1  .setitem 3 :vp 10 "
+             ".setitem 4 :vp 0  .setitem 5 :vp %g", hz + 56.0f);
+    run(expr);
+    run("make \"vp.b 1  make \"vp.x 0");
+
+    float last = hz + 56.0f;
+    bool rose = false, fell = false;
+    int frames = 0;
+    for (int i = 0; i < 30; i++)
+    {
+        if (vp_field(1, 1) < 1.0f)
+            break;
+        snprintf(expr, sizeof(expr), "make \"vp.t %g", vp_field(1, 1) - 1.0f);
+        run(expr);
+        mock_device_clear_graphics();
+        run("vp.fly");
+        frames++;
+
+        if (vp_field(1, 1) < 1.0f)
+        {
+            TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_dot_count(),
+                                          "a spark was drawn on the frame it landed");
+            break;
+        }
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, mock_device_dot_count(), "the spark was not drawn");
+
+        const float y = vp_field(1, 5);
+        if (y > last) rose = true;
+        if (rose && y < last) fell = true;
+        last = y;
+        // The sideways velocity does not change -- the ROM's does not either.
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)frames, vp_field(1, 4),
+                                        "the drift is not one step a frame");
+    }
+
+    TEST_ASSERT_TRUE_MESSAGE(rose && fell, "the spark did not arc");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, vp_field(1, 1), "the spark did not die on the ground");
+    TEST_ASSERT_TRUE_MESSAGE(frames < 15, "the spark outlived the ROM's countdown");
+}
+
+// A spark leaves the vent bright and dims as it goes: two levels where the
+// cabinet ramps eight, picked by the countdown and not by the height.
+void test_a_spark_cools_as_it_flies(void)
+{
+    face_the_volcano();
+
+    int bright = 0, dim = 0;
+    const float hot = num(":moon.colour");
+    for (int i = 0; i < 150; i++)
+    {
+        mock_device_clear_graphics();
+        run("volcano");
+        for (int j = 0; j < mock_device_dot_count(); j++)
+        {
+            const float c = (float)mock_device_get_dot(j)->colour;
+            if (c == hot) bright++;
+            else if (c == 165.0f) dim++;   // the palette's neutral grey
+            else TEST_FAIL_MESSAGE("a spark was drawn in a colour that is neither");
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(bright > 0, "no spark was drawn at full intensity");
+    TEST_ASSERT_TRUE_MESSAGE(dim > 0, "no spark ever dimmed");
+
+    // And the pen is handed back the way every other backdrop piece hands it
+    // back, or the obstacles drawn after it come out the wrong colour.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":world.colour"), num("pencolor"),
+                                    "the volcano left the pen its own colour");
+}
+
+//==========================================================================
 // The treads
 //==========================================================================
 
@@ -5195,6 +5426,11 @@ void test_the_game_fits_the_global_table_with_room_to_spare(void)
         release(KEY_FIRE);
     }
     run("make \"bm.x 0  make \"bm.y 40  crack.screen  draw.cracks");
+    // The backdrop's two culled pieces: the play loop above drives at heading
+    // 0, where the moon and the volcano are both off the side and neither
+    // reaches the names it mints.  That is the §16.12.4 gap -- a count that is
+    // not under budget but under-MEASURED -- so face each of them once.
+    run("make \"ph 300  moon  make \"ph 144  volcano");
     run("engine  alarm  hit.player");
 
     const int peak = var_global_count(true);
@@ -5228,7 +5464,12 @@ void test_every_hot_path_temporary_is_prefixed(void)
         // the two explosions are two different things -- one is three solids
         // out on the plain and the other is five strokes on the glass -- and a
         // shared prefix would have invited sharing the slots.
-        "wr.", NULL};
+        "wr.",
+        // The volcano's sparks.  `vp` itself -- the particle list -- is a
+        // top-level name and not a temporary, and the temporaries that walk it
+        // are all `local` because the table had one slot and it went to the
+        // list (section 16.13).
+        "vp.", NULL};
     static const char *const state[] = {
         "px", "pz", "ph", "cs", "sn", "a", "b", "apx", "apy",
         "left.tread", "right.tread", "bumped", "paused", "quit",
@@ -5602,6 +5843,11 @@ int main(void)
     RUN_TEST(test_the_horizon_maps_bearing_through_the_same_tangent_as_the_world);
     RUN_TEST(test_the_horizon_ignores_the_camera_position);
     RUN_TEST(test_the_moon_appears_only_when_it_is_in_view);
+    RUN_TEST(test_the_vent_is_the_craters_own_notch);
+    RUN_TEST(test_the_volcano_throws_sparks_out_of_its_crater);
+    RUN_TEST(test_a_volcano_behind_you_costs_nothing);
+    RUN_TEST(test_a_spark_arcs_over_and_dies_on_the_ground);
+    RUN_TEST(test_a_spark_cools_as_it_flies);
     RUN_TEST(test_each_key_drives_its_own_tread);
     RUN_TEST(test_one_key_arcs_and_two_keys_pivot);
     RUN_TEST(test_driving_forward_moves_along_the_heading);

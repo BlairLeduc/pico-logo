@@ -2229,14 +2229,39 @@ end
 ; floor.
 ;
 ; The table is a silhouette you can read
-; off the numbers. Indices 14 to 19
-; (azimuth 117 to 162 degrees) are the
-; volcano: a broad rise to 46, a crater
-; notch at 40, a second lip at 52, and
-; back down. Everything else is range.
+; off the numbers. Indices 15 to 19
+; (azimuth 126 to 162 degrees) are the
+; volcano: one steep flank to a lip at
+; 62, a crater notch at 56, a second lip
+; at 66, and one steep flank back down.
+; Everything else is range.
+;
+; IT IS THIN AND TALL ON PURPOSE, and
+; the two go together. A cone drawn as a
+; broad rise -- which this was, six
+; points from 22 up to 52 and down over
+; 63 degrees -- is a HILL at this scale,
+; because a silhouette has no shading to
+; say which of two slopes is the steep
+; one. Half the width and a third more
+; height puts the whole cone inside 36
+; degrees, about half the view, with
+; flanks near 45 degrees; it reads as a
+; volcano in one frame instead of in the
+; turn that reveals its shape.
+;
+; The height is bounded by the glass and
+; not by taste. Section 6 puts the
+; presented band at y in [-79, 160] with
+; the horizon at 40, so there are 120
+; steps of sky: the lip at 66 leaves 54
+; of them, and the sparks want 41 of
+; that (see the volcano). A taller cone
+; would throw its own sparks off the top
+; of the screen.
 make "mtn [6 11 5 14 8 18 9]
-make "mtn se :mtn [4 12 7 16 6 10 22]
-make "mtn se :mtn [34 46 40 52 30 15 8]
+make "mtn se :mtn [4 12 7 16 6 10 12]
+make "mtn se :mtn [18 62 56 66 20 15 8]
 make "mtn se :mtn [13 5 17 9 20 7 11]
 make "mtn se :mtn [15 6 19 8 13 5 21]
 make "mtn se :mtn [10 16 7 12 4]
@@ -2333,6 +2358,203 @@ to horizon
   pu
 end
 
+;======================================
+; The volcano
+;
+; THE CABINET THROWS SPARKS OUT OF IT
+; AND THAT IS THE ONLY THING ON THE
+; BACKDROP THAT MOVES. `UpdateVolcano`
+; ($58ba) keeps FIVE particles, spawns
+; one with a 1-in-8 roll on any frame a
+; slot is free, gives it a random
+; sideways velocity and an upward one,
+; decrements the upward one every frame
+; so it falls, and kills it when it
+; reaches the ground. `DrawVolParts`
+; ($5824) then draws each as a POINT
+; whose intensity is the top three bits
+; of its own countdown, so a spark
+; leaves the vent bright and dims as it
+; arcs. Every number below is that
+; routine's, converted once.
+;
+; THE CONVERSION IS THE VENT. The ROM
+; puts the source 94 units above the
+; horizon and kills a spark at -94, so
+; the fall is exactly the height of the
+; cone; here the crater notch is
+; `item 17 :mtn` = 56 above `hz`, so 56
+; is the drop and the ground is `:hz`.
+; That makes the ratio 56/94 = 0.6, and
+; it is applied to the ROM's UPWARD
+; velocity and to its gravity: 5-12
+; becomes 6-14 and 1 becomes 2.4, each
+; DOUBLED again because the cabinet
+; updates at 30 Hz and this frame is 15,
+; and gravity twice over because it is
+; an acceleration.
+;
+; A spark thrown at 14 tops out 41 above
+; the notch and is back on the ground in
+; 15 frames, which is where the
+; countdown is set: BOTH limits fire,
+; the way the ROM's 31 and its -94 do.
+; The 41 is also what the sky can take
+; -- the lip is at 66 and the band ends
+; at 120 above the horizon -- so the
+; cone's height and the throw are one
+; number checked against one ceiling.
+;
+; THE SIDEWAYS VELOCITY IS THE ONE THING
+; NOT CONVERTED, and the crater is why.
+; The ROM's 1-5 through the same ratio
+; and doubling is 1.2-6, and a spark
+; thrown at 6 is over the lip in seven
+; frames and falls down the OUTSIDE of
+; the cone, where it reads as coming off
+; the ridge rather than out of the vent.
+; The mouth is 18 degrees wide, about 82
+; steps at `k`, so the drift has to stay
+; inside 41: 0.5-2 over a flight of at
+; most 15 frames reaches 30. A thinner
+; volcano is a tighter fountain, and
+; that is the trade the shape asks for.
+;
+; AZIMUTH 144 IS NOT A NEW NUMBER
+; EITHER. The horizon table's notch is
+; its 17th point and the points are 9
+; degrees apart, so the vent bearing is
+; 16 * 9 -- the same tangent the ridge
+; line's own vertex is drawn through,
+; which is what puts the sparks in the
+; crater rather than beside it. The test
+; re-derives it from `mtn` so the two
+; cannot drift apart.
+;
+; ONE DEVIATION, AND IT IS THE UPDATE
+; RATHER THAN THE DRAW. The ROM steps
+; the particles on every frame and culls
+; only the DRAWING by facing ($5819's
+; $39..$87 window). Here the cull covers
+; both: five sparks stepped and drawn is
+; about 2.7 ms, the whole of which would
+; otherwise be spent on frames where the
+; volcano is behind you. What it costs
+; is that a spark hangs where it was
+; while you look away and resumes its
+; arc when you look back -- and nothing
+; on screen can show that, because
+; looking away is what makes it true.
+;
+; The window is 45 degrees either side
+; rather than the ROM's 27, because a
+; spark drifts up to 25 steps off the
+; vent and the view already ends at
+; 31.6: at 45 the vent is 260 steps out,
+; well past the edge, so nothing can pop
+; in. An off-screen dot costs nothing
+; but the arithmetic that placed it.
+;
+; FIVE FIELDS A SPARK IN ONE FLAT LIST,
+; mutated with `.setitem`, which
+; allocates nothing: countdown, sideways
+; velocity, upward velocity, and the
+; screen offset and screen y it has
+; reached. The list is ONE global slot
+; because the table is full -- 238 of
+; 254, with 16 budgeted for whatever
+; else is in the workspace (section
+; 16.12.4) -- so every temporary here is
+; `local` instead, and the moon gave up
+; both of its own names to pay for this
+; one. See `draw.moon`.
+make "vp [0 0 0 0 0 0 0 0 0 0]
+make "vp se :vp [0 0 0 0 0 0 0 0 0 0]
+make "vp se :vp [0 0 0 0 0]
+
+to volcano
+  local [vp.a vp.x vp.b vp.t]
+  local [vp.v vp.w vp.y]
+  make "vp.a wrap.diff 144 - :ph
+  if 45 < abs :vp.a [stop]
+  make "vp.x :k * tan :vp.a
+  repeat 5 [
+    make "vp.b 5 * repcount - 4
+    make "vp.t (item :vp.b :vp) - 1
+    ifelse :vp.t < 1 [vp.new] [vp.fly]
+  ]
+  setpc :world.colour
+end
+
+; A free slot takes a new spark on a
+; 1-in-4 roll: the ROM's 1-in-8 at twice
+; this frame rate, so the vent throws
+; the same number a SECOND. `vp.v` is
+; rolled and then signed, because the
+; ROM's own negate ($58d9) is the half
+; of this it does in one instruction.
+to vp.new
+  if 0 < random 4 [stop]
+  make "vp.v ((random 4) + 1) / 2
+  if 0 = random 2 [make "vp.v 0 - :vp.v]
+  .setitem :vp.b :vp 15
+  .setitem :vp.b + 1 :vp :vp.v
+  .setitem :vp.b + 2 :vp 6 + random 9
+  .setitem :vp.b + 3 :vp 0
+  .setitem :vp.b + 4 :vp :hz + 56
+end
+
+; Gravity, then the ground, then the
+; rest -- in that order, so that the
+; frame a spark lands on is a frame it
+; is not drawn on. The ROM kills it the
+; same way and for the same reason: a
+; point drawn AT the horizon reads as a
+; hole in the ridge line.
+;
+; The intensity ramp is two levels where
+; the cabinet has eight, and it is the
+; countdown that picks between them and
+; not the height: a spark cools as it
+; flies, whichever way it is going.
+;
+; WHITE, AND NOT THE WORLD'S GREEN. The
+; cabinet had one phosphor and no choice
+; about this; this display has colour,
+; and the sparks are the one thing in
+; the scene that is not a wireframe
+; OBJECT -- they are hot rock, and white
+; is what hot reads as against a green
+; ridge. It is the same argument the
+; locked reticle makes for its red: a
+; colour the tube could not have is
+; spent where it says something. They
+; borrow `moon.colour`, because the moon
+; is already the white thing on this
+; horizon and two whites would be two
+; names for one decision. 165 is the
+; grey below it -- the palette's neutral
+; ramp, not another hue -- so a cooling
+; spark dims rather than changing what
+; it is.
+to vp.fly
+  make "vp.v (item :vp.b + 2 :vp) - 2.4
+  make "vp.y :vp.v + item :vp.b + 4 :vp
+  if :vp.y < :hz [
+    .setitem :vp.b :vp 0
+    stop
+  ]
+  make "vp.w item :vp.b + 3 :vp
+  make "vp.w :vp.w + item :vp.b + 1 :vp
+  .setitem :vp.b :vp :vp.t
+  .setitem :vp.b + 2 :vp :vp.v
+  .setitem :vp.b + 3 :vp :vp.w
+  .setitem :vp.b + 4 :vp :vp.y
+  setpc :moon.colour
+  if :vp.t < 7 [setpc 165]
+  dot list :vp.x + :vp.w :vp.y
+end
+
 ; The moon is a crescent: two arcs of
 ; the same radius whose centres are ten
 ; steps apart, which is the shape you
@@ -2358,6 +2580,23 @@ end
 ; frame in five, and one of the numbers
 ; the play test should read off the HUD
 ; rather than take from this comment.
+;
+; TWO GLOBAL SLOTS CAME BACK FROM HERE
+; AND THE VOLCANO IS SPENDING ONE. The
+; second centre is `mt.m` ADVANCED
+; rather than a second name -- the first
+; arc is finished before the offset is
+; taken, so the one temporary carries
+; both -- and `mt.m` is now `local` to
+; `moon`, which `draw.moon` still reads
+; through the same dynamic scope that
+; makes a bare temporary dangerous
+; elsewhere. The moon is drawn on about
+; one frame in five and reads the name
+; four times, so L0.5's argument for
+; globals (section 13) buys about 50 us
+; a frame here, against a table that had
+; run out of room.
 make "moon.az 300
 make "moon.y 100
 make "moon.r 16
@@ -2375,6 +2614,7 @@ make "moon.d 10
 make "moon.arc 38
 
 to moon
+  local "mt.m
   make "mt.m wrap.diff :moon.az - :ph
   if :moon.arc > abs :mt.m [
     make "mt.m :k * tan :mt.m
@@ -2383,12 +2623,12 @@ to moon
 end
 
 to draw.moon
-  make "mt.m2 :mt.m + :moon.d
   setpc :moon.colour
   pu (setpos :mt.m :moon.y)
   seth 162
   pd arc 216 :moon.r
-  pu (setpos :mt.m2 :moon.y)
+  make "mt.m :mt.m + :moon.d
+  pu (setpos :mt.m :moon.y)
   seth 199
   pd arc 143 :moon.r
   pu
@@ -5654,6 +5894,7 @@ to play.frame
     setpc :world.colour
     ground
     horizon
+    volcano
     moon
     draw.field
     if :e.alive [draw.foe]
