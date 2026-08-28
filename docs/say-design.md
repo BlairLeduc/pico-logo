@@ -1,7 +1,9 @@
 # P16 — `say`: a speech synthesizer (design)
 
-Status: **DESIGN, nothing built.** M0 is a listening test on the host and it
-is the gate.
+Status: **M0 and M1 built** (2026-08-28), both listening gates passed.
+`core/speech_synth.c` is the whole 41-phoneme engine and `sayphonemes` /
+`speaking?` are live on the host; M2's rule engine, and M3's board
+integration, are not.
 
 [Berzerk §14.3](berzerk-design.md) asked for this and deliberately did not
 block on it: emulating the cabinet's speech part is the wrong target because
@@ -608,9 +610,9 @@ Two notes for whoever writes that file:
   throughout, and the RP2350's FPU makes it free) and
   `tests/test_speech_synth.c`. It runs and is host-testable, which is why it
   moved out of `devices/picocalc/speech.c` and into `core/` — that file stays
-  the M3 IRQ wrapper, not the resonator's home. **The Goertzel half of the
-  gate is green**; the listening half has not been run and M1 does not start
-  until it has.
+  the M3 IRQ wrapper, not the resonator's home. **Both halves of the gate
+  are green**: the Goertzel assertion passes, and a listen confirmed
+  `iy eh aa ao uw` are all recognisable in the rendered `.wav` files.
 
   One real finding, not just a build: a naive parallel sum
   (`a1*R1 + a2*R2 + a3*R3`) put the measured spectral peak on the wrong side
@@ -633,6 +635,57 @@ Two notes for whoever writes that file:
   classes, stops and fricatives; `sayphonemes`, `speaking?`, `stopsound`'s
   extension; device op and mock. **Gate: the ten Berzerk words, hand-typed as
   phonemes, are intelligible in a rendered WAV.**
+
+  **Built 2026-08-28.** `core/speech_synth.c` grew from the ten monophthongs
+  to the whole §6 table, plus the transition machinery of §8.3;
+  `core/primitives_speech.c`, three device ops (`speech_queue`,
+  `speech_status`, `speech_stop`), their mocks, and
+  `tests/test_primitives_speech.c`. The gate renders `intruder alert
+  humanoid chicken robot fight escape destroy shoot kill` and the sentence
+  "INTRUDER ALERT! INTRUDER ALERT!" to `.wav`.
+
+  §9.1's numbers came out right where it said: the table links at **492 B**
+  of `.rodata` against the predicted ~500 B, and it is `.rodata` — the one
+  failure mode §9.1 named did not happen. The engine's *code* is ~4.7 KB
+  against a ~3 KB line item, which matters not at all against 4 MB of flash
+  but is worth carrying forward into M2's estimate.
+
+  **Four corrections to the design came out of building it**, all in §8's
+  half and all found by measuring rather than by listening:
+
+  1. **§8.1's "a voiced fricative runs both" cannot mean both at full
+     level.** At equal levels `z` is the loudest phoneme in the inventory and
+     clips, which it never is in speech: the voicing under an obstruent is a
+     voice bar, a weak buzz behind the constriction. It runs at 0.3.
+  2. **A stop's closure has to be silence, not a fade.** Ramping the
+     amplitude down across the whole closure leaves no silent stretch at all,
+     and the silence *is* the cue that says "stop". The tract now shuts in
+     8 ms and the rest of the closure is nothing.
+  3. **The noise source needs two levels.** §8.1's "an amplitude envelope on
+     the noise source" for a stop turns out to be quantitative: a release
+     burst is a transient and runs 4× the level sustained frication does, or
+     `p` and `k` vanish under the vowels around them.
+  4. **The two source gains are a measurement, not a ratio you can reason
+     out.** Rendering all 41 rows and reading their RMS is the only way to
+     find the balance; the obvious equal-gain pairing puts the fricatives
+     about 10 dB *above* the vowels, which is backwards, and no amount of
+     listening to one phoneme at a time reveals it.
+
+  Two smaller things the table itself wanted. §6's diphthongs ("a start
+  index, an end index and a duration") fit **inside** the 12 B row as a
+  twelfth byte, `glide_to`, rather than needing the separate table the
+  wording implies — 6 B of formants, 3 of amplitudes, duration, flags, glide.
+  And the pause row holds the *neutral-tract* frequencies at zero amplitude
+  rather than zero frequency, because a transition into 0 Hz sweeps the
+  formants down to DC on the way out and that is audible.
+
+  The automated companions to the ear, in `tests/test_speech_synth.c`: every
+  row sounds and the pause does not; every row round-trips through its
+  ARPABET name; `s` and `sh` land in different bands, which is §8.4's stated
+  reason for the honest sample rate and therefore ought to be an assertion
+  rather than a paragraph; `r`'s low F3 is measurable; a stop is silent
+  before it bursts; and a diphthong's second half does not sound like its
+  first.
 - **M2 — The front end.** The 329 rules, the exception list, `say` and
   `phonemes`; §9.3's cost measured. **Gate: the 200-word table at ≥ 90 %.**
 - **M3 — On the board.** Mixer integration, §8.5's headroom decided by

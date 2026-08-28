@@ -93,6 +93,7 @@ add_library(logo_core
     core/primitives_files_load_save.c
     core/primitives_hardware.c
     core/primitives_sound.c
+    core/primitives_speech.c
     core/notation.c
     core/speech_synth.c
     core/primitives_logical.c
@@ -443,6 +444,7 @@ if(BUILD_FOR_HOST)
         core/primitives_files_load_save.c
         core/primitives_hardware.c
         core/primitives_sound.c
+        core/primitives_speech.c
         core/notation.c
         core/speech_synth.c
         core/primitives_logical.c
@@ -630,6 +632,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_files_load_save.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_hardware.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_sound.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_speech.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/notation.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/speech_synth.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_logical.c

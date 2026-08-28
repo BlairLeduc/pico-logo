@@ -252,6 +252,15 @@ extern "C" {
 // at the 36.6 kHz mix rate is ~3.5 ms of audio per half.
 #define SOUND_RING_HALF 256
 
+// Utterance queue depth, in phonemes (SpeechFrame, 4 B), for the P16 speech
+// engine (docs/say-design.md §9.1). 128 phonemes is about eight seconds of
+// speech; "the humanoid must not escape" is 22 of them.
+//
+// OVERFLOW: `sayphonemes` does NOT error when the queue is full -- like
+// `play` it waits (BREAK-interruptible) for slots to drain, so a long
+// utterance streams instead of failing.
+#define SPEECH_QUEUE_LEN 128
+
 // Vi mode (docs/vi-mode-design.md). Four fixed-capacity fields in `ViState`,
 // which is one static struct inside the editor.
 //

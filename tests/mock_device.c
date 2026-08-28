@@ -1242,6 +1242,10 @@ void mock_device_reset(void)
     {
         mock_state.sound.free_slots[i] = SOUND_QUEUE_LEN;
     }
+
+    // Speech: memset zeroed the log and `speaking`; the utterance queue
+    // starts empty (all slots free).
+    mock_state.speech.free_slots = SPEECH_QUEUE_LEN;
 }
 
 //
@@ -1368,6 +1372,62 @@ void mock_sound_set_status(int voice, bool sounding, int free_slots)
 void mock_sound_clear_gates(void)
 {
     mock_state.sound.gate_count = 0;
+}
+
+//
+// Mock speech operations (P16). The same shape as the sound ops above: every
+// accepted phoneme is logged in order, and each speech_status poll drains one
+// queued slot so `sayphonemes`' queue-full wait makes progress and terminates
+// without real hardware timing.
+//
+
+int mock_speech_queue(const SpeechFrame *frames, int n)
+{
+    int free = mock_state.speech.free_slots;
+    int accepted = (n < free) ? n : free;
+
+    for (int k = 0; k < accepted; k++)
+    {
+        if (mock_state.speech.queued_count < MOCK_SPEECH_MAX_QUEUED)
+        {
+            mock_state.speech.queued[mock_state.speech.queued_count++] = frames[k];
+        }
+    }
+    mock_state.speech.free_slots -= accepted;
+    if (accepted > 0)
+    {
+        mock_state.speech.speaking = true;
+    }
+    return accepted;
+}
+
+SpeechStatus mock_speech_status(void)
+{
+    SpeechStatus s;
+    s.speaking = mock_state.speech.speaking;
+    int free = mock_state.speech.free_slots;
+    s.free_slots = (uint8_t)(free < 0 ? 0 : free);
+
+    // Advance the simulation one step, so a wait loop terminates.
+    mock_state.speech.speaking = false;
+    if (mock_state.speech.free_slots < SPEECH_QUEUE_LEN)
+    {
+        mock_state.speech.free_slots++;
+    }
+    return s;
+}
+
+void mock_speech_stop(void)
+{
+    mock_state.speech.stop_count++;
+    mock_state.speech.speaking = false;
+    mock_state.speech.free_slots = SPEECH_QUEUE_LEN;
+}
+
+void mock_speech_set_status(bool speaking, int free_slots)
+{
+    mock_state.speech.speaking = speaking;
+    mock_state.speech.free_slots = free_slots;
 }
 
 int mock_sound_gate_count(void)

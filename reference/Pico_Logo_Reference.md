@@ -5428,7 +5428,7 @@ If one frequency is provided the same tone is produced on both left and right ch
 
 `toot` does not block. If a second `toot` is requested, Logo will wait until the previous `toot` completes. 
 
-`toot` is the simplest way to make a sound. For volume, envelopes, waveforms, noise, and background music, see [`sound`](#sound), [`setenv`](#setenv), [`setwave`](#setwave), and [`play`](#play).
+`toot` is the simplest way to make a sound. For volume, envelopes, waveforms, noise, and background music, see [`sound`](#sound), [`setenv`](#setenv), [`setwave`](#setwave), and [`play`](#play). For a speaking voice, see [`sayphonemes`](#sayphonemes).
 
 > The actual frequency range is 100Hz to 2000Hz. If the input is outside this range, no tone is produced and but `toot` behaves as if a rest is requested. By convention, a rest is produced using a frequency of 0Hz.
 
@@ -5596,13 +5596,63 @@ stopsound
 
 `command`
 
-Silences every voice (through its release) and clears all queued notes. It does not change the envelopes or waveforms set with [`setenv`](#setenv) and [`setwave`](#setwave), so the timbre you chose survives.
+Silences every voice (through its release), stops speaking, and clears all queued notes and phonemes. It does not change the envelopes or waveforms set with [`setenv`](#setenv) and [`setwave`](#setwave), so the timbre you chose survives.
 
 **Example**:
 
 ```logo
 ?play [c d e f g a b c6]
 ?stopsound
+```
+
+
+## sayphonemes
+
+sayphonemes [_phonemes_]
+
+`command`
+
+Speaks a list of _phonemes_ in the background: they are added to the utterance and Logo continues at once. Calling `sayphonemes` again appends to what is already being said, so a sentence can be assembled a word at a time.
+
+Each item in the list is one phoneme, written the way it is below. Anything else is an error, and the case does not matter.
+
+- Vowels are `iy ih ey eh ae aa ao ow uh uw ah ax er ay aw oy`.
+- Stops are `p b t d k g`, and affricates `ch jh`.
+- Fricatives are `f v th dh s z sh zh hh`.
+- Nasals are `m n ng`, and approximants `l r w y`.
+- `_` is a pause, which is how you put a gap between words.
+
+If the utterance is full, `sayphonemes` waits for room (you can interrupt it with the break key).
+
+Spelling a word out in phonemes is how you say something the machine has no business knowing how to pronounce, and how a game keeps a fixed vocabulary. Use [`speaking?`](#speaking-speakingp) to tell when it has finished, and [`stopsound`](#stopsound) to cut it short.
+
+**Example**:
+
+```logo
+?sayphonemes [ih n t r uw d er]
+?sayphonemes [ax l er t]
+; a game's vocabulary, one property list rather than
+; one procedure a word
+?pprop "ph "chicken [ch ih k ax n]
+?sayphonemes gprop "ph "chicken
+```
+
+
+## speaking? (speakingp)
+
+speaking?  
+speakingp
+
+`operation`
+
+outputs `true` if something is currently being said or still queued to be said, and `false` otherwise. This pairs with [`when`](#when) to chain speech together: `when [not speaking?] [next.taunt]`.
+
+**Example**:
+
+```logo
+?sayphonemes [f ay t l ay k ax r ow b aa t]
+?show speaking?
+true
 ```
 
 

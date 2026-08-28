@@ -55,6 +55,28 @@ extern "C"
     } SoundStatus;
 
     //
+    // Speech synthesizer (P16) shared types. See docs/say-design.md §10.
+    //
+    // One phoneme of an utterance, the speech engine's answer to SoundEvent:
+    // the front end (rules, or `sayphonemes`' own list) resolves everything
+    // the device queue needs, so the queue holds nothing but phonemes.
+    typedef struct SpeechFrame
+    {
+        uint8_t phoneme; // index into the say-design.md §6 phoneme table
+        uint8_t dur_ms;  // 0 = the table's default, scaled by voice speed
+        uint8_t pitch;   // 0 = the voice default, else Hz/2
+        uint8_t stress;  // 0..3; scales amplitude and duration
+    } SpeechFrame;
+
+    // Snapshot of the speech engine, returned by speech_status. Backs
+    // `speaking?` and the `sayphonemes` queue-full wait.
+    typedef struct SpeechStatus
+    {
+        bool speaking;      // an utterance is sounding
+        uint8_t free_slots; // queue slots available for speech_queue
+    } SpeechStatus;
+
+    //
     // WiFi connection state, as reported by wifi_status.
     //
     // Backs the `wifi.status` primitive and lets a `when [wifi?] [...]` demon
@@ -214,6 +236,24 @@ extern "C"
 
         // Set a voice's waveform. duty (1..99) applies to SOUND_WAVE_PULSE.
         void (*sound_wave)(int voice, int wave, int duty);
+
+        //
+        // Speech synthesizer (P16). NULL on devices without a speech engine
+        // (e.g. host); the speech primitives then silently succeed, which is
+        // Terrapin's documented behaviour (docs/say-design.md §2.2/§4).
+        //
+
+        // Append n phonemes to the utterance. Returns the number actually
+        // accepted (< n when the queue fills); `sayphonemes` waits and
+        // retries the remainder, exactly as `play` does.
+        int (*speech_queue)(const SpeechFrame *frames, int n);
+
+        // Snapshot the engine (speaking? / free queue slots).
+        SpeechStatus (*speech_status)(void);
+
+        // Abandon the utterance, fade the speech source out and clear the
+        // phoneme queue. Called by `stopsound`.
+        void (*speech_stop)(void);
 
         //
         // WiFi operations (only available on Pico W boards with LOGO_HAS_WIFI)
