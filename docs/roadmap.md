@@ -43,6 +43,10 @@ Companion documents (everything in `docs/`):
 - [`berzerk-design.md`](berzerk-design.md) — P15 Berzerk, the first game in the
   tree whose *cabinet* was a raster machine (design drafted 2026-08-28, gated
   on its own M0 measurement).
+- [`say-design.md`](say-design.md) — P16 `say`, a formant speech synthesizer
+  and the six primitives over it (design drafted 2026-08-28; M0 is a listening
+  test on the host). Asked for by P15 §14.3, which deliberately does not block
+  on it.
 - [`code-review-2026-07-02.md`](code-review-2026-07-02.md) — the review that
   produced PR #86; a few small refinements from it are tracked below, its
   defects in [`bugs.md`](bugs.md).
@@ -96,6 +100,7 @@ Companion documents (everything in `docs/`):
 | Atom reclamation / `erall` soft reset | done / deferred | Atom reclamation landed 2026-07-23; `erall` soft reset remains deferred. See `memory-reclamation-design.md` |
 | Tile maps + smooth scrolling (accelerated tile games) | **removed 2026-08-28, see [P14](#p14--the-vector-direction-removing-tiles-and-the-sprite-games-plan-first)**; was: bake half done, scrolling half open | Design drafted 2026-07-29 ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md)); M0 measured 2026-08-01 and the gate **failed** — the interpreter, not the wire, was the bottleneck, which opened [P10](#p10--interpreter-throughput) and split the item (§3.4). **The bake half shipped**: `newtiles`/`snaptile`/`newmap`/`settile`/`tile`/`stampmap`/`stamptile` over `core/tilemap.c` (M1+M2, hardware-accepted 2026-08-02), and M3 revamped Turtle Trails in place — the board is the C map and `draw.board` is a `stampmap`, replacing a **5,916 ms** pen-carved build with a **7.6 ms** bake. Two findings came out of it: **B11** (`dot` ignored the pen size on the PicoCalc — the blank maze was that, not the tile system), and that **the C map does not move the frame**, contradicting §3.4's and P10 §7's expectation that it would close Trails. **The scrolling half's gate was measured 2026-08-04** (§13.6–§13.7), on one board before and after, settling the Plus-2-W-vs-Pico-2 mismatch §13.5 flagged: the frame is **73.6 → 42.55 ms (1.73×)** and the body **73.35 → 40.15**, essentially at the 40 ms gate. But **the gate omitted the present it was meant to leave room for** — a scroll dirties the whole viewport, so a scrolled frame is 61–66 ms and the real budget is a body under 14–19 ms. So **M4 is unblocked only for a new, simpler scroller** sized to that (~300–400 statements, ~540 under §15's half-rate lever), and **M5 (Checkpoint Run) is closed** at ~150 ms against a ~19 ms need. Whether to design such a game is the open question. All boards, tiered capacity. See [P9](#p9--tile-maps-and-smooth-scrolling-design-first) |
 | Interpreter throughput (games hit their frame budgets) | done; `pico2` joined the tiering 2026-08-23 and **confirmed it with a control group** -- 1.65x on the frame, both controls unmoved | Opened 2026-08-01 by P9's failed M0 gate, design drafted ([`interpreter-throughput-design.md`](interpreter-throughput-design.md)): the display was never the bottleneck — both shipped games run at ~9 fps and ~4 fps against a designed 25, and ~48 % of interpreter runtime is spent re-deriving facts that cannot change (word class re-lexed every evaluation, names resolved by `strncasecmp` every call). Memoise them on the interned atom. Target: Turtle Trails' `play.frame` under 40 ms, from 87.3 ms. M0–M3 done 2026-08-01, M4 declined. M1 (word class) delivered all of it on hardware — Trails 87.3 → **73.4 ms**, Checkpoint Run 258.6 → **232.6 ms**. M2 (name binding) flattened the workspace-scan cliff (**128.3 → 24.0 µs** per call) and returned 9 KB of SRAM, but moved neither game and regressed the profiled loop 1.64× on the board. **§1's 40 ms is not met**, and P9's C map — named here as what would close Trails — landed on 2026-08-02 and moved the frame by 0.2 ms (73.4 → 73.6). That expectation is **disproved** (P9 design §13.4): it misread P9 M0, which measured `step.bugs` at 59 % of a frame rather than the `tile.at` walk inside it. **M5 profiled the frame on 2026-08-02 (design §11.1) and found one.** There is no hot spot — 791 operations on the board against 787 predicted from the host, every slot proportional to its statement count — but a `make "x (:x + 1)` costs **102.5 µs against a procedure call's 24 µs, 4.3×, where the host ratio is 2.5×**. Calls scale host→board at 75×, a `make` with arithmetic at 129×. M2 made calls cheap; the statement itself is what is left, and the hot slots are almost nothing but `make` statements. The uncached piece inside it is **variable resolution**, which §3.2/§7 set aside as dynamically scoped — a reason it cannot use M2's mechanism, not a reason it must stay slow. Before M5, the target had no named lever, and M4 and the bytecode body — the only candidates then left — had both been rejected partly on the strength of the disproved claim. **M5 (design §11) is therefore to re-profile before choosing**: `tests/logo/p10prof` splits a frame into its thirteen parts on a board and reports each in *operations* as well as milliseconds, so "no hot spot exists" is a result the profile can actually return. **It returned exactly that, and the answer was the flash.** The board:host ratios were 60× for a bare loop and 67× for a call against 132× for an arithmetic statement and 212× for the parenthesised-call path -- the RP2350 executes the interpreter from flash through a 16 KB XIP cache, and the code entered once per statement pays for it. Four tiers of `__not_in_flash_func` (design §11.2–§11.6) took the frame **81.0 → 47.0 ms, 1.72×, for 13.6 KB of SRAM**, `sync` flat at 1.6-1.8 ms throughout as the control. Returns halved every tier — 1.24×, 1.23×, 1.105×, 1.024× — so the tiering is done. **§1's 40 ms is still not met**, by 1.17×, but it is now a game-side number: `step.bugs` and `place.all` are 65 % of the frame and are nothing but statements. Enabled on the `pico2w` and `pico+2w` presets. See [P10](#p10--interpreter-throughput) |
+| Speech: a `say` primitive over a formant synthesizer | todo | Design drafted 2026-08-28 ([`say-design.md`](say-design.md)), M0 not run: [P16](#p16--say-a-speech-synthesizer-design-first). Asked for by [P15](#p15--berzerk-design-first) §14.3 and deliberately not blocking it. **The licence constraint is the whole design** — the cabinet's speech ROM is Stern's, SAM's C port is unlicensed abandonware, eSpeak is GPLv3 against an MIT tree — so the engine is written here from published descriptions: NRL Report 7948's 329 letter-to-sound rules (US Government, public domain, ~90 % of words), Peterson & Barney's 1952 vowel formants, ARPABET naming. Splits exactly as `play` does — text→phonemes is a pure function in core beside `notation.c` and is host-testable, phonemes→samples is a **ninth mixer source** (not a ninth PSG voice) in the refill IRQ. ~13.5 KB flash, ~750 B SRAM, ~60 µs a refill against the 3.5 ms deadline |
 
 ### Platform
 
@@ -1636,12 +1641,85 @@ reading the source. Eight milestones, M0 the measurement gate. It also gives
 [P14 §10](vector-direction-design.md) asked for when it noted the guard is thin
 at two.
 
+### P16 — `say`: a speech synthesizer (design first)
+
+Status: **DESIGN DRAFTED 2026-08-28, nothing built. M0 is a listening test on
+the host and it is the gate.** See [`say-design.md`](say-design.md).
+
+[P15](#p15--berzerk-design-first) §14.3 asked for this and deliberately did not
+block on it. Berzerk talks — thirty words assembled into sentences at runtime —
+and emulating the cabinet's part is the wrong target because *the voice is in
+Stern's speech ROM, not in the decoder*, so a chip emulation without the ROM
+says nothing and the ROM cannot live in an MIT repository. The alternative it
+named is this item, and the reason to take it is that a formant engine gives
+**every** Logo program a voice rather than giving one game a sound effect.
+
+**The output path already exists.** [P8](#p8--sound-stereo-psg-synthesizer-design-first)
+built a software PSG that mixes eight voices in the DMA refill IRQ and pushes
+them through PWM slice 5 at a 36.6 kHz mix rate. Speech is a **ninth source**
+into that mixer — deliberately not a ninth voice, since a `Voice` is a phase
+accumulator plus an ADSR and a formant synthesizer shares none of that
+structure. There is no new hardware question in the whole design.
+
+**The licence constraint selects everything else.** Four obvious routes are
+closed: the Berzerk ROM (Stern's data), SAM's widely circulated C port
+(reverse-engineered abandonware whose own README says it *"cannot be put under
+any specific open source software license"* — the Stern objection, applied to
+ourselves), eSpeak (GPLv3 into an MIT tree), and recorded ADPCM words (~60 KB
+for one game's vocabulary, and it buys no generality). What is left is enough,
+and all of it is published rather than copied: **NRL Report 7948** (Naval
+Research Laboratory, 1976) — **329 letter-to-sound rules**, ~90 % of words in
+average text, a US Government report, and it carries the IPA→Votrax mapping
+besides; **Peterson & Barney's 1952 vowel formant measurements**, facts rather
+than a creative work; and **ARPABET** naming. Nothing is ported, which is a
+real cost and is why M0 is a listening test rather than a build.
+
+**A correction to P15 §14.3 came out of the survey**: it says "Apple Logo had
+`SAY`", and Apple Logo II is silent — [`sound-design.md`](sound-design.md) §3.2
+already established that. The precedent is real but it belongs to **Terrapin
+Logo** (the Apple Logo line's continuation) and to FMSLogo, both of which drive
+a host OS synthesizer. Terrapin's semantics are the ones to copy, and one of
+them is load-bearing here: *"On computers without a speech synthesizer, SAY does
+nothing"* — which is exactly what `toot` does on the host today, and what keeps
+a speaking program running in CI. TI's `CALL SAY` is BASIC, not Logo, and its
+300-word ROM vocabulary is the argument against the whole word-vocabulary
+approach: it can say `INTRUDER` and cannot say the child's name.
+
+**The split is `play`'s split, again.** Text→phonemes is a pure function in
+`core/phonemes.c`, the sibling of `core/notation.c`, so the interesting half is
+host-testable and the 200-word accuracy check runs in `ctest` with no board and
+no ear; phonemes→samples is `devices/picocalc/speech.c` behind four device ops,
+NULL on the host. Six primitives: `say`, `sayphonemes`, `phonemes`,
+`speaking?`, `setvoice`/`voice`, with `stopsound` extended to mean speech too.
+`phonemes` and `sayphonemes` are in the shipped surface rather than in a
+debugging appendix because 90 % correct means one word in ten is wrong and it
+will be a word someone cares about — printing the phonemes, editing them and
+feeding them back is the fix.
+
+**Budgets**: ~13.5 KB of flash (the rule table is 10 KB of it — P15 §14.3's
+~10 KB estimate is 35 % low, and its SRAM figure was right), **~750 B of
+SRAM**, ~60 µs a refill against P8 §12.3's hard **3.5 ms** deadline, and
+~0.25 ms to translate a sentence. The specific way this becomes an
+out-of-memory panic at `repl_init` is **a table that is not `const`**, which at
+10 KB is exactly the size of mistake that does it. All three boards: speech
+needs neither a radio nor PSRAM.
+
+Five milestones, and **M0 through M2 need no hardware**, which is most of the
+work. M0 renders five sustained vowels to `.wav` on the host and asks a person
+to pick them out of a shuffled set — a gate that stops the item after ~300
+lines of C rather than after the primitive surface, the reference chapter and
+the board integration. The automated companion is a **Goertzel at the tabled
+formant centres**, which is what makes a synthesizer testable without an ear: a
+synthesizer that is merely *wrong* passes "did it make noise" and fails that.
+M4 is Berzerk adopting it, as P8's M4 was Space Invaders.
+
 ---
 
 ## Progress log
 
 | Date | Item | Change |
 |---|---|---|
+| 2026-08-28 | P16 | `say` designed ([`say-design.md`](say-design.md)), gate not run. Asked for by [P15](#p15--berzerk-design-first) §14.3 and not blocking it. **The licence constraint is the design, and the survey closed four routes**: the cabinet's speech ROM is Stern's data, SAM's C port is unlicensed abandonware (*"cannot be put under any specific open source software license"* — the Stern objection applied to ourselves), eSpeak is GPLv3 against an MIT tree, and recorded ADPCM words are ~60 KB for one game's vocabulary. What is left is published rather than copied and is enough: **NRL Report 7948**'s 329 letter-to-sound rules (US Government, 1976, ~90 % of words, and it carries the IPA→Votrax mapping), Peterson & Barney's 1952 vowel formants, ARPABET naming. **The prior-art survey also corrected P15 §14.3**, which credits `SAY` to Apple Logo: Apple Logo II is silent, as [`sound-design.md`](sound-design.md) §3.2 already said, and the precedent is **Terrapin Logo** — word-or-list, returns immediately, and *"on computers without a speech synthesizer, SAY does nothing"*, which is `toot`'s host behaviour today. The name was well-precedented; the attribution was wrong. **Splits exactly as `play` does**: text→phonemes is a pure function in core beside `notation.c` (host-testable, so the 200-word accuracy check runs in `ctest` with no board and no ear), phonemes→samples is a **ninth mixer source** in the existing refill IRQ — not a ninth PSG voice, whose phase-accumulator + ADSR structure a formant synthesizer shares nothing with. Six primitives (`say`, `sayphonemes`, `phonemes`, `speaking?`, `setvoice`/`voice`), `stopsound` extended. **~13.5 KB flash** (P15 §14.3's ~10 KB is 35 % low; the rule table is the difference), **~750 B SRAM** (that figure was right), ~60 µs a refill against P8 §12.3's 3.5 ms deadline, ~0.25 ms to translate a sentence — which dissolves the concern that motivated `sayphonemes` as a performance escape, since the rules are C and Berzerk could simply call `say`. Five milestones, **M0–M2 needing no hardware**; M0 is a listening test on rendered `.wav` vowels, gated so the item can stop after ~300 lines of C, with a **Goertzel at the tabled formant centres** as the automated companion — the thing that makes a synthesizer testable without an ear |
 | 2026-08-28 | P15 | Berzerk design drafted ([`berzerk-design.md`](berzerk-design.md)), gate not run. The first port whose *cabinet* was a raster machine, and the case for it is that its walls, bolts and figures are line drawings pretending to be bitmaps — the bolts are already vectors in the ROM and the nine shooting sprites collapse to one segment drawn at the firing heading. Three mechanisms lift straight out of the disassembly: the room is a pure function of `ROOM_X + 256·ROOM_Y` (infinite maze, no storage, revisits reproduce), the generator is **eight segments, one per interior intersection, chosen from four by `random and 3`**, and the 15-byte cell wall-mask table **replaces the cabinet's hardware pixel-intercept bit** (a wall test is a cell lookup, four statements, cannot tunnel). Playfield **1:1 with the cabinet** (244 × 204 steps in `splitscreen`'s 240-row band) so every ROM constant transfers verbatim. Estimated frame **≈ 38 ms at 300 MHz** against a **50 ms / 20 fps** gate, with the bolt × robot pair loop and the per-robot dispatch flagged as the two numbers most likely wrong. **No interpreter change needed to ship** — no trigonometry anywhere, and arrays re-priced at eleven-element lists still only ~0.4 ms. One language feature asked for and deliberately not blocked on: a **`say` primitive**, since emulating the cabinet's speech part (a TSI S14001A) is the wrong target — its voice is in Stern's ROM — while the PSG's 11-bit PWM mixer would take a formant engine as a ninth source |
 | 2026-08-28 | P14 | M6 done — **P14 complete, all six milestones landed same-day.** Prose swept: `README.md`'s "Tile maps" paragraph and its games-table rows for the three removed games gone; `logo/demos/graphics`'s two on-screen labels and `tests/CMakeLists.txt`'s `test_graphics_demo` comment no longer claim "tilemap scenes" (the demo always faked it with `stamp`); the P9 roadmap entry updated to say the bake half was removed; the five kept design docs banner-marked "Removed 2026-08-28 — see roadmap P14"; companion list updated. `docs/bugs.md`'s Trails-tile Fixed-table row left alone (record of what happened). `graphify update .` regenerated the graph. Suite 78/78 green, all four presets link |
 | 2026-08-28 | P14 | M5 done, Gate A held (one commit): the tile engine removed — `core/tilemap.c`/`.h`, `core/primitives_tilemap.c`, the seven primitives' `primitives_tilemap_init()` hook, the `TILE_BANK_SIZE`/`TILE_MAP_SIZE`/`TILEMAP_ROW_MAX` limits block, three device-op orphans (`canvas_snap`/`canvas_write_row`/`screen_gfx_write_row`, verified callerless first), `test_tilemap.c`/`test_primitives_tilemap.c`/`p9m0`/`p9m2`, and the reference's `# Tile Maps` chapter — all in the same commit as the primitive deregistration, so `test_primitive_help_coverage` never saw a half-removed state. `screen_gfx_snap` kept (`snapsh` shares it). Anchor checker: 444 headings, all resolve. Full suite 78/78 green; all four presets (`host`, `pico2` 89.00% RAM, `pico2w` 86.49%, `pico+2w` 91.40%) link. M6 (prose + `graphify update`) next |
