@@ -40,6 +40,9 @@ Companion documents (everything in `docs/`):
   of the tile map and the sprite arcade games in favour of vector games
   (M0–M6 done 2026-08-28). Superseded the tile half of P9 and three of the
   shipped games above.
+- [`berzerk-design.md`](berzerk-design.md) — P15 Berzerk, the first game in the
+  tree whose *cabinet* was a raster machine (design drafted 2026-08-28, gated
+  on its own M0 measurement).
 - [`code-review-2026-07-02.md`](code-review-2026-07-02.md) — the review that
   produced PR #86; a few small refinements from it are tracked below, its
   defects in [`bugs.md`](bugs.md).
@@ -1561,12 +1564,85 @@ outlives the game. `graphify update .` regenerated the graph (8,852 nodes,
 27,747 edges, 271 communities). **P14 complete: all six milestones (M0–M6)
 landed 2026-08-28, suite 78/78 green, all four presets link.**
 
+### P15 — Berzerk (design first)
+
+Status: **DESIGN DRAFTED 2026-08-28, nothing built. Gated on its own M0
+measurement.** See [`berzerk-design.md`](berzerk-design.md).
+
+The third vector game, and the first whose cabinet was **not** a vector
+machine: Asteroids and Battlezone were XY monitors tracing a display list,
+Berzerk was a 256 × 223 raster with 8-pixel sprites and a hardware
+pixel-intercept collision bit. The case for it as a P14 game is that the walls,
+the bolts and the figures are all line drawings pretending to be bitmaps — the
+bolts are *already* vectors in the ROM ("plotted pixel-by-pixel from head to
+tail; they do not have pattern data"), the nine shooting sprites collapse to
+one segment drawn at the firing heading, and the Vectrex port did the whole
+translation in 1982 while keeping the arcade's 5 × 3 room grid and wall masks
+byte for byte. Source of truth is the arcade disassembly
+([`berzerk-source-arcade.asm`](berzerk-source-arcade.asm)), with the Vectrex
+([`berzerk-source-vectrex.asm`](berzerk-source-vectrex.asm)) for how to draw
+it and the two home manuals for rules the code makes hard to read. **Single
+player**, as the 2600 version is.
+
+**Three things the disassembly gives this port for nothing.** The room is a
+pure function of where you are — `RNG_SEED := ROOM_X + 256·ROOM_Y` at every
+room build ($2540) — so an infinite maze costs two globals and no storage, and
+walking back into a room gets the same room. The maze generator is **eight
+segments, one per interior grid intersection, each chosen from four by
+`random and 3`** ($25EB), with no connectivity check and no pocket check. And
+the 15-byte cell wall-mask table ($435E) that `IQ` ($1C6E) consults for robot
+pathing **replaces the cabinet's hardware collision bit**: we have no
+`intercept` and must not fake one with `colourunder`, so a wall test becomes
+"which cell am I in, is the edge I am crossing walled" — four statements, no
+pixels, cannot tunnel.
+
+**The playfield is 1:1 with the cabinet's** — 244 × 204 arcade pixels as 244 ×
+204 turtle steps, centred at `(0, +40)` in `splitscreen`'s 240-row band — so
+every constant in the ROM (hit boxes, bolt lengths 8 and 5, `TPRIME` 2 for the
+man and 5 → 1 for robots, the spawn table, the 48 × 68 cell) transfers
+verbatim, which is what [P13 §16.10](battlezone-design.md) paid to learn late.
+The eight text rows below are where the cabinet already puts the score, the
+lives and the `BONUS` flash. **Estimated frame ≈ 38 ms at 300 MHz** (24 ms body
++ 14 ms split present) against a **50 ms / 20 fps gate**; 20 rather than 15
+because the cabinet's *player* runs at 30 Hz and a dodging game degrades faster
+than a driving one. The clock is a precondition, not an optimisation, as it is
+for P13. Two numbers are flagged as most likely wrong: the bolt × robot pair
+loop (the only quadratic in the budget) and the per-robot model dispatch, which
+Asteroids measured at 360–398 µs a rock and which is avoided here by one list
+of five procedure names reached with `run` rather than an `if` chain.
+
+**No interpreter change is needed to ship it**, which is unusual for a game
+this size and is worth stating: there is no trigonometry anywhere (eight
+directions, axis-aligned walls, box hit tests), so P13's L1 buys nothing;
+arrays are a better case than Battlezone's at eleven-element lists but still
+only ~0.4 ms, because `item`'s ~16 µs is fixed cost rather than walk. **One
+thing is asked for, and it is a language feature rather than a game
+optimisation: a `say` primitive.** Berzerk talks — thirty words assembled into
+sentences at runtime — and emulating the cabinet's part (MAME identifies it as
+a TSI S14001A) is the *wrong* target, because the voice lives in Stern's
+speech ROM and a chip emulation without it says nothing. The output path is
+already there (the PSG's 11-bit PWM at a 36.6 kHz software mix rate takes a
+ninth source), so what is missing is an engine: a SAM-class formant
+synthesiser, ~10 KB of flash and no data files, giving every Logo program a
+voice. **Its own design and its own roadmap entry**, and Berzerk must not block
+on it — v1 ships the Vectrex's answer, the sentences as on-screen text, and the
+sentence-assembly code is written once either way.
+
+Budgets, both hard and both found by P13 the expensive way: **100 of 128
+procedures** (Battlezone defines exactly 128 and the overflow is silent) and a
+**220-of-254 global peak** measured by a test that *plays* a game rather than
+reading the source. Eight milestones, M0 the measurement gate. It also gives
+`test_bench_throughput` a third game subject, which is what
+[P14 §10](vector-direction-design.md) asked for when it noted the guard is thin
+at two.
+
 ---
 
 ## Progress log
 
 | Date | Item | Change |
 |---|---|---|
+| 2026-08-28 | P15 | Berzerk design drafted ([`berzerk-design.md`](berzerk-design.md)), gate not run. The first port whose *cabinet* was a raster machine, and the case for it is that its walls, bolts and figures are line drawings pretending to be bitmaps — the bolts are already vectors in the ROM and the nine shooting sprites collapse to one segment drawn at the firing heading. Three mechanisms lift straight out of the disassembly: the room is a pure function of `ROOM_X + 256·ROOM_Y` (infinite maze, no storage, revisits reproduce), the generator is **eight segments, one per interior intersection, chosen from four by `random and 3`**, and the 15-byte cell wall-mask table **replaces the cabinet's hardware pixel-intercept bit** (a wall test is a cell lookup, four statements, cannot tunnel). Playfield **1:1 with the cabinet** (244 × 204 steps in `splitscreen`'s 240-row band) so every ROM constant transfers verbatim. Estimated frame **≈ 38 ms at 300 MHz** against a **50 ms / 20 fps** gate, with the bolt × robot pair loop and the per-robot dispatch flagged as the two numbers most likely wrong. **No interpreter change needed to ship** — no trigonometry anywhere, and arrays re-priced at eleven-element lists still only ~0.4 ms. One language feature asked for and deliberately not blocked on: a **`say` primitive**, since emulating the cabinet's speech part (a TSI S14001A) is the wrong target — its voice is in Stern's ROM — while the PSG's 11-bit PWM mixer would take a formant engine as a ninth source |
 | 2026-08-28 | P14 | M6 done — **P14 complete, all six milestones landed same-day.** Prose swept: `README.md`'s "Tile maps" paragraph and its games-table rows for the three removed games gone; `logo/demos/graphics`'s two on-screen labels and `tests/CMakeLists.txt`'s `test_graphics_demo` comment no longer claim "tilemap scenes" (the demo always faked it with `stamp`); the P9 roadmap entry updated to say the bake half was removed; the five kept design docs banner-marked "Removed 2026-08-28 — see roadmap P14"; companion list updated. `docs/bugs.md`'s Trails-tile Fixed-table row left alone (record of what happened). `graphify update .` regenerated the graph. Suite 78/78 green, all four presets link |
 | 2026-08-28 | P14 | M5 done, Gate A held (one commit): the tile engine removed — `core/tilemap.c`/`.h`, `core/primitives_tilemap.c`, the seven primitives' `primitives_tilemap_init()` hook, the `TILE_BANK_SIZE`/`TILE_MAP_SIZE`/`TILEMAP_ROW_MAX` limits block, three device-op orphans (`canvas_snap`/`canvas_write_row`/`screen_gfx_write_row`, verified callerless first), `test_tilemap.c`/`test_primitives_tilemap.c`/`p9m0`/`p9m2`, and the reference's `# Tile Maps` chapter — all in the same commit as the primitive deregistration, so `test_primitive_help_coverage` never saw a half-removed state. `screen_gfx_snap` kept (`snapsh` shares it). Anchor checker: 444 headings, all resolve. Full suite 78/78 green; all four presets (`host`, `pico2` 89.00% RAM, `pico2w` 86.49%, `pico+2w` 91.40%) link. M6 (prose + `graphify update`) next |
 | 2026-08-28 | P14 | M4 done: Turtle Trails removed — `logo/games/trails`, `tests/test_trails.c`, `tests/logo/p9trails`, `test_bench_trails_play_frame` and both its bounds all gone; `tests/logo/p10prof` also deleted once orphaned (no consumer left after `test_trails`'s compile definition went). Full suite 80/80 green. M5 (the tile engine, one commit) next |
