@@ -23,7 +23,7 @@ about phonetics and licences.
 | | |
 |---|---|
 | Front end | `core/phonemes.c` / `.h` — English text → phoneme list. Pure, host-testable, the mirror of `core/notation.c` |
-| Back end | `devices/picocalc/speech.c` / `.h` — phoneme list → samples, inside the existing refill IRQ |
+| Back end | `core/speech_synth.c` / `.h` — the resonators and the phoneme table; pure math, no device, host-testable (built at M0, below). `devices/picocalc/speech.c` / `.h` (M3) is the thin IRQ wrapper: block-boundary parameter updates, the mixer slot, `sound_reclock`. See the M0 note in §12 for why the split moved here from the single `devices/` file first sketched |
 | Surface | `core/primitives_speech.c` — `say`, `sayphonemes`, `phonemes`, `speaking?`, `setvoice`/`voice`; `stopsound` extended |
 | Tests | `tests/test_phonemes.c`, `tests/test_speech_synth.c`, `tests/test_primitives_speech.c` |
 | Reference | six new sections in `# The Outside World`, beside `play` and `stopsound` |
@@ -602,6 +602,33 @@ Two notes for whoever writes that file:
   assertion is green. If the vowels do not come out, this item stops here — for
   ~300 lines of C, rather than after the primitive surface, the reference
   chapter and the board integration.
+
+  **Built 2026-08-28**, `core/speech_synth.c`/`.h` (float, not §8.2's Q15
+  sketch — this project's math convention is single-precision float
+  throughout, and the RP2350's FPU makes it free) and
+  `tests/test_speech_synth.c`. It runs and is host-testable, which is why it
+  moved out of `devices/picocalc/speech.c` and into `core/` — that file stays
+  the M3 IRQ wrapper, not the resonator's home. **The Goertzel half of the
+  gate is green**; the listening half has not been run and M1 does not start
+  until it has.
+
+  One real finding, not just a build: a naive parallel sum
+  (`a1*R1 + a2*R2 + a3*R3`) put the measured spectral peak on the wrong side
+  of a low F1 against 100 Hz pitch harmonics, because the three resonators'
+  phase responses partially cancelled near the boundary between formants.
+  Alternating the sign of the middle branch (`+ a1*R1 − a2*R2 + a3*R3`) fixed
+  it — this is Klatt's own convention for a parallel formant synthesizer, and
+  the actual reason the topology is called "parallel" rather than "summed."
+  §10's "within 10%" also needed one refinement to be checkable at all: with
+  phonemes rendered at a 100 Hz default pitch, no harmonic lands exactly on a
+  tabled centre (270 Hz sits between 200 and 300), so the test locates the
+  loudest harmonic and refines it by parabolic interpolation against its
+  neighbours rather than reading a single bin. And the two off-formant probes
+  that reliably clear 20 dB below every tested formant, for every vowel
+  tried, are not an arbitrary pair — they are both above F3 (1.4× and 1.8×
+  it); a probe below F1 or between F1 and F2 was sometimes within a few dB of
+  the peak itself, since real vowels don't leave much room there (`aa`'s F1
+  and F2 are only 360 Hz apart).
 - **M1 — The inventory and `sayphonemes`.** All 41 phonemes, the transition
   classes, stops and fricatives; `sayphonemes`, `speaking?`, `stopsound`'s
   extension; device op and mock. **Gate: the ten Berzerk words, hand-typed as
