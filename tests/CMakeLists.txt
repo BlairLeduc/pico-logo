@@ -63,8 +63,6 @@ add_logo_test(test_primitives_files_directory)
 add_logo_test(test_primitives_files_load_save)
 add_logo_test(test_primitives_text)
 add_logo_test(test_primitives_turtle)
-add_logo_test(test_tilemap)
-add_logo_test(test_primitives_tilemap)
 add_logo_test(test_demons)
 add_logo_test(test_primitives_hardware)
 add_logo_test(test_notation)
@@ -85,7 +83,7 @@ add_logo_test(test_lfs_backup)
 add_logo_test(test_repl)
 add_logo_test(test_syntax_highlight)
 # Graphics showcase test — loads logo/demos/graphics into the interpreter,
-# then renders its static sprite and tilemap scenes on the mock device.
+# then renders its static sprite and stamped-scenery scenes on the mock device.
 add_logo_test(test_graphics_demo)
 target_compile_definitions(test_graphics_demo PRIVATE
     GRAPHICS_DEMO_SOURCE="${CMAKE_SOURCE_DIR}/logo/demos/graphics")
@@ -93,22 +91,6 @@ target_compile_definitions(test_graphics_demo PRIVATE
 add_logo_test(test_xkcd2601)
 target_compile_definitions(test_xkcd2601 PRIVATE
     XKCD2601_SOURCE="${CMAKE_SOURCE_DIR}/logo/samples/xkcd2601")
-
-# Galaxian game test — loads logo/games/galaxian into the interpreter (proving
-# it parses and its init path runs on the mock device) and checks the game's
-# pure logic helpers. The source path is passed in as a compile definition.
-add_logo_test(test_galaxian)
-target_compile_definitions(test_galaxian PRIVATE
-    GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian"
-    P10GAMES_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p10games")
-
-# Space Invaders game test — the same treatment as Galaxian: the file loads and
-# its init path runs on the mock device, the pure helpers are checked directly,
-# and the frame is run for as long as a level lasts to prove it reclaims.
-add_logo_test(test_invaders)
-target_compile_definitions(test_invaders PRIVATE
-    INVADERS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/invaders"
-    P10GAMES_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p10games")
 
 # Asteroids (P11), M4: rocks, ship, shots, lives, the saucer and the sound. The
 # game is pure Logo -- the file loads and its init path runs on the mock, and
@@ -140,25 +122,16 @@ target_compile_definitions(test_battlezone PRIVATE
 
 # P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
 # regression guard on relative numbers (interpreter-throughput-design.md §6).
+# P14 M1 added the two vector-game subjects (Asteroids, Battlezone) that
+# replace Galaxian/Invaders/Trails as those get removed (M2-M4).
 add_logo_test(test_bench_throughput)
 target_compile_definitions(test_bench_throughput PRIVATE
-    CHECKRUN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/checkrun"
-    TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails"
-    GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian"
-    INVADERS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/invaders"
+    ASTEROIDS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/asteroids"
+    BATTLEZONE_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/battlezone"
     P10M0_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p10m0"
     # Every BENCH line is written here as well as to the terminal, so the
     # numbers can be pasted into a design doc instead of read off a screen.
     BENCH_REPORT="${CMAKE_BINARY_DIR}/bench-throughput.txt")
-
-# Turtle Trails is a pure-Logo maze chase.  Its test loads the program and
-# checks the encoded map, the deterministic 25 fps simulation, and the maze it
-# carves from that same map.
-add_logo_test(test_trails)
-target_compile_definitions(test_trails PRIVATE
-    TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/trails"
-    P9TRAILS_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p9trails"
-    P10PROF_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p10prof")
 
 # The Snake Temple -- the one game that is pure text screen. Its test loads the
 # program (proving it parses and that no procedure name collides with a
@@ -167,13 +140,6 @@ target_compile_definitions(test_trails PRIVATE
 add_logo_test(test_temple)
 target_compile_definitions(test_temple PRIVATE
     TEMPLE_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/temple")
-
-# Game HUD test — both games use the fullscreen graphics canvas and draw their
-# score/lives/level text into the lower part of it.
-add_logo_test(test_game_huds)
-target_compile_definitions(test_game_huds PRIVATE
-    INVADERS_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/invaders"
-    GALAXIAN_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/galaxian")
 
 # File-server example test — loads logo/pfs into the interpreter and
 # drives real HTTP requests through the mock connection. The source path is

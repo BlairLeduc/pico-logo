@@ -1,5 +1,7 @@
 # Space Invaders in Pico Logo (design & implementation)
 
+**Removed 2026-08-28 — see roadmap P14.** Kept as history.
+
 Status: **implemented.** See [`logo/games/invaders`](../logo/games/invaders)
 (`load "invaders` then `invaders`). A worked example that exercises the
 P5 multi-sprite feature set ([design](multi-sprite-design.md)). The goal was a

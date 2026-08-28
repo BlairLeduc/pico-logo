@@ -1,5 +1,7 @@
 # Checkpoint Run — a maze-driving game (design)
 
+**Removed 2026-08-28 — see roadmap P14.** Kept as history.
+
 Status: **design revised 2026-07-27; implementation in progress.**
 The first implementation was withdrawn (see §16). Target files are
 [`logo/games/checkrun`](../logo/games/checkrun) and

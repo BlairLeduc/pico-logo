@@ -1,5 +1,8 @@
 # P9 — Tile maps and smooth scrolling (design)
 
+**Removed 2026-08-28 — see roadmap P14.** Kept as history: the analysis below
+is what justified the vector-games direction change.
+
 Status: **v1 design, drafted 2026-07-29. M0 measured 2026-08-01 — gate
 FAILED (§3.3), design split (§3.4). The bake half is built: M1+M2 landed and
 were hardware-accepted 2026-08-02 (§13.1, §13.2), and M3 — the Turtle Trails

@@ -211,19 +211,6 @@ extern "C"
         // false when the costume pool cannot hold the capture. Optional.
         bool (*snap_costume)(uint8_t slot, uint8_t w, uint8_t h);
 
-        // Copy the size x size canvas region centred on the turtle into
-        // `out` (size*size bytes, row-major), verbatim: unlike snap_costume
-        // no pixel becomes transparent, because tiles are background rather
-        // than sprites (backs snaptile). Returns false when the region
-        // cannot be read. Optional.
-        bool (*canvas_snap)(uint8_t size, uint8_t *out);
-
-        // Write `count` palette indices into the canvas left to right from
-        // screen pixel (x, y) -- the same space canvas_point reads -- and
-        // mark them for display. Pixels outside the canvas are dropped
-        // rather than wrapped (backs stampmap/stamptile). Optional.
-        void (*canvas_write_row)(int x, int y, const uint8_t *pixels, int count);
-
         //
         // Sensing support (backs touching?/over?/colourunder). Core owns
         // the geometry; the device only exposes the rendered rasters and

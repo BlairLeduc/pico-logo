@@ -102,8 +102,6 @@ add_library(logo_core
     core/primitives_json.c
     core/primitives_text.c
     core/primitives_time.c
-    core/primitives_tilemap.c
-    core/tilemap.c
     core/primitives_turtle.c
     core/primitives_variables.c
     core/primitives_words_lists.c
@@ -453,8 +451,6 @@ if(BUILD_FOR_HOST)
         core/primitives_json.c
         core/primitives_text.c
         core/primitives_time.c
-        core/primitives_tilemap.c
-        core/tilemap.c
         core/primitives_turtle.c
         core/primitives_variables.c
         core/primitives_words_lists.c
@@ -641,8 +637,6 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_json.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_text.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_time.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_tilemap.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/core/tilemap.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_turtle.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_variables.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_words_lists.c

@@ -1,5 +1,7 @@
 # Turtle Trails (design)
 
+**Removed 2026-08-28 — see roadmap P14.** Kept as history.
+
 Status: **implemented.** The game is `logo/games/trails` and its tests are
 `tests/test_trails.c`. Section 15 records where the built game diverges from
 the design below; everything else was built as written.

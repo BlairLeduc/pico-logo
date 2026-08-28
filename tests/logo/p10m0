@@ -7,10 +7,10 @@
 ; The native benchmark (tests/test_bench_throughput.c) is the repeatable
 ; regression guard; this script takes the same scenarios on a Pico 2 with
 ; `ticks`, so the host-to-Pico ratio the design leans on stays on the
-; record.  The game frame bodies are already covered by `p9m0.trails` and
-; `p9m0.checkrun`, so this file measures only the two synthetic scenarios:
-; the pure repeat loop of the design's profile, and a user-procedure call
-; in a small workspace against a full one.
+; record.  The game frame bodies are already covered by `p9m0.trails`,
+; so this file measures only the two synthetic scenarios: the pure repeat
+; loop of the design's profile, and a user-procedure call in a small
+; workspace against a full one.
 ;
 ; The full-workspace case fills the procedure table to ~110 of its 128
 ; entries and defines the call target last, so the linear scan in
@@ -70,6 +70,5 @@ to p10m0
   pr (se [proc call, small ws :] :e [usec each])
   pr (se [proc call, full ws  :] :lt [usec each])
   pr []
-  pr [Frame bodies: load "trails then p9m0.trails,]
-  pr [and load "checkrun then p9m0.checkrun.]
+  pr [Frame bodies: load "trails then p9m0.trails.]
 end

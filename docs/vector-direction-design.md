@@ -1,9 +1,13 @@
 # P14 — The vector direction: removing tiles and the sprite games (design)
 
-Status: **Plan recorded 2026-08-26, not started.** Two scoping decisions were
-taken with the user the same day: **Asteroids stays** (§2.2) and the
-replacement throughput guard measures **Battlezone and Asteroids `play.frame`**
-(§7). No implementation has begun; M0 is the first step.
+Status: **M0–M6 done 2026-08-28.** Two scoping decisions were taken with the
+user on 2026-08-26: **Asteroids stays** (§2.2) and the replacement throughput
+guard measures **Battlezone and Asteroids `play.frame`** (§7). All six
+milestones landed same-day: ~10,280 lines deleted (tile engine, three games,
+their tests and fixtures), the replacement guard's two new scenarios added
+and bounds set, Gate A held (reference chapter + deregistration in one
+commit), and all four presets link. See the roadmap's Progress log
+(2026-08-28) for the milestone-by-milestone record.
 
 Target: all three boards. Nothing here is board-conditional — the tile engine
 was already tiered rather than gated, so its removal reads the same everywhere.

@@ -223,30 +223,6 @@ extern "C" {
 // ERR_FILE_TOO_BIG rather than truncating.
 #define HTTPD_ELEMENT_MAX 1024
 
-// Tile bank and tile map (P9, docs/tilemap-scrolling-design.md §4). Both
-// pools are allocated lazily on the first `newtiles` / `newmap` and, like the
-// HTTP transfer buffer, choose their tier at run time:
-//   - TILE_BANK_SIZE / TILE_MAP_SIZE (SRAM fallback): used when no aux/PSRAM
-//     region is present. Kept small because SRAM is largely consumed by the
-//     Logo arena, the frame buffer, and the operand stack -- 4 KB of bank is
-//     64 tiles at 8x8 or 16 at 16x16, and 4 KB of map is a 64x64 world.
-//   - TILE_BANK_SIZE_PSRAM / TILE_MAP_SIZE_PSRAM: used when an aux region
-//     backs the pool (the Pico Plus 2 W), where a 512x512 world fits.
-// Boards that never touch tiles pay nothing: there are no static arrays.
-//
-// OVERFLOW: `newmap` with more cells than the active tier allows is
-// ERR_OUT_OF_SPACE, as is a `newtiles` whose pool cannot be allocated at all.
-// A bank slot beyond the active tier's capacity is ERR_DOESNT_LIKE_INPUT.
-#define TILE_BANK_SIZE (4 * 1024)
-#define TILE_BANK_SIZE_PSRAM (64 * 1024)
-#define TILE_MAP_SIZE (4 * 1024)
-#define TILE_MAP_SIZE_PSRAM (256 * 1024)
-
-// Widest run of screen pixels the tile sampler builds in one call, and so the
-// size of the single row buffer `stampmap` bakes through. The PicoCalc screen
-// is 320 px wide; a wider viewport than this is clipped rather than an error.
-#define TILEMAP_ROW_MAX 320
-
 // Sound synthesizer (P8, docs/sound-design.md). The engine renders eight
 // voices: three tone plus one noise per stereo ear (the SN76489 layout,
 // doubled). Voices are numbered by ear: 0-2 tone + 3 noise (left),
