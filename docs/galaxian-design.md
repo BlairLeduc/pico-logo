@@ -1,5 +1,7 @@
 # Galaxian in Pico Logo (design)
 
+**Removed 2026-08-28 — see roadmap P14.** Kept as history.
+
 Status: **implemented.** See [`logo/games/galaxian`](../logo/games/galaxian)
 (`load "galaxian` then `galaxian`), a sibling of
 [`logo/games/invaders`](../logo/games/invaders). Its pure logic (the rank

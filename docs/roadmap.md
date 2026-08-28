@@ -25,22 +25,21 @@ Companion documents (everything in `docs/`):
 - [`memory-reclamation-design.md`](memory-reclamation-design.md) — atom GC
   (implemented); `erall` soft reset remains deferred.
 - [`space-invaders-design.md`](space-invaders-design.md) /
-  [`galaxian-design.md`](galaxian-design.md) — shipped games (#101, #106) that
-  validate the sprite stack.
+  [`galaxian-design.md`](galaxian-design.md) — games that validated the sprite
+  stack; **removed 2026-08-28, see P14**, kept as history.
 - [`checkpoint-run-design.md`](checkpoint-run-design.md) /
-  [`turtle-trails-design.md`](turtle-trails-design.md) — shipped games (#124)
-  that validate the tile-map, deterministic `sync`-mode simulation and
-  mutate-in-place memory patterns. Turtle Trails also draws its whole maze
-  from its own map, so it ships without a picture asset.
+  [`turtle-trails-design.md`](turtle-trails-design.md) — games that validated
+  the tile-map, deterministic `sync`-mode simulation and mutate-in-place
+  memory patterns; **removed 2026-08-28, see P14**, kept as history.
 - [`asteroids-design.md`](asteroids-design.md) — P11 Asteroids, the first
   *vector* game in the tree (design drafted, gated on its own M0 measurement).
 - [`battlezone-design.md`](battlezone-design.md) — P13 Battlezone, the first
   *3D* game in the tree (design drafted 2026-08-21, gated on its own M0
   measurement; B48, which blocked it, fixed 2026-08-23).
 - [`vector-direction-design.md`](vector-direction-design.md) — P14, the removal
-  of the tile map and the sprite arcade games in favour of vector games (plan
-  recorded 2026-08-26, not started). Supersedes the tile half of P9 and three of
-  the shipped games above.
+  of the tile map and the sprite arcade games in favour of vector games
+  (M0–M6 done 2026-08-28). Superseded the tile half of P9 and three of the
+  shipped games above.
 - [`code-review-2026-07-02.md`](code-review-2026-07-02.md) — the review that
   produced PR #86; a few small refinements from it are tracked below, its
   defects in [`bugs.md`](bugs.md).
@@ -92,7 +91,7 @@ Companion documents (everything in `docs/`):
 | Key state for games (`pollkeys`, `keydown?`, `keyhit?`) | done | Landed 2026-08-14, out of B28's keyboard work. `readchar` is a buffered character **stream** at the southbridge's typing cadence — nothing for 300 ms after a press, then one repeat per 100 ms, queued — and a frame loop reading one character a frame consumes slower than the firmware produces, so the backlog grows and the game acts on input the player has already finished giving. One character a frame also means two keys can never be held at once, a constraint all three shipped games had to design around (`asteroids` §Input). The FIFO already carries what a game wants: every entry names a key code and a state, so a press sets a bit and a release clears it, and the game reads a **level** instead of replaying history. `keyboard_poll_keys()` drains the FIFO into a 256-bit down bitmap plus a press-edge latch (64 bytes total) and discards the characters the same events buffered, so no backlog can rebuild; `keydown?`/`keyhit?` are then pure memory reads, and a frame costs one visit to the 10 kHz bus however many controls it checks. `keyhit?` latches only a press that finds the key up, so the firmware's repeats do not read as auto-fire, and it catches a tap too short to still be down at the poll. NULL-able hardware ops, so boards without key releases (the host) simply output `false`. **Asteroids is converted**: every branch of `poll.input` used to end in `stop` because only one control could act per frame, and steering, thrust and fire are independent `if`s now — level (`keydown?`) for the controls that hold, edge (`keyhit?`) for pause, quit, hyperspace and the trigger, which also ends a held `p` toggling the pause ten times a second. `play.level` takes a baseline `pollkeys` so the press that leaves the attract screen is not delivered to the first frame as a hit. **All four games are converted**; Galaxian and Invaders share one `poll.input` shape and both gained move-and-fire-together. Turtle Trails needed it for a different reason: its `while [key?]` drain never built a backlog, but a character stream cannot tell *held* from *pressed*, so a direction held through several junctions was latched once and, after `try.turn` spent it, the next junction saw an empty latch with the key still down. Its latch is set from `(or (keydown? c) (keyhit? c))` — `keydown?` for the held direction, `keyhit?` for a flick shorter than a frame, which the character queue did catch because the press was queued rather than sampled — and each half has a test that fails without it. `poll.input` there had no coverage at all before this (every steering test writes `:a.next` directly), so it gained six tests. Space Invaders' design doc had named this exact change in its own limitations table — "`readchar` gives presses, not held-key state; a held-key device query would smooth this but is out of scope" — so §9 there is now closed rather than open. Menus, attract screens and name entry stay on `readchar`, which is the right shape for them. **The load-bearing assumption is confirmed on hardware** (2026-08-14, Pico Plus 2 W): the whole design rests on the southbridge reporting `RELEASED` for ordinary keys and not only for modifiers — which is all the driver handled before this change, and therefore all the source could prove — and the host tests cannot settle it, since they drive a FIFO this project wrote. `tests/logo/keystate` runs the real bus; DOWN followed the finger and released cleanly, and HIT appeared once per press rather than once per firmware repeat. It stays in the tree as the regression check for any future driver change |
 | Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need. **[P13](#p13--battlezone-design-first) looked like that need and measured out as not being it** (design §13 L2): `item` costs ~16 µs fixed plus ~0.73 µs an element on a board, so a 3D frame's 44 walks over lists of 8–32 cost ~1.1 ms and arrays would return ~0.7 of it. The pre-P10-M5 figure of "~115 µs for a twelve-element walk" that P11 §12 quotes no longer holds — the interpreter got much faster underneath it. Arrays become this game's lever only if its model tables grow past ~64 entries. **P13 M0 confirmed it on a board** (2026-08-23): `draw.box` reads forty `item`s and they are 0.72 ms of a measured 3.82 ms box -- 19 % -- but the cost is the ~16 us *fixed* charge of an `item` call and not the walk, because the lists are four elements long. O(1) indexing removes the part that is already almost nothing |
 | Atom reclamation / `erall` soft reset | done / deferred | Atom reclamation landed 2026-07-23; `erall` soft reset remains deferred. See `memory-reclamation-design.md` |
-| Tile maps + smooth scrolling (accelerated tile games) | **superseded by [P14](#p14--the-vector-direction-removing-tiles-and-the-sprite-games-plan-first)** — removal planned 2026-08-26; was: bake half done, scrolling half open | Design drafted 2026-07-29 ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md)); M0 measured 2026-08-01 and the gate **failed** — the interpreter, not the wire, was the bottleneck, which opened [P10](#p10--interpreter-throughput) and split the item (§3.4). **The bake half shipped**: `newtiles`/`snaptile`/`newmap`/`settile`/`tile`/`stampmap`/`stamptile` over `core/tilemap.c` (M1+M2, hardware-accepted 2026-08-02), and M3 revamped Turtle Trails in place — the board is the C map and `draw.board` is a `stampmap`, replacing a **5,916 ms** pen-carved build with a **7.6 ms** bake. Two findings came out of it: **B11** (`dot` ignored the pen size on the PicoCalc — the blank maze was that, not the tile system), and that **the C map does not move the frame**, contradicting §3.4's and P10 §7's expectation that it would close Trails. **The scrolling half's gate was measured 2026-08-04** (§13.6–§13.7), on one board before and after, settling the Plus-2-W-vs-Pico-2 mismatch §13.5 flagged: the frame is **73.6 → 42.55 ms (1.73×)** and the body **73.35 → 40.15**, essentially at the 40 ms gate. But **the gate omitted the present it was meant to leave room for** — a scroll dirties the whole viewport, so a scrolled frame is 61–66 ms and the real budget is a body under 14–19 ms. So **M4 is unblocked only for a new, simpler scroller** sized to that (~300–400 statements, ~540 under §15's half-rate lever), and **M5 (Checkpoint Run) is closed** at ~150 ms against a ~19 ms need. Whether to design such a game is the open question. All boards, tiered capacity. See [P9](#p9--tile-maps-and-smooth-scrolling-design-first) |
+| Tile maps + smooth scrolling (accelerated tile games) | **removed 2026-08-28, see [P14](#p14--the-vector-direction-removing-tiles-and-the-sprite-games-plan-first)**; was: bake half done, scrolling half open | Design drafted 2026-07-29 ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md)); M0 measured 2026-08-01 and the gate **failed** — the interpreter, not the wire, was the bottleneck, which opened [P10](#p10--interpreter-throughput) and split the item (§3.4). **The bake half shipped**: `newtiles`/`snaptile`/`newmap`/`settile`/`tile`/`stampmap`/`stamptile` over `core/tilemap.c` (M1+M2, hardware-accepted 2026-08-02), and M3 revamped Turtle Trails in place — the board is the C map and `draw.board` is a `stampmap`, replacing a **5,916 ms** pen-carved build with a **7.6 ms** bake. Two findings came out of it: **B11** (`dot` ignored the pen size on the PicoCalc — the blank maze was that, not the tile system), and that **the C map does not move the frame**, contradicting §3.4's and P10 §7's expectation that it would close Trails. **The scrolling half's gate was measured 2026-08-04** (§13.6–§13.7), on one board before and after, settling the Plus-2-W-vs-Pico-2 mismatch §13.5 flagged: the frame is **73.6 → 42.55 ms (1.73×)** and the body **73.35 → 40.15**, essentially at the 40 ms gate. But **the gate omitted the present it was meant to leave room for** — a scroll dirties the whole viewport, so a scrolled frame is 61–66 ms and the real budget is a body under 14–19 ms. So **M4 is unblocked only for a new, simpler scroller** sized to that (~300–400 statements, ~540 under §15's half-rate lever), and **M5 (Checkpoint Run) is closed** at ~150 ms against a ~19 ms need. Whether to design such a game is the open question. All boards, tiered capacity. See [P9](#p9--tile-maps-and-smooth-scrolling-design-first) |
 | Interpreter throughput (games hit their frame budgets) | done; `pico2` joined the tiering 2026-08-23 and **confirmed it with a control group** -- 1.65x on the frame, both controls unmoved | Opened 2026-08-01 by P9's failed M0 gate, design drafted ([`interpreter-throughput-design.md`](interpreter-throughput-design.md)): the display was never the bottleneck — both shipped games run at ~9 fps and ~4 fps against a designed 25, and ~48 % of interpreter runtime is spent re-deriving facts that cannot change (word class re-lexed every evaluation, names resolved by `strncasecmp` every call). Memoise them on the interned atom. Target: Turtle Trails' `play.frame` under 40 ms, from 87.3 ms. M0–M3 done 2026-08-01, M4 declined. M1 (word class) delivered all of it on hardware — Trails 87.3 → **73.4 ms**, Checkpoint Run 258.6 → **232.6 ms**. M2 (name binding) flattened the workspace-scan cliff (**128.3 → 24.0 µs** per call) and returned 9 KB of SRAM, but moved neither game and regressed the profiled loop 1.64× on the board. **§1's 40 ms is not met**, and P9's C map — named here as what would close Trails — landed on 2026-08-02 and moved the frame by 0.2 ms (73.4 → 73.6). That expectation is **disproved** (P9 design §13.4): it misread P9 M0, which measured `step.bugs` at 59 % of a frame rather than the `tile.at` walk inside it. **M5 profiled the frame on 2026-08-02 (design §11.1) and found one.** There is no hot spot — 791 operations on the board against 787 predicted from the host, every slot proportional to its statement count — but a `make "x (:x + 1)` costs **102.5 µs against a procedure call's 24 µs, 4.3×, where the host ratio is 2.5×**. Calls scale host→board at 75×, a `make` with arithmetic at 129×. M2 made calls cheap; the statement itself is what is left, and the hot slots are almost nothing but `make` statements. The uncached piece inside it is **variable resolution**, which §3.2/§7 set aside as dynamically scoped — a reason it cannot use M2's mechanism, not a reason it must stay slow. Before M5, the target had no named lever, and M4 and the bytecode body — the only candidates then left — had both been rejected partly on the strength of the disproved claim. **M5 (design §11) is therefore to re-profile before choosing**: `tests/logo/p10prof` splits a frame into its thirteen parts on a board and reports each in *operations* as well as milliseconds, so "no hot spot exists" is a result the profile can actually return. **It returned exactly that, and the answer was the flash.** The board:host ratios were 60× for a bare loop and 67× for a call against 132× for an arithmetic statement and 212× for the parenthesised-call path -- the RP2350 executes the interpreter from flash through a 16 KB XIP cache, and the code entered once per statement pays for it. Four tiers of `__not_in_flash_func` (design §11.2–§11.6) took the frame **81.0 → 47.0 ms, 1.72×, for 13.6 KB of SRAM**, `sync` flat at 1.6-1.8 ms throughout as the control. Returns halved every tier — 1.24×, 1.23×, 1.105×, 1.024× — so the tiering is done. **§1's 40 ms is still not met**, by 1.17×, but it is now a game-side number: `step.bugs` and `place.all` are 65 % of the frame and are nothing but statements. Enabled on the `pico2w` and `pico+2w` presets. See [P10](#p10--interpreter-throughput) |
 
 ### Platform
@@ -402,7 +401,8 @@ prompt while BREAK/error silence, `sound` range 20 Hz–10 kHz).
 
 ### P9 — Tile maps and smooth scrolling (design first)
 
-Status: **design drafted 2026-07-29; M0 measured 2026-08-01 — gate FAILED**
+Status: **design drafted 2026-07-29; M0 measured 2026-08-01 — gate FAILED;
+the bake half removed 2026-08-28 by [P14](#p14--the-vector-direction-removing-tiles-and-the-sprite-games-plan-first)**
 ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md) §3.3–§3.5): a
 present is 21–26 ms but the game frame bodies are 87.3 ms and 258.6 ms, so
 the interpreter, not the display, is the bottleneck — which opened
@@ -1415,8 +1415,8 @@ two gameplay levers; over 71.4 stop and take L4.
 
 ### P14 — The vector direction: removing tiles and the sprite games (plan first)
 
-Status: **Plan recorded 2026-08-26, not started.** See
-[`vector-direction-design.md`](vector-direction-design.md).
+Status: **M0–M6 done 2026-08-28 (suite green, 78/78; all four presets
+link).** See [`vector-direction-design.md`](vector-direction-design.md).
 
 A scope reduction, not a rescue. The tile map and the sprite arcade games do
 not fit the Turtle graphics aesthetic — a tile board is a picture assembled
@@ -1465,12 +1465,115 @@ engine, reference chapter and device orphans in one commit → **M6** prose and
 history, one of them because P13's still-open L4 lever is specified "in the
 shape of the P9 tilemap primitives".
 
+**M0 baseline (2026-08-28, host run of `test_bench_throughput`, kept because
+these become unreproducible once M3/M4 land):** `trails.frame` **0.574
+ms/frame** (x166.1k cal), `trails.board` **2.727 ms/build** (x0.8M cal),
+`galaxian.frame` **0.175 ms/frame** (x50.6k cal, 0.01 cells/frame),
+`invaders.frame` **0.117 ms/frame** (x33.9k cal, 0.01 cells/frame). Full suite
+84/84 green.
+
+**M1 done (2026-08-28):** `test_bench_asteroids_play_frame` (`init.game
+setup.level setrefresh "manual`, 100 frames) and
+`test_bench_battlezone_play_frame` (`init.game setrefresh "manual`, 30
+frames) added to `test_bench_throughput.c`, both kept as separate test
+functions since `test_scaffold_setUp` resets the procedure table per
+`RUN_TEST` and Battlezone alone fills all 128 of `MAX_PROCEDURES`. Host
+baseline: `asteroids.frame` **0.199 ms/frame** (x58.1k cal, 13.41
+cells/frame), `battlezone.frame` **0.894 ms/frame** (x261.6k cal, 14.01
+cells/frame). Bounds set to ~3x: `BOUND_ASTEROIDS_FRAME_X_CAL` 1.75e5,
+`BOUND_BATTLEZONE_FRAME_X_CAL` 7.85e5. Nine scenarios green (seven original +
+two new), full suite 84/84.
+
+**M2 done (2026-08-28):** Checkpoint Run's orphaned remains swept — deleted
+the unregistered `tests/test_checkrun.c` (957 lines, never built or run) and
+`CHECKRUN_SOURCE` (pointed at a game file that no longer exists), along with
+its `#ifndef` guard and unused `BOUND_CHECKRUN_FRAME_X_CAL` in
+`test_bench_throughput.c`. Reworded `tests/logo/p10m0`'s closing `pr` and its
+header comment to drop the `load "checkrun` mention (Turtle Trails' mention
+stays until M4). Full suite 84/84 green.
+
+**M3 done (2026-08-28):** Galaxian and Space Invaders removed — deleted
+`logo/games/galaxian` (944), `logo/games/invaders` (804),
+`tests/test_galaxian.c` (712), `tests/test_invaders.c` (548),
+`tests/test_game_huds.c` (158), `tests/logo/p10games` (109), and their
+`add_logo_test` blocks in `tests/CMakeLists.txt`. `test_bench_throughput.c`
+lost `test_bench_galaxian_play_frame`/`test_bench_invaders_play_frame`, their
+bounds and `#ifndef` guards. Full suite 81/81 green (three binaries gone).
+
+**M4 done (2026-08-28):** Turtle Trails removed — deleted `logo/games/trails`
+(1,712), `tests/test_trails.c` (2,163), `tests/logo/p9trails` (141), and its
+`add_logo_test` block. `test_bench_throughput.c` lost
+`test_bench_trails_play_frame` with both `BOUND_TRAILS_FRAME_X_CAL` and
+`BOUND_TRAILS_BOARD_X_CAL`. `tests/logo/p10prof` (the board expression
+profiler) had no consumer left once `test_trails`'s compile definition went,
+so it was deleted too — checked first, per the design doc, since deleting it
+prematurely would have orphaned P10 M5's other half while it still had a
+caller. Full suite 80/80 green.
+
+**M5 done (2026-08-28), Gate A held (one commit):** the tile engine removed.
+**Core:** `core/tilemap.c` (300), `core/tilemap.h` (111),
+`core/primitives_tilemap.c` (307) deleted; `primitives_tilemap_init()` calls
+dropped from `core/primitives.c`/`.h`; the `TILE_BANK_SIZE`/`TILE_MAP_SIZE`/
+`_PSRAM`/`TILEMAP_ROW_MAX` block gone from `core/limits.h`; the three
+source-list entries gone from the top-level `CMakeLists.txt` (host, tests,
+device). **Device orphans**, verified callerless before deletion: `canvas_snap`/
+`canvas_write_row` from `devices/console.h`'s vtable and both implementations
+(`devices/picocalc/picocalc_console.c`, `tests/mock_device.c`);
+`screen_gfx_write_row` from `devices/picocalc/screen.c`/`.h`.
+`screen_gfx_snap` stays — `snapsh` still shares it, its remaining caller
+always passes `opaque=false`. **Tests:** `tests/test_tilemap.c` (441),
+`tests/test_primitives_tilemap.c` (388), `tests/logo/p9m0` (115),
+`tests/logo/p9m2` (224) deleted, with their `add_logo_test` lines.
+**Reference:** the `# Tile Maps` chapter (`newtiles`/`snaptile`/`newmap`/
+`settile`/`tile`/`stampmap`/`stamptile`) deleted from
+`reference/Pico_Logo_Reference.md`; `check_reference_anchors.py` reports 444
+headings, all links resolve; the stray `curl -T invaders` example repointed
+at Asteroids. **Gate A held**: the reference deletion and the
+deregistration landed together, and `test_primitive_help_coverage` passed
+with no orphaned help entries. Full suite 78/78 green; all four presets
+(`host`, `pico2`, `pico2w`, `pico+2w`) link — `pico2` RAM 89.00% (down from
+93.86%), `pico2w` 86.49%, `pico+2w` 91.40%.
+
+**M6 done (2026-08-28):** prose swept and the graph regenerated. `README.md`
+lost its "Tile maps" paragraph and the now-nonexistent `invaders`/`galaxian`/
+`trails` rows from the on-device games table; its demos line and
+`tests/CMakeLists.txt`'s `test_graphics_demo` comment no longer claim
+"tilemap scenes" (`logo/demos/graphics` never had one — its "STAMPED
+TILEMAPS" scene fakes it with repeated `stamp`, so its two on-screen labels
+were reworded to "STAMPED SCENERY" without touching the scene itself). The
+P9 roadmap entry now says the bake half was removed by P14 rather than just
+that its gate failed. The five kept design docs
+(`tilemap-scrolling-design.md`, `turtle-trails-design.md`,
+`galaxian-design.md`, `space-invaders-design.md`,
+`checkpoint-run-design.md`) each got a one-line "Removed 2026-08-28 — see
+roadmap P14" banner, and the companion-document list here was updated to
+match. `docs/bugs.md:179`'s Fixed-table row about a Trails tile bug was left
+alone, as the design doc specifies — the bug tracker records what happened,
+not what still exists. Passing prose mentions in `hardware-notes.md`,
+`battlezone-design.md`, `concurrent-present-design.md`,
+`interpreter-throughput-design.md`, `http-server-design.md`,
+`launch-design.md`, `multi-sprite-design.md`, `sound-design.md`,
+`asteroids-design.md`, and comments in `test_pfs.c`,
+`test_primitives_words_lists.c`, `test_temple.c`, `test_asteroids.c` were
+checked and left as-is (none load-bearing); ditto the "Galaxian's
+dive-siren idiom" citations in `asteroids`/`battlezone`, since the idiom
+outlives the game. `graphify update .` regenerated the graph (8,852 nodes,
+27,747 edges, 271 communities). **P14 complete: all six milestones (M0–M6)
+landed 2026-08-28, suite 78/78 green, all four presets link.**
+
 ---
 
 ## Progress log
 
 | Date | Item | Change |
 |---|---|---|
+| 2026-08-28 | P14 | M6 done — **P14 complete, all six milestones landed same-day.** Prose swept: `README.md`'s "Tile maps" paragraph and its games-table rows for the three removed games gone; `logo/demos/graphics`'s two on-screen labels and `tests/CMakeLists.txt`'s `test_graphics_demo` comment no longer claim "tilemap scenes" (the demo always faked it with `stamp`); the P9 roadmap entry updated to say the bake half was removed; the five kept design docs banner-marked "Removed 2026-08-28 — see roadmap P14"; companion list updated. `docs/bugs.md`'s Trails-tile Fixed-table row left alone (record of what happened). `graphify update .` regenerated the graph. Suite 78/78 green, all four presets link |
+| 2026-08-28 | P14 | M5 done, Gate A held (one commit): the tile engine removed — `core/tilemap.c`/`.h`, `core/primitives_tilemap.c`, the seven primitives' `primitives_tilemap_init()` hook, the `TILE_BANK_SIZE`/`TILE_MAP_SIZE`/`TILEMAP_ROW_MAX` limits block, three device-op orphans (`canvas_snap`/`canvas_write_row`/`screen_gfx_write_row`, verified callerless first), `test_tilemap.c`/`test_primitives_tilemap.c`/`p9m0`/`p9m2`, and the reference's `# Tile Maps` chapter — all in the same commit as the primitive deregistration, so `test_primitive_help_coverage` never saw a half-removed state. `screen_gfx_snap` kept (`snapsh` shares it). Anchor checker: 444 headings, all resolve. Full suite 78/78 green; all four presets (`host`, `pico2` 89.00% RAM, `pico2w` 86.49%, `pico+2w` 91.40%) link. M6 (prose + `graphify update`) next |
+| 2026-08-28 | P14 | M4 done: Turtle Trails removed — `logo/games/trails`, `tests/test_trails.c`, `tests/logo/p9trails`, `test_bench_trails_play_frame` and both its bounds all gone; `tests/logo/p10prof` also deleted once orphaned (no consumer left after `test_trails`'s compile definition went). Full suite 80/80 green. M5 (the tile engine, one commit) next |
+| 2026-08-28 | P14 | M3 done: Galaxian and Space Invaders removed — `logo/games/galaxian`, `logo/games/invaders`, `tests/test_galaxian.c`, `tests/test_invaders.c`, `tests/test_game_huds.c`, `tests/logo/p10games`, and their `test_bench_throughput.c` scenarios/bounds and CMake wiring all gone. Full suite 81/81 green. M4 (Turtle Trails) next |
+| 2026-08-28 | P14 | M2 done: Checkpoint Run's orphaned remains swept — deleted unregistered `tests/test_checkrun.c` (957 lines) and the dangling `CHECKRUN_SOURCE`/`BOUND_CHECKRUN_FRAME_X_CAL`; `tests/logo/p10m0` no longer tells the operator to `load "checkrun`. Full suite 84/84 green. M3 (Galaxian + Invaders) next |
+| 2026-08-28 | P14 | M1 done: `test_bench_asteroids_play_frame` and `test_bench_battlezone_play_frame` added to `test_bench_throughput.c` (kept as separate test functions — Battlezone alone fills all 128 `MAX_PROCEDURES`), with `ASTEROIDS_SOURCE`/`BATTLEZONE_SOURCE` compile definitions in `tests/CMakeLists.txt`. Host baseline: `asteroids.frame` 0.199 ms/frame (13.41 cells/frame), `battlezone.frame` 0.894 ms/frame (14.01 cells/frame); bounds set to ~3x measured. Full suite 84/84 green. M2 (Checkpoint Run sweep) next |
+| 2026-08-28 | P14 | M0 done: baseline recorded before removal — full suite 84/84 green; `test_bench_throughput` host BENCH lines for the four subjects about to lose their game (`trails.frame` 0.574 ms/frame, `trails.board` 2.727 ms/build, `galaxian.frame` 0.175 ms/frame, `invaders.frame` 0.117 ms/frame) pasted into the P14 entry |
 | 2026-08-26 | P14 | Plan recorded: `vector-direction-design.md` — remove the tile engine (P9's bake half), Turtle Trails, Galaxian and Space Invaders, and Checkpoint Run's orphaned remains, in favour of vector games. Two decisions taken with the user: **Asteroids stays** (vector game; its only sprite use is a two-pixel dot on four shot-carrier turtles) and the replacement P10 throughput guard measures **Battlezone + Asteroids `play.frame`**. Sprites are out of scope — only tiles go. Ordering fixed by two gates: help coverage forces the reference chapter and the deregistration into one commit, and the guard is rebuilt (M1) *before* its three subjects are deleted (M3/M4). Verified leaf: no evaluator, checkpoint or save/load integration; Trails is the only tile consumer; no SRAM win (both pools were lazy). ~10,280 lines to delete; the five design docs kept as history — `tilemap-scrolling-design.md` because P13's open L4 lever is specified "in the shape of the P9 tilemap primitives". Not started |
 | 2026-07-03 | (all) | Roadmap created; P1–P5 planned, backlog triaged |
 | 2026-07-03 | P1 | Done: host REPL EOF/prompt fixes, e2e golden tests (`tests/e2e/`), CI workflow, anchor checker |

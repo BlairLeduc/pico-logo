@@ -25,17 +25,11 @@
 #include <string.h>
 #include <time.h>
 
-#ifndef TRAILS_SOURCE
-#error "TRAILS_SOURCE must be defined"
+#ifndef ASTEROIDS_SOURCE
+#error "ASTEROIDS_SOURCE must be defined"
 #endif
-#ifndef CHECKRUN_SOURCE
-#error "CHECKRUN_SOURCE must be defined"
-#endif
-#ifndef GALAXIAN_SOURCE
-#error "GALAXIAN_SOURCE must be defined"
-#endif
-#ifndef INVADERS_SOURCE
-#error "INVADERS_SOURCE must be defined"
+#ifndef BATTLEZONE_SOURCE
+#error "BATTLEZONE_SOURCE must be defined"
 #endif
 
 // Relative bounds (scenario time / calibration-loop time), set at ~3x the
@@ -43,11 +37,8 @@
 #define BOUND_REPEAT_ITER_X_CAL   700.0    // M2 baseline x~215
 #define BOUND_PROC1_ITER_X_CAL    300.0    // M2 baseline x~91
 #define BOUND_PROC_SCAN_RATIO     2.0      // 128- vs 1-proc; M2 flattened this to 1.00
-#define BOUND_TRAILS_FRAME_X_CAL  5.5e5    // M2 baseline x181k
-#define BOUND_TRAILS_BOARD_X_CAL  3.0e6    // P9 M3 baseline x~0.9M (was x~16M)
-#define BOUND_CHECKRUN_FRAME_X_CAL 1.8e6   // M2 baseline x587k
-#define BOUND_GALAXIAN_FRAME_X_CAL 2.0e5   // baseline x66k (2026-08-06)
-#define BOUND_INVADERS_FRAME_X_CAL 1.3e5   // baseline x41k (2026-08-06)
+#define BOUND_ASTEROIDS_FRAME_X_CAL  1.75e5 // baseline x58.1k (2026-08-28)
+#define BOUND_BATTLEZONE_FRAME_X_CAL 7.85e5 // baseline x261.6k (2026-08-28)
 
 void setUp(void)
 {
@@ -188,7 +179,7 @@ void test_bench_proc_call_workspace_scaling(void)
 
 //==========================================================================
 // Scenario 3/4: the shipped games' play.frame on the mock device.
-// Loading mirrors test_trails.c's loader, which mirrors prim_load.
+// Loading mirrors prim_load.
 //==========================================================================
 
 #define TEST_LOAD_MAX_LINE 256
@@ -264,61 +255,41 @@ static double time_game_frames_ms(const char *setup, int frames)
     return time_code_ms(code) / frames;
 }
 
-void test_bench_trails_play_frame(void)
+// P14 M1: the replacement guard's two subjects, both vector games with no
+// tile or sprite-arcade dependency.  Asteroids and Battlezone each define
+// `play.frame` and `init.game` and are drivable headless on the mock device.
+// Kept as separate test functions, never merged: `test_scaffold_setUp` calls
+// `procedures_init()` before every RUN_TEST, and Battlezone alone defines all
+// 128 of MAX_PROCEDURES, so the two workspaces cannot share a table.
+void test_bench_asteroids_play_frame(void)
 {
     double cal = calibrate_ns();
-    load_game(TRAILS_SOURCE);
+    load_game(ASTEROIDS_SOURCE);
     double ms = time_game_frames_ms(
-        "setup.palette setup.shapes setup.turtles setup.tiles setup.sound "
-        "init.game setup.level setrefresh \"manual", 30);
+        "init.game setup.level setrefresh \"manual", 100);
 
-    bench_line("BENCH trails.frame     %8.3f ms/frame  x%.1fk cal\n",
-           ms, ms * 1e6 / cal / 1e3);
-    TEST_ASSERT_TRUE_MESSAGE(ms * 1e6 / cal < BOUND_TRAILS_FRAME_X_CAL,
-                             "Turtle Trails play.frame regressed vs calibration");
-
-    // The level build -- P9 M3 turned this from decoding a map into 1,050
-    // cons cells and carving it with the pen into two map passes and one
-    // stampmap.  It is not a frame cost, but it is the largest single stall
-    // the game has, so it belongs in the record beside the frame.
-    double board = time_code_ms("setup.level");
-    bench_line("BENCH trails.board     %8.3f ms/build x%.1fM cal\n",
-           board, board * 1e6 / cal / 1e6);
-    TEST_ASSERT_TRUE_MESSAGE(board * 1e6 / cal < BOUND_TRAILS_BOARD_X_CAL,
-                             "Turtle Trails level build regressed vs calibration");
+    bench_line("BENCH asteroids.frame  %8.3f ms/frame  x%.1fk cal  %.2f cells/frame\n",
+           ms, ms * 1e6 / cal / 1e3, frame_storage_cells(200));
+    TEST_ASSERT_TRUE_MESSAGE(ms * 1e6 / cal < BOUND_ASTEROIDS_FRAME_X_CAL,
+                             "Asteroids play.frame regressed vs calibration");
 }
 
-// The two older shipped games, measured the same way.  Neither had ever been
-// timed anywhere until their frames were factored into `play.frame`; both are
-// far lighter than Turtle Trails (no five-actor simulation, no per-frame tile
-// arithmetic), so these lines are as much a floor for the interpreter as a
-// budget for the games.
-void test_bench_galaxian_play_frame(void)
+// Battlezone's `init.game` arms `setrefresh "sync`, which on the host waits
+// the real frame period; `setrefresh "manual` alone is enough because
+// `prim_sync` degrades to a plain present when frame_sync_active() is false
+// (core/primitives_text.c). That does mean a mock refresh_now() sits inside
+// this measurement and not Asteroids' -- not subtracted, just noted here.
+void test_bench_battlezone_play_frame(void)
 {
     double cal = calibrate_ns();
-    load_game(GALAXIAN_SOURCE);
+    load_game(BATTLEZONE_SOURCE);
     double ms = time_game_frames_ms(
-        "init.game make \"score 0 make \"lives 3 make \"level 1 setup.level "
-        "setrefresh \"manual", 100);
+        "init.game setrefresh \"manual", 30);
 
-    bench_line("BENCH galaxian.frame   %8.3f ms/frame  x%.1fk cal  %.2f cells/frame\n",
+    bench_line("BENCH battlezone.frame %8.3f ms/frame  x%.1fk cal  %.2f cells/frame\n",
            ms, ms * 1e6 / cal / 1e3, frame_storage_cells(200));
-    TEST_ASSERT_TRUE_MESSAGE(ms * 1e6 / cal < BOUND_GALAXIAN_FRAME_X_CAL,
-                             "Galaxian play.frame regressed vs calibration");
-}
-
-void test_bench_invaders_play_frame(void)
-{
-    double cal = calibrate_ns();
-    load_game(INVADERS_SOURCE);
-    double ms = time_game_frames_ms(
-        "init.game make \"score 0 make \"lives 3 make \"level 1 setup.level "
-        "setrefresh \"manual", 100);
-
-    bench_line("BENCH invaders.frame   %8.3f ms/frame  x%.1fk cal  %.2f cells/frame\n",
-           ms, ms * 1e6 / cal / 1e3, frame_storage_cells(200));
-    TEST_ASSERT_TRUE_MESSAGE(ms * 1e6 / cal < BOUND_INVADERS_FRAME_X_CAL,
-                             "Space Invaders play.frame regressed vs calibration");
+    TEST_ASSERT_TRUE_MESSAGE(ms * 1e6 / cal < BOUND_BATTLEZONE_FRAME_X_CAL,
+                             "Battlezone play.frame regressed vs calibration");
 }
 
 // P10 M5: the cost of an expression, by shape. The board profiler
@@ -390,9 +361,8 @@ int main(void)
     RUN_TEST(test_bench_repeat_loop);
     RUN_TEST(test_bench_proc_call_workspace_scaling);
     RUN_TEST(test_bench_expr_shapes);
-    RUN_TEST(test_bench_trails_play_frame);
-    RUN_TEST(test_bench_galaxian_play_frame);
-    RUN_TEST(test_bench_invaders_play_frame);
+    RUN_TEST(test_bench_asteroids_play_frame);
+    RUN_TEST(test_bench_battlezone_play_frame);
     RUN_TEST(test_p10m0_script_runs);
     return UNITY_END();
 }

@@ -193,7 +193,7 @@ to gfxtiles
   gfx.capture.gem
   clean
 
-  gfx.title [COLOUR COSTUMES  STAMPED TILEMAPS]
+  gfx.title [COLOUR COSTUMES  STAMPED SCENERY]
   gfx.label -142 112 :gfx.tile [SNAPSH CAPTURES A COLOUR COSTUME]
   gfx.label -142 92 :gfx.tile [STAMP BAKES SPRITES INTO THE CANVAS]
 
@@ -317,7 +317,7 @@ to graphicsdemo
   gfx.title [PICO LOGO IS A TINY 2D GAME ENGINE]
   gfx.label -142 92 :gfx.player [8 LIVE ACTORS]
   gfx.label -142 62 :gfx.gem [15 CUSTOM COSTUMES]
-  gfx.label -142 32 :gfx.sun [PALETTE GRAPHICS AND TILEMAPS]
+  gfx.label -142 32 :gfx.sun [PALETTE GRAPHICS AND STAMPED SCENERY]
   gfx.label -142 2 :gfx.enemy [ANIMATION COLLISION AND EVENTS]
   gfx.label -142 -28 :gfx.ink [FRAME PACING BUILT IN]
   wait 2800

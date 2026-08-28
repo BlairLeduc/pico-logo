@@ -109,12 +109,6 @@ scale and rotate it, move and animate autonomously (`setspeed`, `setanim`)
 while your program does something else, and collide pixel-accurately
 (`touching?`, `over?`, `colourunder`, `distance`).
 
-**Tile maps** build worlds too big to draw square by square: `newtiles` and
-`snaptile` fill a bank of 8×8 or 16×16 tiles picked up off the screen,
-`newmap`/`settile`/`tile` hold the world as one byte per square — up to
-512×512 on a PSRAM board — and `stampmap`/`stamptile` paint it. The map is not
-just a picture; it is the thing your program asks "what is here?".
-
 For input, `pollkeys` samples the whole keyboard at once and `keydown?` /
 `keyhit?` answer from that snapshot, so a game can tell *held* from *pressed*
 and read several keys in the same frame.
@@ -198,14 +192,11 @@ the bootloader so the next UF2 is a drag away.
 |---|---|
 | `asteroids` | The 1979 vector arcade game, drawn as vectors: `fd`/`rt` with the pen down *is* a display list. Rocks, splitting, a shooting saucer, hyperspace, the heartbeat that speeds up as the board thins, and a top-ten score table that survives the power switch. |
 | `battlezone` | The 1980 vector tank game, in 3D: a wireframe plain that wraps, cubes and pyramids projected from four ground columns each, a mountain range and a crescent moon at infinity, and two treads on four keys -- `1`/`Q` the left tread, `0`/`P` the right, one key per tread per direction the way the cabinet's two sticks worked. Four enemies come at you in turn -- a tank, a missile that kills by arriving, a supertank and a saucer worth 5,000 -- and being hit shatters the periscope until your next tank. Radar, an engine idle that revs with the treads, an alarm whose tempo closes as the enemy does, and a top-ten score table. Steer with the arrows or with one key per tread, whichever suits — `C` on the title screen picks. Needs the fast clock: it asks the board for 300 MHz and says so rather than playing badly if the board will not take it. |
-| `invaders` | Space Invaders, on the sprite and sound stack. |
-| `galaxian` | Diving attackers, with an attract screen and score table. |
-| `trails` | An original maze chase themed on the Logo turtle, drawing its whole maze from its own tile map. |
 | `temple` | The Snake Temple, after RAX's Oric BASIC 10-liner: a dark labyrinth crawl drawn entirely on the text screen -- no turtle, no sprites, no tiles, just `setcursor` and `type`. |
 | `ttt` | Tic-tac-toe, for a quieter afternoon. |
 
-**Demos** (`/demos`) — `graphics` is a tour of sprites, tile maps, collision
-and animation; `sound` is a tour of the synthesizer. Both are written to be
+**Demos** (`/demos`) — `graphics` is a tour of sprites, stamped scenery,
+collision and animation; `sound` is a tour of the synthesizer. Both are written to be
 read as much as run, and every scene is a procedure you can call on its own.
 
 **Samples** (`/samples`) — `stars` is a short drawing; `webturtle` drives the

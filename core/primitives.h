@@ -185,7 +185,6 @@ extern "C"
     void primitives_http_init(void);
     void primitives_httpd_init(void);
     void primitives_time_init(void);
-    void primitives_tilemap_init(void);
 
     // Stop autonomous motion and animation on every turtle (speed 0, anim
     // off). Turtle state, not demon state: called by `cs` alongside its

@@ -1244,23 +1244,6 @@ static bool turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
     return true;
 }
 
-// Capture the size x size canvas region centred on the selected turtle,
-// verbatim (the snaptile primitive). Tiles are background, so unlike a
-// costume capture no pixel becomes transparent.
-static bool turtle_canvas_snap(uint8_t size, uint8_t *out)
-{
-    int x0 = (int)(cur->x + 0.5f) - size / 2;
-    int y0 = (int)(cur->y + 0.5f) - size / 2;
-    screen_gfx_snap(x0, y0, size, size, out, true);
-    return true;
-}
-
-// Write a run of canvas pixels at a screen position (the tile baker).
-static void turtle_canvas_write_row(int x, int y, const uint8_t *pixels, int count)
-{
-    screen_gfx_write_row(x, y, pixels, count);
-}
-
 // Get shape data for shapes 1-15
 // Returns 16 bytes representing 8 columns x 16 rows
 // Each byte is one row, MSB = leftmost column
@@ -1490,8 +1473,6 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .set_scale = turtle_set_scale,
     .stamp = turtle_stamp,
     .snap_costume = turtle_snap_costume,
-    .canvas_snap = turtle_canvas_snap,
-    .canvas_write_row = turtle_canvas_write_row,
     .get_raster = turtle_get_raster,
     .canvas_point = turtle_canvas_point,
     .sense_metrics = turtle_sense_metrics,
