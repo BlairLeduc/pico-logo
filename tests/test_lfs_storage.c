@@ -13,6 +13,7 @@
 #include "devices/stream.h"
 #include "third_party/littlefs/lfs.h"
 
+#include <stdio.h>
 #include <string.h>
 
 //============================================================================
@@ -26,9 +27,24 @@
 
 static uint8_t ram[BS * BC];
 
+// Fault injection: `read_seen` records which blocks are actually read (the walk
+// enumerates a file's data blocks without reading them, so only the blocks it
+// reads are worth breaking), and `read_fail` makes reads of a block fail —
+// standing in for a block that has gone bad on the device.
+static bool read_seen[BC];
+static bool read_fail[BC];
+
 static int bd_read(const struct lfs_config *c, lfs_block_t b, lfs_off_t o,
                    void *buf, lfs_size_t s)
 {
+    if (b < BC)
+    {
+        read_seen[b] = true;
+        if (read_fail[b])
+        {
+            return LFS_ERR_CORRUPT;
+        }
+    }
     memcpy(buf, &ram[b * c->block_size + o], s);
     return 0;
 }
@@ -62,6 +78,8 @@ static LogoStorage storage;
 
 void setUp(void)
 {
+    memset(read_seen, 0, sizeof(read_seen));
+    memset(read_fail, 0, sizeof(read_fail));
     memset(ram, 0xff, sizeof(ram));
     TEST_ASSERT_EQUAL_INT(0, lfs_format(&lfs, &cfg));
     TEST_ASSERT_EQUAL_INT(0, lfs_mount(&lfs, &cfg));
@@ -276,6 +294,160 @@ static void test_open_directory_as_file_fails(void)
     TEST_ASSERT_NULL(storage.ops->open("/adir"));
 }
 
+//============================================================================
+// Consistency walk (fs_check) -- the walk that free-space reporting and block
+// allocation both run, which is why a broken one takes all three down (B64).
+//============================================================================
+
+// A file big enough to need data blocks of its own, plus a subdirectory: the
+// walk reads the directory's metadata pair, which is the part worth breaking.
+static void build_filesystem(void)
+{
+    LogoStream *s = storage.ops->open("/data");
+    TEST_ASSERT_NOT_NULL(s);
+    char payload[1500];
+    memset(payload, 'a', sizeof(payload));
+    s->ops->write_bytes(s, payload, sizeof(payload));
+    s->ops->close(s);
+    free(s);
+    TEST_ASSERT_TRUE(storage.ops->dir_create("/sketches"));
+}
+
+static void test_fs_check_reports_a_clean_filesystem(void)
+{
+    build_filesystem();
+
+    uint32_t blocks = 0;
+    long last_block = 0;
+    int code = -1;
+    TEST_ASSERT_TRUE(storage.ops->fs_check(&blocks, &last_block, &code, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(0, code);
+    TEST_ASSERT_GREATER_THAN(0, blocks);
+}
+
+static void test_fs_check_names_the_error_a_broken_walk_stops_on(void)
+{
+    build_filesystem();
+
+    // Break the metadata the walk reads, leaving the superblock pair (so the
+    // volume still mounts and lists) and every data block (so files still read).
+    memset(read_seen, 0, sizeof(read_seen));
+    uint32_t blocks = 0;
+    long last_block = 0;
+    int code = -1;
+    TEST_ASSERT_TRUE(storage.ops->fs_check(&blocks, &last_block, &code, NULL, NULL));
+    int broken = 0;
+    for (lfs_block_t b = 2; b < BC; b++)
+    {
+        if (read_seen[b])
+        {
+            read_fail[b] = true;
+            broken++;
+        }
+    }
+    TEST_ASSERT_GREATER_THAN(0, broken);
+
+    // The walk stops, and reports the filesystem's own code rather than a bare
+    // "something went wrong".
+    code = 0;
+    TEST_ASSERT_FALSE(storage.ops->fs_check(&blocks, &last_block, &code, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(LFS_ERR_CORRUPT, code);
+
+    // The same fault takes free-space reporting down with it: this pairing is
+    // what made a failing `free` and a stalled write one bug rather than two.
+    uint32_t free_blocks = 0, block_size = 0;
+    TEST_ASSERT_FALSE(storage.ops->free_blocks("/", &free_blocks, &block_size));
+
+    // ...while reading a file, which never walks the filesystem, still works —
+    // which is why a damaged volume looks healthy until something allocates.
+    LogoStream *r = storage.ops->open("/data");
+    TEST_ASSERT_NOT_NULL(r);
+    TEST_ASSERT_EQUAL_INT(1500, r->ops->get_length(r));
+    r->ops->close(r);
+    free(r);
+}
+
+// Blocks the walk reports as live, so a test can tell a file's data blocks
+// (reported but never read) from the metadata it does read.
+static bool live_block[BC];
+
+static int mark_live(void *p, lfs_block_t block)
+{
+    (void)p;
+    if (block < BC)
+    {
+        live_block[block] = true;
+    }
+    return 0;
+}
+
+static bool record_bad_file(const char *path, long size, void *user_data)
+{
+    char *out = (char *)user_data;
+    snprintf(out, LOGO_STREAM_NAME_MAX, "%s:%ld", path, size);
+    return true;
+}
+
+// The walk never reads a file's data blocks, so damage inside a file is
+// invisible to it. That is exactly the gap the per-file scan closes.
+static void test_fs_check_scan_names_a_file_it_cannot_read(void)
+{
+    LogoStream *s = storage.ops->open("/sketches/rocks");
+    TEST_ASSERT_NULL(s); // the directory does not exist yet
+    TEST_ASSERT_TRUE(storage.ops->dir_create("/sketches"));
+
+    s = storage.ops->open("/sketches/rocks");
+    TEST_ASSERT_NOT_NULL(s);
+    char payload[1500];
+    memset(payload, 'a', sizeof(payload));
+    s->ops->write_bytes(s, payload, sizeof(payload));
+    s->ops->close(s);
+    free(s);
+
+    // A data block is one the walk reports as live but never reads.
+    memset(live_block, 0, sizeof(live_block));
+    memset(read_seen, 0, sizeof(read_seen));
+    TEST_ASSERT_EQUAL_INT(0, lfs_fs_traverse(&lfs, mark_live, NULL));
+    lfs_block_t victim = 0;
+    for (lfs_block_t b = 2; b < BC; b++)
+    {
+        if (live_block[b] && !read_seen[b])
+        {
+            victim = b;
+            break;
+        }
+    }
+    TEST_ASSERT_GREATER_THAN(1, victim);
+    read_fail[victim] = true;
+
+    // The walk still passes -- it never touches that block -- while the scan
+    // finds the file, names it, and reports its recorded length.
+    char found[LOGO_STREAM_NAME_MAX] = "";
+    uint32_t blocks = 0;
+    long last_block = 0;
+    int code = -1;
+    TEST_ASSERT_TRUE(storage.ops->fs_check(&blocks, &last_block, &code,
+                                           record_bad_file, found));
+    TEST_ASSERT_EQUAL_INT(0, code);
+    TEST_ASSERT_EQUAL_STRING("/sketches/rocks:1500", found);
+
+    // Reporting only: the file it named is still there.
+    TEST_ASSERT_TRUE(storage.ops->file_exists("/sketches/rocks"));
+}
+
+static void test_fs_check_scan_is_quiet_when_every_file_reads(void)
+{
+    build_filesystem();
+
+    char found[LOGO_STREAM_NAME_MAX] = "";
+    uint32_t blocks = 0;
+    long last_block = 0;
+    int code = -1;
+    TEST_ASSERT_TRUE(storage.ops->fs_check(&blocks, &last_block, &code,
+                                           record_bad_file, found));
+    TEST_ASSERT_EQUAL_STRING("", found);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -289,5 +461,9 @@ int main(void)
     RUN_TEST(test_dir_delete_nonempty_fails);
     RUN_TEST(test_list_directory_and_filter);
     RUN_TEST(test_open_directory_as_file_fails);
+    RUN_TEST(test_fs_check_reports_a_clean_filesystem);
+    RUN_TEST(test_fs_check_names_the_error_a_broken_walk_stops_on);
+    RUN_TEST(test_fs_check_scan_names_a_file_it_cannot_read);
+    RUN_TEST(test_fs_check_scan_is_quiet_when_every_file_reads);
     return UNITY_END();
 }

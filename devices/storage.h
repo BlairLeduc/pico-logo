@@ -36,6 +36,10 @@ extern "C"
     //
     typedef bool (*LogoDirCallback)(const char *name, LogoEntryType type, void *user_data);
 
+    // Reports one file that could not be read: `path` is absolute, `size` its
+    // recorded length in bytes. Return false to stop the scan early.
+    typedef bool (*LogoFsBadFileFn)(const char *path, long size, void *user_data);
+
     //
     // LogoStorage interface
     // Platform-specific implementation should be provided to logo_io_init()
@@ -101,6 +105,26 @@ extern "C"
         // Implemented only by the imageable root backend. Optional: NULL means
         // restore is unsupported on this backend.
         bool (*fs_image_restore)(LogoStream *in);
+
+        // Walk every block the internal (root) volume considers live, as a
+        // consistency check. This is the same walk that block allocation and
+        // free-space reporting both run, so when it fails those fail with it —
+        // which is exactly the failure this op exists to name. Returns true if
+        // the walk completed; `*blocks` receives the number of live blocks
+        // visited. On false, `*code` carries the backend's own error code
+        // (negative for LittleFS) and `*last_block` the last block visited
+        // before the walk stopped — the neighbour of the bad one in traverse
+        // order, not the bad one itself, and -1 when the walk stopped on a null
+        // block pointer (metadata naming a block that was never written).
+        //
+        // When `on_bad_file` is non-NULL the check also reads every file end to
+        // end and reports each one it cannot read. That pass is separate from
+        // the walk on purpose: the walk never touches a file's data blocks, so
+        // damage inside a file is invisible to it, and a broken file pointer is
+        // invisible to a read of any other file. Neither pass modifies anything.
+        // Optional: NULL means the backend has no such check.
+        bool (*fs_check)(uint32_t *blocks, long *last_block, int *code,
+                         LogoFsBadFileFn on_bad_file, void *user_data);
 
     } LogoStorageOps;
 

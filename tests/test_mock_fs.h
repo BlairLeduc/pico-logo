@@ -34,6 +34,26 @@ typedef struct MockFile
 // Mock file storage
 static MockFile mock_files[MOCK_MAX_FILES];
 
+// Volume knobs: whether free-space reporting works, and whether the removable
+// "/sd" volume is mounted. Both reset to true by mock_fs_reset().
+static bool mock_fs_free_blocks_ok = true;
+static bool mock_fs_sd_present = true;
+
+// Result the consistency walk reports: 0 is a clean filesystem, anything else
+// is the filesystem's own error code.
+static int mock_fs_check_code = 0;
+static long mock_fs_check_last_block = 132;
+
+// When set, the per-file scan reports this one path as unreadable.
+static const char *mock_fs_bad_file = NULL;
+
+// True for the "/sd" mount and anything under it (the removable volume).
+static bool mock_fs_is_sd_path(const char *pathname)
+{
+    return pathname && strncmp(pathname, "/sd", 3) == 0 &&
+           (pathname[3] == '\0' || pathname[3] == '/');
+}
+
 // Mock file stream context
 typedef struct MockFileContext
 {
@@ -279,6 +299,11 @@ static void mock_fs_create_dir(const char *name)
 // Reset the mock file system
 static void mock_fs_reset(void)
 {
+    mock_fs_free_blocks_ok = true;
+    mock_fs_sd_present = true;
+    mock_fs_check_code = 0;
+    mock_fs_check_last_block = 132;
+    mock_fs_bad_file = NULL;
     for (int i = 0; i < MOCK_MAX_FILES; i++)
     {
         mock_files[i].exists = false;
@@ -408,10 +433,16 @@ static bool mock_storage_list_directory(const char *pathname, LogoDirCallback ca
 }
 
 // Fixed, deterministic free-block count and block size for tests of `free`.
+// Set mock_fs_free_blocks_ok to false to simulate a volume that is present but
+// cannot report its free space (a disk problem, not a missing card).
 static bool mock_storage_free_blocks(const char *pathname, uint32_t *free_blocks,
                                      uint32_t *block_size)
 {
     (void)pathname;
+    if (!mock_fs_free_blocks_ok)
+    {
+        return false;
+    }
     if (free_blocks)
     {
         *free_blocks = 100;
@@ -421,6 +452,40 @@ static bool mock_storage_free_blocks(const char *pathname, uint32_t *free_blocks
         *block_size = 512;
     }
     return true;
+}
+
+// Canned result for the consistency walk: code 0 is a clean filesystem.
+static bool mock_storage_fs_check(uint32_t *blocks, long *last_block, int *code,
+                                  LogoFsBadFileFn on_bad_file, void *user_data)
+{
+    if (on_bad_file && mock_fs_bad_file)
+    {
+        on_bad_file(mock_fs_bad_file, 412, user_data);
+    }
+    if (blocks)
+    {
+        *blocks = 7;
+    }
+    if (last_block)
+    {
+        *last_block = mock_fs_check_last_block;
+    }
+    if (code)
+    {
+        *code = mock_fs_check_code;
+    }
+    return mock_fs_check_code == 0;
+}
+
+// Only "/sd" is removable here: it is absent when mock_fs_sd_present is false.
+static bool mock_storage_mount_available(const char *pathname)
+{
+    return !mock_fs_is_sd_path(pathname) || mock_fs_sd_present;
+}
+
+static bool mock_storage_is_external(const char *pathname)
+{
+    return mock_fs_is_sd_path(pathname);
 }
 
 static LogoStorageOps mock_storage_ops = {
@@ -434,6 +499,9 @@ static LogoStorageOps mock_storage_ops = {
     .file_size = mock_storage_file_size,
     .list_directory = mock_storage_list_directory,
     .free_blocks = mock_storage_free_blocks,
+    .mount_available = mock_storage_mount_available,
+    .is_external = mock_storage_is_external,
+    .fs_check = mock_storage_fs_check,
 };
 
 static LogoStorage mock_storage;

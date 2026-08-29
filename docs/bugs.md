@@ -22,9 +22,98 @@ edge case)
 
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
+| [B65](#b65--the-internal-littlefs-walk-fails-on-a-board-so-free-writes-past-256-bytes-and-backup-all-fail) | The internal LittleFS walk fails on a board, so `free`, writes past 256 bytes and `backup` all fail | files | high | 2026-08-29 | open |
 | [B51](#b51--an-arithmetic-statement-got-23--slower-on-the-board-and-only-on-the-board) | An arithmetic statement got 23 % slower on the board, and only on the board | interpreter | medium | 2026-08-24 | open |
 | [B19](#b19--collision-tests-ignore-the-wrapped-playfield) | Collision tests ignore the wrapped playfield (Asteroids) | games | low | 2026-08-12 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
+
+### B65 — The internal LittleFS walk fails on a board, so `free`, writes past 256 bytes and `backup` all fail
+
+Reported from a board while chasing [B64](#fixed): `pr free` errors, `dribble "db.txt`
+stops filling its file at exactly **256 bytes**, and `backup "/sd/img` fails —
+while `cat`, `files`, reading files, and everything on the SD card
+(`pr (free "/sd)`, `(cat "/sd)`) work normally.
+
+B64 established that these are **one** failure, not three. `lfs_alloc` rebuilds
+its lookahead window by walking the whole filesystem
+(`lfs_alloc_scan` → `lfs_fs_traverse_`, lfs.c:655); `lfs_fs_size`, which backs
+`free`, runs the same walk (lfs.c:5190); and so does `logo_lfs_backup`
+(lfs_backup.c:119). Operations that never walk — mount, `open`, `cat`, `files`,
+reading — keep working, which is what makes the volume look healthy. 256 is
+`PICOCALC_LFS_CACHE_SIZE`: the first byte that must leave SRAM and claim a block.
+
+**What B64 fixed was the message, not this.** What is still unknown is *why* the
+walk fails on that board. Ruled out so far:
+
+- **A full filesystem.** `NOSPC` comes from a walk that succeeded, so `free`
+  would answer with 0 blocks rather than erroring.
+- **The region overlapping the firmware.** pico2w text is 853,612 B against a
+  region starting at 2 MB; pico+2w is 981,096 B against 8 MB.
+- **`PICOCALC_FLASH_LFS_SIZE` not reaching every translation unit.** It reaches
+  `picocalc_flash.c`, `picocalc_lfs.c` and `lfs.c` (checked in
+  `compile_commands.json`; `lfs_storage.c` does not use it).
+- **`picocalc_flash_erase` / `_program` rejecting arguments.** Their bounds
+  checks cannot fail for any block LittleFS can address at this geometry.
+
+**`fscheck` (added under B64) localised it.** The board reports:
+
+```logo
+?pr .fsck          ; the shape it had when the board ran it
+-84 103 4.29496e9
+```
+
+`-84` is `LFS_ERR_CORRUPT`, 103 blocks were walked cleanly, and the third number
+is `4294967295` = `0xFFFFFFFF` = LittleFS's own `LFS_BLOCK_NULL` — **the walk was
+handed a null block pointer as if it were a live block, and died on it.** The
+chain is exact:
+
+1. `lfs_ctz_traverse` reports a file's data head to the callback before reading
+   it (lfs.c:3032), so a head of `0xFFFFFFFF` is recorded as visited.
+2. It then reads that block to find the next pointer (lfs.c:3043).
+3. `lfs_bd_read` rejects `block >= lfs->block_count` with `LFS_ERR_CORRUPT`
+   (lfs.c:49-51) — **before the block device is called at all**, so no flash was
+   touched and the fault is on-disk metadata, not the flash layer.
+
+The metadata-tail path is ruled out: `lfs_pair_isnull` is true when *either* half
+is null (lfs.c:309), so the walk exits rather than reporting one. That leaves a
+**file whose recorded size is non-zero while its CTZ head holds the erased-flash
+value** — a data pointer that was never written. (A directory entry with both
+pair halves null could also report `-1`, but its failure would come later in the
+walk, not on the next read.)
+
+So the volume is not sick everywhere: 103 blocks are fine and one file's entry is
+blank. Since `filelen` reads only metadata while reading the file follows the
+broken pointer, the culprit is **the file whose `filelen` is non-zero but which
+reads back empty**. Erasing it should let the walk complete, and `fscheck`
+reporting OK confirms it.
+
+Still open: what wrote a blank data pointer in the first place. A backup cannot
+be used to rescue the volume, since imaging runs the same walk — individual files
+must be copied off with `copyfile` to `/sd` first.
+
+`fscheck` was then reshaped around what the board actually needs. It reported the
+null as the raw `4294967295`, which came out of Logo as `4.29496e9` — single
+precision cannot hold that value exactly, and the number had to be decoded by
+hand before it meant anything. So it is now `fscheck` (with `fsck` as the abbreviation, and no leading period,
+since it changes nothing) and a **command that prints a labelled report** rather
+than an operation outputting three bare numbers (a screen you
+cannot copy numbers off is the same argument that put metrics in files), and a
+null block is named in words instead of printed.
+
+It also grew the pass that names the file to erase. Whenever the walk fails,
+`fscheck` reads every file end to end and reports each one it cannot read —
+**naming, never erasing**: the destructive step stays a deliberate `erasefile`.
+`(fscheck "scan)` forces that pass on a volume that walks clean, which is worth
+having because **the walk never reads a file's data blocks**: a filesystem can
+walk perfectly and still hold a file that cannot be read, and no amount of
+walking will say so. The scan recurses to `LOGO_FSCK_MAX_DEPTH` (4), capped
+because each level costs an `lfs_dir_t` plus an `lfs_info` on a board's stack.
+
+Worth noting while here, not itself a defect: **the reserved region is not
+carved out in the linker script.** The pico2w link reports `FLASH: 849224 B / 4 MB
+20.25%`, i.e. the linker believes it may use all 4 MB, and only the 1.2 MB of
+slack between the firmware and the 2 MB region boundary keeps them apart. Nothing
+would catch the firmware growing into the filesystem.
 
 ### B51 — An arithmetic statement got 23 % slower on the board, and only on the board
 
@@ -122,6 +211,7 @@ pixels twice and speckle the line. Thick reverse drawing is therefore left at
 
 | Date | Bug | Area | Fix | Ref |
 |---|---|---|---|---|
+| 2026-08-29 | `pr free` said "There is no SD card" about the internal `/` volume (B64) | files | Reported from a board: *"`pr free` returns 'There is no SD card', however `(cat "/sd)` displays the contents of the SD card, and my prefix is set to `/`."* Both halves of that are consistent, because **the two commands were talking about different volumes.** With the prefix at `/`, `free` asks the storage router about `.`, which resolves to `/` and routes to the **internal LittleFS**, never touching the card; `cat "/sd` routes to the FAT32 backend, which was working fine. `prim_free` collapsed *every* `logo_io_free_blocks` failure into `ERR_NO_SD_CARD` on the reasoning in its own comment -- *"most commonly: no SD card for a /sd path"* -- so a failure on the one volume that has no card slot at all was reported as a missing card, and pointed the reader at the wrong hardware. Only a removable volume can genuinely be absent: the error is now gated on `logo_io_is_external_path` **and** `logo_io_mount_available`, and anything else that can't report its free space is `I'm having trouble with the disk`. Two tests, both failing on the old code -- one drives `free` at a present-but-failing internal volume and expects `ERR_DISK_TROUBLE`, the other drives `(free "/sd)` with no card and still expects `ERR_NO_SD_CARD`. The mock filesystem grew two knobs for them (`mock_fs_free_blocks_ok`, `mock_fs_sd_present`) plus `mount_available`/`is_external` ops, which is the first coverage the SD-absent path has had. 81/81 ctest green. **The message was the defect; the underlying failure on the board is separate, and the board found it.** Two more reports arrived: `dribble` stopped filling its file at exactly **256 bytes**, and `backup "/sd/img` failed the same way. 256 is `PICOCALC_LFS_CACHE_SIZE` -- the first byte that has to leave SRAM and claim a flash block -- and that pins all three symptoms to **one** failure. `lfs_alloc` does not pick a block off a free list; when the lookahead window is spent it rebuilds it by walking the whole filesystem (`lfs_alloc_scan` -> `lfs_fs_traverse_`, lfs.c:655), and `lfs_fs_size` runs the *same* walk (lfs.c:5190), as does `logo_lfs_backup` (lfs_backup.c:119). So a broken traverse takes free-space reporting, block allocation and imaging down together, while mount, `open`, `cat`, `files` and reading a file -- none of which walk anything -- keep working and make the volume look healthy. Reproduced on the host: a fault in the block layer gives `open=0` then `write FAILED after 256 bytes`, with listing still clean. A full volume was ruled out by the same evidence: `NOSPC` comes from a traverse that *succeeded*, so `free` would still answer, with 0 blocks. Also ruled out by measurement -- the region does not overlap the firmware (pico2w text is 853,612 B against a region starting at 2 MB; pico+2w 981,096 B against 8 MB), and `PICOCALC_FLASH_LFS_SIZE` does reach `picocalc_flash.c`, `picocalc_lfs.c` and `lfs.c` (checked in `compile_commands.json`). **`free` was already the integrity check and swallowed the reason**, so a check was added to report it: a new optional `fs_check` storage op, LittleFS-only, routed to the root backend like imaging. It first surfaced as `.fsck` outputting `[code blocks last_block]`; B65 reshaped it into `fscheck` (alias `fsck`), a command that prints a report, once the board showed what that output actually reads like. Two tests drive it against a real RAM-backed LittleFS, including the exact shape of the report -- metadata broken, superblock and data blocks intact, so the volume still mounts, lists and reads while the walk and `free` both fail. **This does not repair anything and the board's own cause is still open** (see B65). `setprefix` has the same misattribution one line up (`primitives_files_directory.c:472` reports a missing card when a directory is absent on a root volume that failed to mount); left alone as out of scope for this report | [`fscheck` reference](../reference/Pico_Logo_Reference.md) |
 | 2026-08-29 | `hw.setcpu "fast` made the voice 6 dB quieter (B63) | sound/speech | Reported from a board on the P16 M3 listening session: *"when in fast mode the voice is quieter than in normal mode."* `fast` doubles `clk_sys`, and the PSG mix rate follows it straight off the PWM slice, so the speech engine reclocks from 36.6 kHz to 73.2. Every resonator coefficient was correctly re-derived — the pitch and the formants were right, which is why nothing else sounded wrong — but **the excitation was not.** `speech_resonator_tune` normalises the filter to unit gain at DC, so its input coefficient `a = 1 - b - c` falls as **1/fs²**: measured 0.015630 at 36.6 kHz against 0.003921 at 73.2, a ratio of 3.99. A fixed-amplitude impulse therefore deposits a quarter as much energy at twice the rate, and the sentence's RMS came out at 819 against 1561 — **half, to within 2 %**, exactly what the ear reported. The two sources need different compensation because they are different kinds of signal, and both exponents were measured rather than assumed: the **impulse train** fires at a rate fixed in Hz, so what matters is energy per impulse and it scales with `fs` (which brings the loudness back to within 1 % across a 4× span of rates); the **noise source** fires every sample, so doubling the rate spreads a fixed per-sample variance over twice the bandwidth and a fixed-Hz resonator sees half the power, so it scales with `√fs` (measurement puts the true exponent nearer 0.59, so this is right to about 6 % — a bound in the test rather than a fudge factor in the code). Both factors are exactly 1 at `SPEECH_SAMPLE_RATE_HZ`, so **every `.wav` the M0 and M1 listening gates were judged on is bit-identical** and the gates still stand. `test_the_mix_rate_does_not_change_the_loudness` renders a sustained vowel and a sustained fricative at half, stock and double the rate and holds each within 3 dB of the others; it fails at 0.49 on the old code. **Confirmed on a Pico 2 W the same day**: the same sentence at `normal` and at `fast`, each paired with a reference note, comes back at the same loudness and the same speed. The note is what makes that judgeable — comparing loudness against a memory three seconds old is the comparison that let this through the M0 and M1 gates in the first place, and pairing the voice with a rate-correct PSG note turns it into a within-clock question. The general lesson is worth keeping: **reclocking a DSP engine means re-deriving its levels as well as its frequencies**, and the frequencies are the half that is obvious | |
 | 2026-08-26 | Every queued sound sequence ran about a third long, and the loud explosion was the wrong one (B62) | games | Found reading the sequencer against §16.14's own numbers. **(1) The tempo.** `voice_advance_block` pops the next queued note only at `ENV_IDLE`, so the POKEY pair's `[0 0 15 15]` envelope added its 15 ms release to *every* note in *every* sequence: the enemy alert ran 780 ms against the cabinet's 576, the collision warble 650 against 456. Each sequence had been checked note-by-note and each note was right. POKEY has no envelope -- a sequence there is a register written and written again -- so the pair is `[0 0 15 0]` and the floor is the one refill block the driver cannot go below, **28.5 ms, not 25**. **(2) The explosions were inverted.** `$6027` gives the `$ff` counter and the loud bit to the unit that was HIT and the `$70` and the soft bit to the one that FIRED, so a tank you kill and a shell you put into a wall are the same 448 ms soft sound and the only long loud explosion in the game is your own death; M7 had a tank at 800 ms loud and a wall at 250 soft. A missile that rams you is `$676d`'s `$ff` with the bit cleared, so the two deaths differ too. **(3) Sweeps are linear in the divisor**, `f = 27000/(AUDF+1)`, so half way up the saucer's 64 -> 32 is 551 Hz and not 659: the middle note was a sixth where the cabinet plays a fifth. With the floor at 28.5 the alert is seven steps a sweep instead of four (a chromatic run from G#4, the ROM's counter at seven even places) and the collision sixteen instead of ten, now carrying `$78dd`'s volume shape as well -- 11 down to 2 in the first 144 ms, then a flat tail. **(4) The sound of being stuck was missing entirely**: `recent_coll_flag` loops sound `$04` (1588 Hz, vol 1, 64 ms on / 64 off) for as long as you lean on a cube, and takes the pair off the saucer while it does. **(5)** The extra tank is AUDC `$a2` -- volume 2, so 6 here, not 7. Four new tests; the explosion test was rewritten, since it had been asserting the hierarchy M7 invented. 198/198 battlezone, 84/84 ctest green. **Not yet confirmed on a board** | [design §16.15](battlezone-design.md) |
 | 2026-08-25 | Shells that visibly went past still killed the player: the fire window was read off the wrong half of a 9-bit angle (B61) | games | Second board run on B60's fix: *"much better for collisions, and the spawns are better as well. However, I still get hit by shells that look like they should miss."* **B60 replaced the square hit box with a corridor and then made the corridor twice as wide as the cabinet's, on an argument that does not hold.** It read `TryShootPlayer` (`$65c5`) as firing inside ONE angle unit -- 1.406&deg; -- against `hunt`'s 2.8&deg;, and doubled the kill half-width from the cabinet's 7 steps to 14 so that `box / tan(window)`, the range at which a shot stops being certain, stayed where the cabinet has it. **Both sides of that compare are the HIGH BYTE of a 9-bit facing.** `RotateLeft` (`$638d`) adds `$80` to `plyr_facing_lo` and carries, so a rotate step is **0.703&deg;** and the byte the fire test compares is the bearing rounded to 1.406&deg;. A difference of one unit between two rounded bytes is a true error of anything up to **2.81&deg;** -- the cabinet's window IS `hunt`'s, and the box that belongs with it is the cabinet's own 5.6-8 steps (`TestProjCollU`, `$5fb2`), a quarter of the radius the same tank carries against a cube. The corridor is now **half `ehalf`** for the round coming at you and half `e.hw` for the one you fired, so a shot is certain inside **143 steps** rather than 286 and a coin toss at 300. 286 is exactly what the board could still see: a shell passing 13 steps to one side at point blank is a shell that visibly went by. The cabinet runs both directions through one routine, so **your own gun tightened by the same factor** -- a round through the edge of a tank's silhouette now goes past it, which is why the cabinet's long shots miss and closing is worth doing. Three tests rewritten, all three failing on B60's numbers; the sweep test now asserts a hit at 60 and 100 steps and a miss at 400 and 620. 176/176 battlezone, 84/84 ctest green. **Not yet confirmed on a board** | |

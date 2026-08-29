@@ -277,6 +277,120 @@ void test_free_with_pathname(void)
     TEST_ASSERT_EQUAL_STRING("100", mem_word_ptr(mem_car(list)));
 }
 
+// B64: `free` on the internal volume reported "There is no SD card". Any
+// free-space failure was blamed on a missing card, even for a path that never
+// touches the SD slot.
+void test_free_on_internal_volume_reports_disk_trouble(void)
+{
+    mock_fs_free_blocks_ok = false;
+
+    Result r = eval_string("free");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DISK_TROUBLE, result_get_error_code(r));
+}
+
+// A missing card is still named as such when the path is the SD mount.
+void test_free_on_absent_sd_reports_no_sd_card(void)
+{
+    mock_fs_free_blocks_ok = false;
+    mock_fs_sd_present = false;
+
+    Result r = eval_string("(free \"/sd)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_NO_SD_CARD, result_get_error_code(r));
+}
+
+// B64: `fscheck` exists so a broken filesystem can name its own error code --
+// `free` runs the same walk but swallows the reason.
+void test_fscheck_reports_a_clean_filesystem(void)
+{
+    reset_output();
+
+    Result r = run_string("fscheck");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "Internal filesystem: OK"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "blocks read 7"));
+    // A clean walk does not pay for the file scan.
+    TEST_ASSERT_NULL(strstr(output_buffer, "every file reads back"));
+}
+
+void test_fscheck_prints_the_filesystems_own_error_code(void)
+{
+    mock_fs_check_code = -84; // LFS_ERR_CORRUPT
+    reset_output();
+
+    Result r = run_string("fscheck");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "Internal filesystem: DAMAGED"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "error       -84"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "stopped on  block 132"));
+}
+
+// B65: the walk stopping on a null block pointer must be legible. Reported as
+// the raw 4294967295 it came back from the board as "4.29496e9", which single
+// precision cannot hold exactly and no one can read.
+void test_fscheck_names_a_null_block_pointer_instead_of_printing_it(void)
+{
+    mock_fs_check_code = -84;
+    mock_fs_check_last_block = -1;
+    reset_output();
+
+    run_string("fscheck");
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "stopped on  a null block pointer"));
+    TEST_ASSERT_NULL(strstr(output_buffer, "4.29496"));
+    TEST_ASSERT_NULL(strstr(output_buffer, "4294967295"));
+}
+
+// A failed walk always runs the file scan: naming the bad file is the point, so
+// the reader should not have to ask twice.
+void test_fscheck_names_the_unreadable_file_without_erasing_it(void)
+{
+    mock_fs_check_code = -84;
+    mock_fs_bad_file = "/sketches/rocks";
+    mock_fs_create_file("sketches/rocks", "data");
+    reset_output();
+
+    run_string("fscheck");
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "unreadable  /sketches/rocks"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "412 bytes"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "erase"));
+    // Reporting only: the named file is still there.
+    TEST_ASSERT_TRUE(mock_storage_file_exists("sketches/rocks"));
+}
+
+// The walk never reads a file's data blocks, so a volume that walks clean can
+// still hold an unreadable file. That is what the opt-in scan is for.
+void test_fscheck_scan_checks_files_on_a_volume_that_walks_clean(void)
+{
+    mock_fs_bad_file = "/startup";
+    reset_output();
+
+    Result r = run_string("(fscheck \"scan)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "Internal filesystem: OK"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "unreadable  /startup"));
+}
+
+// `fsck` is the abbreviation, and must be the same primitive rather than a
+// second copy that can drift.
+void test_fsck_is_an_alias_for_fscheck(void)
+{
+    mock_fs_check_code = -84;
+    reset_output();
+
+    Result r = run_string("fsck");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "Internal filesystem: DAMAGED"));
+    TEST_ASSERT_NOT_NULL(strstr(output_buffer, "error       -84"));
+}
+
+void test_fscheck_rejects_an_unknown_keyword(void)
+{
+    Result r = run_string("(fscheck \"repair)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_DOESNT_LIKE_INPUT, result_get_error_code(r));
+}
+
 void test_setprefix_and_prefix(void)
 {
     // Create the directory first
@@ -492,6 +606,15 @@ int main(void)
     RUN_TEST(test_rename_file);
     RUN_TEST(test_free_reports_blocks);
     RUN_TEST(test_free_with_pathname);
+    RUN_TEST(test_free_on_internal_volume_reports_disk_trouble);
+    RUN_TEST(test_free_on_absent_sd_reports_no_sd_card);
+    RUN_TEST(test_fscheck_reports_a_clean_filesystem);
+    RUN_TEST(test_fscheck_prints_the_filesystems_own_error_code);
+    RUN_TEST(test_fscheck_names_a_null_block_pointer_instead_of_printing_it);
+    RUN_TEST(test_fscheck_names_the_unreadable_file_without_erasing_it);
+    RUN_TEST(test_fscheck_scan_checks_files_on_a_volume_that_walks_clean);
+    RUN_TEST(test_fsck_is_an_alias_for_fscheck);
+    RUN_TEST(test_fscheck_rejects_an_unknown_keyword);
     RUN_TEST(test_setprefix_and_prefix);
     RUN_TEST(test_sp_alias_sets_prefix);
     RUN_TEST(test_setprefix_nonexistent_directory);

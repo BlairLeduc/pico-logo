@@ -8,7 +8,9 @@
 #include "lfs_storage.h"
 #include "stream.h"
 #include "lfs_backup.h"
+#include "core/limits.h"
 
+#include <stdio.h> // snprintf
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h> // strcasecmp
@@ -495,6 +497,124 @@ static bool lfs_storage_fs_image_restore(LogoStream *in)
     return g_lfs != NULL && logo_lfs_restore(g_lfs, in);
 }
 
+// Traverse callback: count the live blocks and remember the most recent one, so
+// a failed walk can say how far it got.
+typedef struct LfsCheckContext
+{
+    uint32_t blocks;
+    long last_block;
+} LfsCheckContext;
+
+static int lfs_check_visit(void *p, lfs_block_t block)
+{
+    LfsCheckContext *ctx = (LfsCheckContext *)p;
+    ctx->blocks++;
+    // LittleFS's null block (private to lfs.c as LFS_BLOCK_NULL) is the
+    // erased-flash value, not a block: report it as -1 rather than as
+    // 4294967295, which single-precision floats cannot even hold exactly.
+    ctx->last_block = (block == (lfs_block_t)-1) ? -1 : (long)block;
+    return 0;
+}
+
+// Read one file end to end. Returns the first negative LittleFS error, or 0 if
+// the whole file read back. Non-recursive, so its buffer is not multiplied by
+// the directory depth above it.
+static int lfs_read_whole_file(const char *path)
+{
+    lfs_file_t file;
+    int err = lfs_file_open(g_lfs, &file, path, LFS_O_RDONLY);
+    if (err < 0)
+    {
+        return err;
+    }
+    char buf[64];
+    lfs_ssize_t n;
+    while ((n = lfs_file_read(g_lfs, &file, buf, sizeof(buf))) > 0)
+    {
+        // discard: only the error matters
+    }
+    lfs_file_close(g_lfs, &file);
+    return (n < 0) ? (int)n : 0;
+}
+
+// Read every file under `path`, reporting the ones that fail. `path` is a
+// buffer of LOGO_STREAM_NAME_MAX holding the directory to scan, extended in
+// place for each entry. Depth is capped so the recursion cannot run the stack
+// out on a deep tree; the frame here is one lfs_dir_t plus one lfs_info.
+static bool lfs_scan_dir(char *path, int depth, LogoFsBadFileFn on_bad_file,
+                         void *user_data)
+{
+    if (depth > LOGO_FSCK_MAX_DEPTH)
+    {
+        return true;
+    }
+    lfs_dir_t dir;
+    if (lfs_dir_open(g_lfs, &dir, path) < 0)
+    {
+        return true; // an unreadable directory is the walk's business, not ours
+    }
+
+    size_t base = strlen(path);
+    bool keep_going = true;
+    struct lfs_info info;
+    while (keep_going && lfs_dir_read(g_lfs, &dir, &info) > 0)
+    {
+        if (strcmp(info.name, ".") == 0 || strcmp(info.name, "..") == 0)
+        {
+            continue;
+        }
+        // Build "<path>/<name>", skipping anything that would not fit rather
+        // than scanning a truncated path that names a different file.
+        int n = snprintf(path + base, LOGO_STREAM_NAME_MAX - base, "%s%s",
+                         (base > 0 && path[base - 1] == '/') ? "" : "/", info.name);
+        if (n < 0 || (size_t)n >= LOGO_STREAM_NAME_MAX - base)
+        {
+            path[base] = '\0';
+            continue;
+        }
+
+        if (info.type == LFS_TYPE_DIR)
+        {
+            keep_going = lfs_scan_dir(path, depth + 1, on_bad_file, user_data);
+        }
+        else if (lfs_read_whole_file(path) < 0)
+        {
+            keep_going = on_bad_file(path, (long)info.size, user_data);
+        }
+        path[base] = '\0';
+    }
+
+    lfs_dir_close(g_lfs, &dir);
+    return keep_going;
+}
+
+static bool lfs_storage_fs_check(uint32_t *blocks, long *last_block, int *code,
+                                 LogoFsBadFileFn on_bad_file, void *user_data)
+{
+    LfsCheckContext ctx = {0, 0};
+    int err = g_lfs ? lfs_fs_traverse(g_lfs, lfs_check_visit, &ctx) : LFS_ERR_IO;
+
+    if (g_lfs && on_bad_file)
+    {
+        char path[LOGO_STREAM_NAME_MAX] = "/";
+        lfs_scan_dir(path, 0, on_bad_file, user_data);
+    }
+
+    if (blocks)
+    {
+        *blocks = ctx.blocks;
+    }
+    if (last_block)
+    {
+        *last_block = ctx.last_block;
+    }
+    if (code)
+    {
+        *code = err;
+    }
+    return err == 0;
+}
+
 static const LogoStorageOps lfs_storage_ops = {
     .open = lfs_storage_open,
     .file_exists = lfs_storage_file_exists,
@@ -509,6 +629,7 @@ static const LogoStorageOps lfs_storage_ops = {
     .mount_available = lfs_storage_mount_available,
     .fs_image_backup = lfs_storage_fs_image_backup,
     .fs_image_restore = lfs_storage_fs_image_restore,
+    .fs_check = lfs_storage_fs_check,
 };
 
 void logo_lfs_storage_init(LogoStorage *storage, lfs_t *lfs)
