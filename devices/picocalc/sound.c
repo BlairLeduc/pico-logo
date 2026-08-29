@@ -134,6 +134,20 @@ static volatile bool g_ready; // engine initialised
 static const int32_t g_gain[16] = {
     0, 10, 13, 16, 20, 26, 32, 41, 51, 64, 81, 102, 128, 162, 203, 256};
 
+// The speech source's gain: SPEECH_MIX_GAIN through the same ladder, folded
+// into one constant at `setsayvolume` time so the frame loop keeps the single
+// multiply-and-shift it had before there was a volume to set.
+static int32_t g_speech_gain = SPEECH_MIX_GAIN; // volume 15: g_gain[15] is 256
+
+void speech_volume(int volume)
+{
+    if (volume < 0 || volume > 15)
+    {
+        return;
+    }
+    g_speech_gain = (SPEECH_MIX_GAIN * g_gain[volume]) >> 8;
+}
+
 static bool is_noise_voice(int v)
 {
     return v == 3 || v == 7;
@@ -322,7 +336,7 @@ static void __not_in_flash_func(mix_half)(uint32_t *half)
             // §8.5 said to decide this by listening on the board rather than
             // from a spreadsheet, and it was right to: the spreadsheet
             // answer (match the peaks) came out ~20 dB quiet.
-            int32_t sp = ((int32_t)speech[f] * SPEECH_MIX_GAIN) >> SPEECH_MIX_SHIFT;
+            int32_t sp = ((int32_t)speech[f] * g_speech_gain) >> SPEECH_MIX_SHIFT;
             left += sp;
             right += sp;
         }

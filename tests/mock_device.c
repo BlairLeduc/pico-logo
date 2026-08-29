@@ -1244,8 +1244,9 @@ void mock_device_reset(void)
     }
 
     // Speech: memset zeroed the log and `speaking`; the utterance queue
-    // starts empty (all slots free).
+    // starts empty (all slots free) and no volume has been set.
     mock_state.speech.free_slots = SPEECH_QUEUE_LEN;
+    mock_state.speech.volume = -1;
 }
 
 //
@@ -1431,6 +1432,12 @@ void mock_speech_voice(int pitch, int speed, int mouth, int throat)
     mock_state.speech.voice_mouth = mouth;
     mock_state.speech.voice_throat = throat;
     mock_state.speech.voice_count++;
+}
+
+void mock_speech_volume(int volume)
+{
+    mock_state.speech.volume = volume;
+    mock_state.speech.volume_count++;
 }
 
 void mock_speech_set_status(bool speaking, int free_slots)

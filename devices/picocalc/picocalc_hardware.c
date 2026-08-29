@@ -2488,6 +2488,7 @@ static LogoHardwareOps picocalc_hardware_ops = {
     .speech_status = speech_status,
     .speech_stop = speech_stop,
     .speech_voice = speech_voice,
+    .speech_volume = speech_volume,
 #ifdef LOGO_HAS_WIFI
     .wifi_is_connected = picocalc_wifi_is_connected,
     .wifi_connect = picocalc_wifi_connect,

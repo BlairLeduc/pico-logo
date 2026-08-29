@@ -413,6 +413,95 @@ void test_setvoice_is_silent_and_readable_with_no_device_op(void)
     ops->speech_voice = saved;
 }
 
+//==========================================================================
+// setsayvolume / sayvolume (say-design.md §5.8)
+//==========================================================================
+
+void test_sayvolume_starts_full(void)
+{
+    TEST_ASSERT_EQUAL_STRING("15", value_to_string(eval_string("sayvolume").value));
+
+    // And nothing was sent to the device to make that true: full is what the
+    // mixer slot already is.
+    TEST_ASSERT_EQUAL_INT(0, spk()->speech.volume_count);
+}
+
+void test_setsayvolume_sets_and_reaches_the_device(void)
+{
+    Result r = run_string("setsayvolume 8");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("8", value_to_string(eval_string("sayvolume").value));
+
+    const MockDeviceState *s = spk();
+    TEST_ASSERT_EQUAL_INT(1, s->speech.volume_count);
+    TEST_ASSERT_EQUAL_INT(8, s->speech.volume);
+}
+
+// 0 is silence, not an error: the same end of the scale `sound` has.
+void test_setsayvolume_takes_both_ends_of_the_scale(void)
+{
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("setsayvolume 0").status);
+    TEST_ASSERT_EQUAL_STRING("0", value_to_string(eval_string("sayvolume").value));
+    TEST_ASSERT_EQUAL_INT(0, spk()->speech.volume);
+
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("setsayvolume 15").status);
+    TEST_ASSERT_EQUAL_STRING("15", value_to_string(eval_string("sayvolume").value));
+    TEST_ASSERT_EQUAL_INT(15, spk()->speech.volume);
+}
+
+void test_setsayvolume_rejects_a_level_off_the_scale(void)
+{
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setsayvolume 16").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setsayvolume -1").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setsayvolume loud").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setsayvolume [8]").status);
+
+    // And none of them got through.
+    TEST_ASSERT_EQUAL_STRING("15", value_to_string(eval_string("sayvolume").value));
+    TEST_ASSERT_EQUAL_INT(0, spk()->speech.volume_count);
+}
+
+void test_setsayvolume_wants_one_input_and_sayvolume_none(void)
+{
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setsayvolume").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("show (sayvolume 1)").status);
+}
+
+// The volume is the mixer's, not the voice's: `setvoice` does not disturb it
+// and `voice` does not report it.
+void test_the_volume_and_the_voice_are_independent(void)
+{
+    run_string("setsayvolume 4");
+    run_string("setvoice [30 150 200 90]");
+    TEST_ASSERT_EQUAL_STRING("4", value_to_string(eval_string("sayvolume").value));
+    TEST_ASSERT_EQUAL_STRING("[30 150 200 90]", value_to_string(eval_string("voice").value));
+}
+
+// §5.6 again: `stopsound` shuts the voice up, it does not turn it back up.
+void test_stopsound_leaves_the_volume_alone(void)
+{
+    run_string("setsayvolume 4");
+    run_string("sayphonemes [ax l er t]");
+    run_string("stopsound");
+    TEST_ASSERT_EQUAL_STRING("4", value_to_string(eval_string("sayvolume").value));
+}
+
+// A board with no speech engine still answers `sayvolume`, for the reason
+// `voice` does.
+void test_setsayvolume_is_silent_and_readable_with_no_device_op(void)
+{
+    LogoIO *io = primitives_get_io();
+    LogoHardwareOps *ops = io->hardware->ops;
+    void (*saved)(int) = ops->speech_volume;
+    ops->speech_volume = NULL;
+
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("setsayvolume 4").status);
+    TEST_ASSERT_EQUAL_STRING("4", value_to_string(eval_string("sayvolume").value));
+    TEST_ASSERT_EQUAL_INT(0, spk()->speech.volume_count);
+
+    ops->speech_volume = saved;
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -451,5 +540,13 @@ int main(void)
     RUN_TEST(test_voice_takes_no_input);
     RUN_TEST(test_stopsound_leaves_the_voice_alone);
     RUN_TEST(test_setvoice_is_silent_and_readable_with_no_device_op);
+    RUN_TEST(test_sayvolume_starts_full);
+    RUN_TEST(test_setsayvolume_sets_and_reaches_the_device);
+    RUN_TEST(test_setsayvolume_takes_both_ends_of_the_scale);
+    RUN_TEST(test_setsayvolume_rejects_a_level_off_the_scale);
+    RUN_TEST(test_setsayvolume_wants_one_input_and_sayvolume_none);
+    RUN_TEST(test_the_volume_and_the_voice_are_independent);
+    RUN_TEST(test_stopsound_leaves_the_volume_alone);
+    RUN_TEST(test_setsayvolume_is_silent_and_readable_with_no_device_op);
     return UNITY_END();
 }

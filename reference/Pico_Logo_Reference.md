@@ -5596,7 +5596,7 @@ stopsound
 
 `command`
 
-Silences every voice (through its release), stops speaking, and clears all queued notes and phonemes. It does not change the envelopes or waveforms set with [`setenv`](#setenv) and [`setwave`](#setwave), nor the voice set with [`setvoice`](#setvoice), so the timbre you chose survives.
+Silences every voice (through its release), stops speaking, and clears all queued notes and phonemes. It does not change the envelopes or waveforms set with [`setenv`](#setenv) and [`setwave`](#setwave), nor the voice set with [`setvoice`](#setvoice) or its loudness set with [`setsayvolume`](#setsayvolume), so the timbre you chose survives.
 
 **Example**:
 
@@ -5623,7 +5623,7 @@ _text_ can be a word or a list:
 
 Numbers are spoken a digit at a time, so `say 42` says "four two". A `.`, `!` or `?` puts a pause in; other punctuation is ignored, and so is any character the rules cannot pronounce.
 
-`say` works out the pronunciation from the spelling, and English spelling being what it is, about one word in ten comes out wrong. When that happens, look at what it decided with [`phonemes`](#phonemes) and say your own version with [`sayphonemes`](#sayphonemes) — these three are meant to be used together. Use [`speaking?`](#speaking-speakingp) to tell when it has finished, and [`stopsound`](#stopsound) to cut it short.
+`say` works out the pronunciation from the spelling, and English spelling being what it is, about one word in ten comes out wrong. When that happens, look at what it decided with [`phonemes`](#phonemes) and say your own version with [`sayphonemes`](#sayphonemes) — these three are meant to be used together. Use [`speaking?`](#speaking-speakingp) to tell when it has finished, and [`stopsound`](#stopsound) to cut it short. [`setvoice`](#setvoice) changes who is speaking and [`setsayvolume`](#setsayvolume) how loudly.
 
 On a machine with no speaker, `say` does nothing at all, and your program keeps running.
 
@@ -5758,6 +5758,51 @@ to robot :sentence
   setvoice [30 150 200 90]
   say :sentence
   setvoice :was
+end
+```
+
+
+## setsayvolume
+
+setsayvolume _level_
+
+`command`
+
+Sets how loud speech is, from 0 to 15 — the same scale as [`sound`](#sound), [`setenv`](#setenv)'s _sustain_ and `play`'s `v`. 15 is full and is where it starts; 0 is silent, and every step down is about 2 decibels quieter. It takes effect at once, even in the middle of a sentence, and it stays set until you change it — [`stopsound`](#stopsound) does not put it back.
+
+This is the loudness of the voice only. It does not touch the notes the eight voices are playing, which is what makes it useful: turn the music down under a line of speech and back up afterwards, or turn a distant robot down without changing the way it talks.
+
+Speech is quieter than a note at the same number, and that is not a fault in the setting. A square wave is at full swing on every sample and a voice is not, so a voice at 15 sits well below a note at 15. Set the music lower than you think you need to.
+
+**Example**:
+
+```logo
+?setsayvolume 8
+?say [i am far away]
+?setsayvolume 15
+?say [i am right here]
+```
+
+
+## sayvolume
+
+sayvolume  
+
+`operation`
+
+outputs how loud speech is, from 0 to 15, as set by [`setsayvolume`](#setsayvolume). This is how a procedure ducks the voice and puts it back:
+
+**Example**:
+
+```logo
+?show sayvolume
+15
+to whisper :sentence
+  local "was
+  make "was sayvolume
+  setsayvolume 5
+  say :sentence
+  setsayvolume :was
 end
 ```
 

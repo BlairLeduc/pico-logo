@@ -261,6 +261,12 @@ extern "C"
         // `setvoice`; takes effect on the next phoneme.
         void (*speech_voice)(int pitch, int speed, int mouth, int throat);
 
+        // How loud the speech source sits in the mixer, 0..15 on the same
+        // 2 dB ladder every other volume in the language uses; 15 is the
+        // level §8.5 tuned by ear and 0 is silence. Backs `setsayvolume`;
+        // takes effect at once, mid-utterance included.
+        void (*speech_volume)(int volume);
+
         //
         // WiFi operations (only available on Pico W boards with LOGO_HAS_WIFI)
         //

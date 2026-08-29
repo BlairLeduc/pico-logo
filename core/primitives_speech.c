@@ -22,7 +22,9 @@
 //
 //  `setvoice`/`voice` keep a core-side shadow of the four knobs so `voice`
 //  reads back on a device with no engine, which is `setenv`/`env`'s
-//  arrangement exactly (primitives_sound.c).
+//  arrangement exactly (primitives_sound.c). `setsayvolume`/`sayvolume` is
+//  the same shadow again, for the one knob that is not the voice's but the
+//  mixer's (say-design.md §5.8).
 //
 
 #include "primitives.h"
@@ -361,7 +363,7 @@ static Result prim_speaking(Evaluator *eval, int argc, Value *args)
 }
 
 //==========================================================================
-// The voice: say-design.md §5.5
+// The voice: say-design.md §5.5 and §5.8
 //==========================================================================
 
 // Core-side shadow of the four knobs, read back by `voice`. The device is
@@ -375,6 +377,17 @@ static void voice_shadow_reset(void)
     g_voice.speed = SPEECH_VOICE_NOMINAL;
     g_voice.mouth = SPEECH_VOICE_NOMINAL;
     g_voice.throat = SPEECH_VOICE_NOMINAL;
+}
+
+// How loud the speech source is, 0..15, shadowed here for the same reason
+// the four knobs are. Not part of SpeechVoice: it is the mixer's gain rather
+// than anything the synthesizer does, which is why `voice` does not report
+// it and `setvoice` does not set it.
+static int g_say_volume;
+
+static void say_volume_reset(void)
+{
+    g_say_volume = SPEECH_SAY_VOLUME_DEFAULT;
 }
 
 // setvoice [64 72 128 128]      ; pitch speed mouth throat
@@ -445,9 +458,51 @@ static Result prim_voice(Evaluator *eval, int argc, Value *args)
     return result_ok(value_list(n));
 }
 
+// setsayvolume 8
+//
+// 0..15 on the language's one volume scale -- `sound`'s, `setenv`'s sustain
+// and `play`'s v_n -- because a second scale for the same idea would be a
+// thing to look up. 15 is the level the board was tuned to and 0 is silence.
+static Result prim_setsayvolume(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_NUMBER(args[0], vol_f);
+
+    int vol = (int)vol_f;
+    if (vol < 0 || vol > 15)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    g_say_volume = vol;
+
+    LogoHardwareOps *ops = speech_ops();
+    if (ops && ops->speech_volume)
+    {
+        ops->speech_volume(vol);
+    }
+    return result_none();
+}
+
+// sayvolume -> 0..15
+static Result prim_sayvolume(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    UNUSED(args);
+    if (argc > 0)
+    {
+        return result_error_arg(ERR_TOO_MANY_INPUTS, NULL, NULL);
+    }
+
+    char b[24];
+    format_number(b, sizeof b, (float)g_say_volume);
+    return result_ok(value_word(mem_atom(b, strlen(b))));
+}
+
 void primitives_speech_init(void)
 {
     voice_shadow_reset();
+    say_volume_reset();
 
     primitive_register("say", 1, prim_say);
     primitive_register("phonemes", 1, prim_phonemes);
@@ -456,4 +511,6 @@ void primitives_speech_init(void)
     primitive_register("speakingp", 0, prim_speaking);
     primitive_register("setvoice", 1, prim_setvoice);
     primitive_register("voice", 0, prim_voice);
+    primitive_register("setsayvolume", 1, prim_setsayvolume);
+    primitive_register("sayvolume", 0, prim_sayvolume);
 }

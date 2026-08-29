@@ -492,6 +492,12 @@ extern "C"
             // it, since the host has no engine to hear.
             int voice_pitch, voice_speed, voice_mouth, voice_throat;
             int voice_count;
+
+            // The last `setsayvolume` to reach the device, and how many
+            // times. -1 until one does, so a test can tell "set to 15" from
+            // "never set".
+            int volume;
+            int volume_count;
         } speech;
     } MockDeviceState;
 
@@ -706,6 +712,7 @@ extern "C"
     SpeechStatus mock_speech_status(void);
     void mock_speech_stop(void);
     void mock_speech_voice(int pitch, int speed, int mouth, int throat);
+    void mock_speech_volume(int volume);
 
     // Script the engine's status so tests can drive `speaking?` and the
     // `sayphonemes` queue-full wait without hardware.

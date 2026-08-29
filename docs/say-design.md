@@ -37,9 +37,9 @@ about phonetics and licences.
 |---|---|
 | Front end | `core/phonemes.c` / `.h` — English text → phoneme list. Pure, host-testable, the mirror of `core/notation.c` |
 | Back end | `core/speech_synth.c` / `.h` — the resonators and the phoneme table; pure math, no device, host-testable (built at M0, below). `devices/picocalc/speech.c` / `.h` (M3) is the thin IRQ wrapper: block-boundary parameter updates, the mixer slot, `sound_reclock`. See the M0 note in §12 for why the split moved here from the single `devices/` file first sketched |
-| Surface | `core/primitives_speech.c` — `say`, `sayphonemes`, `phonemes`, `speaking?`, `setvoice`/`voice`; `stopsound` extended |
+| Surface | `core/primitives_speech.c` — `say`, `sayphonemes`, `phonemes`, `speaking?`, `setvoice`/`voice`, `setsayvolume`/`sayvolume` (§5.8, added after M3); `stopsound` extended |
 | Tests | `tests/test_phonemes.c`, `tests/test_speech_synth.c`, `tests/test_primitives_speech.c` |
-| Reference | six new sections in `# The Outside World`, beside `play` and `stopsound` |
+| Reference | eight new sections in `# The Outside World`, beside `play` and `stopsound` |
 | Design | this document |
 
 All three boards. Speech needs neither a radio nor PSRAM, so unlike the network
@@ -285,7 +285,7 @@ Berzerk's robots are then one line at startup, not a synthesizer project.
 out with the same release the voices get, and clears the phoneme queue. The
 reference sentence changes from "silences every voice" to "silences every voice
 and stops speaking". Its promise not to touch `setenv`/`setwave` state extends
-to `setvoice`.
+to `setvoice` and to §5.8's volume.
 
 No separate `stopspeech`. There is one "shut up" in the language and it should
 mean all of it.
@@ -295,6 +295,62 @@ mean all of it.
 The [sound-design.md](sound-design.md) §5.5 rules, unchanged and now including
 speech: an utterance keeps going at the toplevel prompt, BREAK stops it, a
 toplevel error unwind stops it, `cs` does not touch it.
+
+### 5.8 `setsayvolume` / `sayvolume`
+
+Added after M3, on the evidence M3 produced. The board listens ended with a
+residual that is physics rather than a setting — at the measured 5× mixer gain
+the voice still sits ~13 dB below a note at volume 15 in RMS, because a square
+wave's crest factor is 1 and speech's is 7.85 — and §8.5's conclusion was that
+**a program that talks over music has to turn the music down**. That was left
+as advice, and advice is a poor substitute for a knob: turning eight voices
+down and back up is a different program from turning the voice up.
+
+```logo
+setsayvolume 8
+say [i am far away]
+show sayvolume
+```
+
+**0..15, default 15**, on the language's one volume scale — `sound`'s, the
+`setenv` sustain's and `play`'s `v`*n* — through the same 2 dB ladder, because
+a second scale for the same idea is a thing to look up. 15 is the level §8.5
+tuned by ear, so the default changes nothing.
+
+It is **not** a fifth `setvoice` knob and `voice` does not report it. The four
+are the synthesizer's, and this one is the mixer's: it is applied where the
+speech source meets the ears, which is why nothing in `core/speech_synth.c`
+reads it and why every M0/M1 gate `.wav` stays bit-identical. Concretely, the
+device folds `SPEECH_MIX_GAIN` and the ladder into one constant at
+`setsayvolume` time, so the refill IRQ keeps the single multiply-and-shift it
+had before there was a volume to set. It takes effect at once, mid-utterance
+included, and like `setvoice` it survives `stopsound` (§5.6).
+
+This is what makes Q4's "no automatic ducking" a position rather than an
+omission: a game that wants ducking now writes it in two lines and holds the
+policy itself.
+
+The host tests prove the scale, the errors, the readback and that the level
+reaches the device op; what they cannot prove is that the number does what its
+name says, because the multiply it changes is in the refill IRQ and what comes
+out is a sound. `tests/logo/p16vol` is that half, and it is three questions
+rather than M3's five: is the ladder a ladder, is 15 unchanged against a
+reference note, and does the knob solve the problem it was added for — the
+tune down under the voice, and then the voice down under the tune. **Run on a
+PicoCalc with a Pico 2 W 2026-08-29 and passed**, on the first attempt, which
+is not the history the rest of this section has: every previous thing decided
+by ear here was decided wrongly first (§8.5's level twice, B63's reclock). The
+difference is that this milestone changed a multiply and not a model — the gain
+sits outside the engine, so there was no new acoustics to be wrong about.
+
+The one open worry was Q3c, since the gain steps instantly in thread context
+rather than on a block boundary, and **there was no audible click** at a ~22 dB
+step under a sounding voice. So "takes effect at once" stays the documented
+behaviour rather than becoming a block-aligned ramp. The likely reason, offered
+as such: the step lands on a resonated impulse train, which is near zero for
+most of its period, so the discontinuity it can create is usually small — the
+crest factor that makes speech quiet at equal peaks (§8.5) makes it forgiving
+here.
 
 ## 6. The phoneme alphabet
 
@@ -1028,7 +1084,9 @@ M0–M2 needed no hardware, which was most of the work.
   feature looking for a user.
 - **Q4 — Should `say` duck the music?** **Recommend no.** A game that wants
   that can `stopsound`, and automatic ducking is a policy the primitive should
-  not hold.
+  not hold. *(Answered no, and §5.8 gave the manual answer teeth: after M3 the
+  ducking a game has to do itself is `setsayvolume` in one direction as well as
+  the notes in the other.)*
 - **Q5 — `setvoice`'s parameters.** SAM's four (pitch, speed, mouth, throat),
   or two (pitch, speed)? **Recommend four** — they are era-correct, they are
   what reaches a robot in one line, and `setenv`'s four-element list is the

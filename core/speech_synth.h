@@ -178,6 +178,11 @@ extern "C"
 #define SPEECH_VOICE_PITCH_DEFAULT 50 // 100 Hz, the M0/M1 gates' fundamental
 #define SPEECH_VOICE_NOMINAL 128      // speed/mouth/throat: the table as tabled
 
+// `setsayvolume`'s default: full, which is the mixer level §8.5 tuned by ear.
+// The surface's, not the engine's -- the volume is applied where the speech
+// source meets the mixer, so nothing in here reads it (§5.8).
+#define SPEECH_SAY_VOLUME_DEFAULT 15
+
     //======================================================================
     // The engine
     //======================================================================

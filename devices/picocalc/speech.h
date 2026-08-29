@@ -36,6 +36,10 @@ SpeechStatus speech_status(void);
 void speech_stop(void);
 void speech_voice(int pitch, int speed, int mouth, int throat);
 
+// Defined in sound.c, not here: the volume is this source's gain in the
+// mixer, and both the gain and the 2 dB ladder it scales live there.
+void speech_volume(int volume);
+
 // IRQ context: render the next `frames` samples of the utterance and return
 // them, or NULL when nothing is being said -- which is the common case, and
 // the one the mixer should pay nothing for.
