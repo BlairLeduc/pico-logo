@@ -255,6 +255,12 @@ extern "C"
         // phoneme queue. Called by `stopsound`.
         void (*speech_stop)(void);
 
+        // The four say-design.md §5.5 voice knobs, each 1..255: `pitch` is
+        // the fundamental in Hz/2 (the SpeechFrame unit), and `speed`,
+        // `mouth` and `throat` are scales with 128 nominal. Backs
+        // `setvoice`; takes effect on the next phoneme.
+        void (*speech_voice)(int pitch, int speed, int mouth, int throat);
+
         //
         // WiFi operations (only available on Pico W boards with LOGO_HAS_WIFI)
         //

@@ -2,7 +2,8 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Speech primitives (P16): say, phonemes, sayphonemes and speaking?.
+//  Speech primitives (P16): say, phonemes, sayphonemes, speaking? and the
+//  setvoice/voice pair.
 //  `stopsound`'s speech half stays in primitives_sound.c, because there is
 //  one "shut up" in the language and it should mean all of it
 //  (docs/say-design.md §5.6).
@@ -18,6 +19,10 @@
 //  is the identity the reference states as the definition (§5.3):
 //
 //      say :text   is   sayphonemes phonemes :text
+//
+//  `setvoice`/`voice` keep a core-side shadow of the four knobs so `voice`
+//  reads back on a device with no engine, which is `setenv`/`env`'s
+//  arrangement exactly (primitives_sound.c).
 //
 
 #include "primitives.h"
@@ -355,11 +360,100 @@ static Result prim_speaking(Evaluator *eval, int argc, Value *args)
     return result_ok(value_bool(s.speaking || s.free_slots < SPEECH_QUEUE_LEN));
 }
 
+//==========================================================================
+// The voice: say-design.md §5.5
+//==========================================================================
+
+// Core-side shadow of the four knobs, read back by `voice`. The device is
+// told about a change but is never asked what it holds, so a board with no
+// speech engine still answers `voice` correctly.
+static SpeechVoice g_voice;
+
+static void voice_shadow_reset(void)
+{
+    g_voice.pitch = SPEECH_VOICE_PITCH_DEFAULT;
+    g_voice.speed = SPEECH_VOICE_NOMINAL;
+    g_voice.mouth = SPEECH_VOICE_NOMINAL;
+    g_voice.throat = SPEECH_VOICE_NOMINAL;
+}
+
+// setvoice [64 72 128 128]      ; pitch speed mouth throat
+//
+// SAM's four knobs, which are the ones that reach a robot in one line. All
+// four are 1..255, so this is one rule rather than four, and the shape is
+// `setenv [a d s r]`'s.
+static Result prim_setvoice(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_LIST(args[0]);
+
+    int vals[4];
+    Node l = mem_first_cell(args[0].as.node);
+    for (int i = 0; i < 4; i++)
+    {
+        if (mem_is_nil(l) || !mem_is_word(mem_car(l)))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+        }
+        float num;
+        if (!value_to_number(value_word(mem_car(l)), &num) || num < 1 || num > 255)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+        }
+        vals[i] = (int)num;
+        l = mem_next_cell(l);
+    }
+    if (!mem_is_nil(l)) // more than four
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+
+    g_voice.pitch = (uint8_t)vals[0];
+    g_voice.speed = (uint8_t)vals[1];
+    g_voice.mouth = (uint8_t)vals[2];
+    g_voice.throat = (uint8_t)vals[3];
+
+    LogoHardwareOps *ops = speech_ops();
+    if (ops && ops->speech_voice)
+    {
+        ops->speech_voice(vals[0], vals[1], vals[2], vals[3]);
+    }
+    return result_none();
+}
+
+// voice -> [pitch speed mouth throat]
+static Result prim_voice(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    UNUSED(args);
+    if (argc > 0)
+    {
+        return result_error_arg(ERR_TOO_MANY_INPUTS, NULL, NULL);
+    }
+
+    char b[4][16];
+    format_number(b[0], sizeof(b[0]), (float)g_voice.pitch);
+    format_number(b[1], sizeof(b[1]), (float)g_voice.speed);
+    format_number(b[2], sizeof(b[2]), (float)g_voice.mouth);
+    format_number(b[3], sizeof(b[3]), (float)g_voice.throat);
+
+    Node n = mem_cons(mem_atom(b[3], strlen(b[3])), NODE_NIL);
+    n = mem_cons(mem_atom(b[2], strlen(b[2])), n);
+    n = mem_cons(mem_atom(b[1], strlen(b[1])), n);
+    n = mem_cons(mem_atom(b[0], strlen(b[0])), n);
+    return result_ok(value_list(n));
+}
+
 void primitives_speech_init(void)
 {
+    voice_shadow_reset();
+
     primitive_register("say", 1, prim_say);
     primitive_register("phonemes", 1, prim_phonemes);
     primitive_register("sayphonemes", 1, prim_sayphonemes);
     primitive_register("speaking?", 0, prim_speaking);
     primitive_register("speakingp", 0, prim_speaking);
+    primitive_register("setvoice", 1, prim_setvoice);
+    primitive_register("voice", 0, prim_voice);
 }

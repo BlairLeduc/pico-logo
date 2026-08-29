@@ -424,6 +424,7 @@ LogoHardwareOps mock_hardware_ops = {
     .speech_queue = mock_speech_queue,
     .speech_status = mock_speech_status,
     .speech_stop = mock_speech_stop,
+    .speech_voice = mock_speech_voice,
     // WiFi operations (always available in tests)
     .wifi_is_connected = mock_wifi_is_connected,
     .wifi_connect = mock_wifi_connect,

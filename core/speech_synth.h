@@ -11,15 +11,20 @@
 //  M0 built the resonator and the ten monophthongs. M1 is the full 41-phoneme
 //  inventory of §6 -- stops, affricates, fricatives, nasals, approximants and
 //  the five diphthongs -- plus the §8.3 transition classes, which is where
-//  intelligibility actually lives. Still missing, and M3's: the mixer slot,
-//  the block-at-a-time IRQ wrapper, and re-deriving coefficients from
-//  `sound_reclock` (§8.4).
+//  intelligibility actually lives. M3 turned the renderer inside out: what
+//  was a loop that wrote a whole utterance into a buffer is now SpeechEngine,
+//  a resumable state machine that hands out any number of samples at a time
+//  and pulls phonemes from its own queue as it needs them, because that is
+//  what a refill IRQ can call. `speech_render` below is the same engine run
+//  to completion offline, which is all the .wav gates ever needed.
 //
 
 #pragma once
 
 #include "devices/hardware.h" // SpeechFrame
+#include "limits.h"          // SPEECH_QUEUE_LEN
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -153,10 +158,138 @@ extern "C"
     // Filter one source sample through the resonator, advancing its state.
     float speech_resonator_step(SpeechResonator *r, float x);
 
-    // Render one utterance. `frames` is the phoneme list the front end (or
-    // `sayphonemes`) produced; `pitch_hz` is the voice fundamental that a
-    // frame's own `pitch` overrides. Returns the number of samples written,
-    // which stops short of the whole utterance if `max_samples` runs out.
+    //======================================================================
+    // The voice: say-design.md §5.5's four knobs
+    //======================================================================
+
+    // SAM's four knobs, which are the ones that reach a robot in one line.
+    // All four are 1..255 so `setvoice` validates them with one rule; the
+    // nominal for the three scales is 128, which is the phoneme table
+    // unmodified. Pitch is in the SpeechFrame unit -- Hz/2 -- so a frame's
+    // own pitch and the voice default are the same kind of number.
+    typedef struct SpeechVoice
+    {
+        uint8_t pitch;  // fundamental, Hz/2: 50 is 100 Hz
+        uint8_t speed;  // duration scale, 128/speed: larger is faster
+        uint8_t mouth;  // scales F2 and F3, the front cavity
+        uint8_t throat; // scales F1, the back cavity
+    } SpeechVoice;
+
+#define SPEECH_VOICE_PITCH_DEFAULT 50 // 100 Hz, the M0/M1 gates' fundamental
+#define SPEECH_VOICE_NOMINAL 128      // speed/mouth/throat: the table as tabled
+
+    //======================================================================
+    // The engine
+    //======================================================================
+
+    // One interpolation target: everything that changes on a block boundary
+    // (§8.3). Public only because SpeechEngine holds several of them and the
+    // engine is placed by its owner rather than allocated.
+    typedef struct SpeechParams
+    {
+        float f1, f2, f3;
+        float a1, a2, a3; // 0..1
+        float voiced;     // impulse-train source level, 0..1
+        float noise;      // noise source level, 0..1
+        bool noisy;       // pick the wider bandwidth set
+    } SpeechParams;
+
+    // Where the engine is inside the phoneme it is rendering. A stop closes
+    // before it bursts, so it visits CUT and CLOSURE first; everything else
+    // starts at TRANSITION. FADE is the tail after the queue runs dry.
+    typedef enum SpeechStage
+    {
+        SPEECH_STAGE_IDLE = 0,
+        SPEECH_STAGE_CUT,
+        SPEECH_STAGE_CLOSURE,
+        SPEECH_STAGE_TRANSITION,
+        SPEECH_STAGE_BODY,
+        SPEECH_STAGE_FADE
+    } SpeechStage;
+
+    // The whole speech back end, in one struct its owner places: ~900 B, of
+    // which the phoneme queue is 516 (§9.1). The board keeps one in .bss and
+    // drives it from the refill IRQ; the host tests keep one on the stack.
+    //
+    // Producer/consumer: `speech_engine_queue` (thread context) writes at
+    // `tail`, `speech_engine_render` (IRQ context) reads at `head`. The
+    // device wrapper serialises the two the way sound_queue does.
+    typedef struct SpeechEngine
+    {
+        SpeechResonator r1, r2, r3;
+        float sample_rate;
+        // Source levels for this sample rate (B52). SPEECH_VOICED_GAIN and
+        // SPEECH_NOISE_GAIN are the levels at SPEECH_SAMPLE_RATE_HZ, where
+        // these are exactly those; at another rate they compensate for the
+        // resonator's input coefficient, which falls as 1/fs^2.
+        float voiced_gain;
+        float noise_gain;
+        float base_pitch_hz; // the voice's fundamental
+        float pitch_hz;      // in force now: a frame's own pitch overrides
+        float phase;         // impulse-train phase, in samples
+        uint16_t lfsr;       // noise shift register, the PSG noise voices'
+        SpeechVoice voice;
+
+        // The segment being rendered: parameters travel from `seg_from` to
+        // `seg_to` across `seg_len` samples.
+        SpeechParams seg_from, seg_to;
+        int seg_len, seg_done;
+        uint8_t stage; // SpeechStage
+
+        // Held flat across a block, which is what makes the rendered samples
+        // depend on the segment structure alone and not on how many samples
+        // the caller happens to ask for (§8.3).
+        SpeechParams cur;
+        int block_left;
+
+        // The phoneme being rendered, and the one before it.
+        SpeechParams tgt, end, prev;
+        int dur, trans; // samples
+        int cls, prev_class;
+
+        // Utterance queue. One slot is reserved so full and empty are
+        // distinguishable, exactly as the PSG sequencer's ring is.
+        SpeechFrame q[SPEECH_QUEUE_LEN + 1];
+        volatile uint16_t head, tail;
+    } SpeechEngine;
+
+    // Place an engine: silent, empty, default voice, coefficients derived
+    // for `sample_rate_hz`.
+    void speech_engine_init(SpeechEngine *e, float sample_rate_hz);
+
+    // Re-derive everything that depends on the sample rate. `hw.setcpu`
+    // moves the mix rate, and every resonator coefficient is a function of
+    // it (§8.4); like sound_reclock this abandons what is in flight rather
+    // than letting it slide, because the ring already holds samples made at
+    // the old rate.
+    void speech_engine_set_rate(SpeechEngine *e, float sample_rate_hz);
+
+    // The §5.5 knobs. Takes effect on the next phoneme, not mid-vowel.
+    void speech_engine_set_voice(SpeechEngine *e, const SpeechVoice *v);
+    SpeechVoice speech_engine_get_voice(const SpeechEngine *e);
+
+    // Append phonemes to the utterance. Returns how many were accepted,
+    // which is short of `n` when the queue fills.
+    int speech_engine_queue(SpeechEngine *e, const SpeechFrame *frames, int n);
+    int speech_engine_free_slots(const SpeechEngine *e);
+
+    // True while something is sounding or still queued.
+    bool speech_engine_busy(const SpeechEngine *e);
+
+    // Abandon the utterance: clear the queue and fade out over one
+    // transition rather than cutting, which would click (§5.6).
+    void speech_engine_stop(SpeechEngine *e);
+
+    // Render exactly `count` samples, pulling phonemes as it needs them and
+    // writing silence when there are none. The only call the refill IRQ
+    // makes, and the sound it produces does not depend on `count`.
+    void speech_engine_render(SpeechEngine *e, int16_t *out, int count);
+
+    // Render one utterance offline, to completion: the engine above driven
+    // by a loop instead of by an IRQ. This is what the .wav gates use.
+    // `pitch_hz` is rounded to the voice's Hz/2 resolution. Returns the
+    // number of samples written, which stops short of the whole utterance
+    // if `max_samples` runs out.
     int speech_render(const SpeechFrame *frames, int n, float pitch_hz, float sample_rate_hz,
                       int16_t *out, int max_samples);
 

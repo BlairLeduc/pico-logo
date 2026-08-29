@@ -209,6 +209,7 @@ endif()
 add_executable(pico-logo
     devices/picocalc/clib.c
     devices/picocalc/sound.c
+    devices/picocalc/speech.c
     devices/picocalc/costumes.c
     devices/picocalc/dirty_tiles.c
     devices/picocalc/editor.c

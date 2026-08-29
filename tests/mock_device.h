@@ -486,6 +486,12 @@ extern "C"
             bool speaking;   // scriptable (backs speech_status -> speaking?)
             int free_slots;  // default SPEECH_QUEUE_LEN
             int stop_count;  // speech_stop calls
+
+            // The last §5.5 knobs set, and how many times: `setvoice`
+            // reaching the device is the only thing a host test can see of
+            // it, since the host has no engine to hear.
+            int voice_pitch, voice_speed, voice_mouth, voice_throat;
+            int voice_count;
         } speech;
     } MockDeviceState;
 
@@ -699,6 +705,7 @@ extern "C"
     int mock_speech_queue(const SpeechFrame *frames, int n);
     SpeechStatus mock_speech_status(void);
     void mock_speech_stop(void);
+    void mock_speech_voice(int pitch, int speed, int mouth, int throat);
 
     // Script the engine's status so tests can drive `speaking?` and the
     // `sayphonemes` queue-full wait without hardware.

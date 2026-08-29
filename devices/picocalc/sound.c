@@ -15,6 +15,9 @@
 //
 
 #include "sound.h"
+#include "speech.h"
+
+#include "core/speech_synth.h" // SPEECH_BLOCK_FRAMES
 
 #include "pico/stdlib.h"
 #include "hardware/pwm.h"
@@ -33,6 +36,30 @@
 #define PWM_WRAP 2048 // 11-bit
 #define PWM_MID 1024
 #define PWM_PEAK 1023 // per-ear headroom before the 4-voice sum
+
+// Speech arrives as int16 and the mixer's ears are 11-bit, so 13 shifts of
+// gain is unity: a full-scale utterance would peak at one full-volume voice.
+// The gain on top of that is a **measurement**, and matching peaks is the
+// wrong rule -- a square wave's crest factor is 1 and speech's is 4 to 8, so
+// equal peaks leave speech ~20 dB below a voice in the RMS the ear reads as
+// loudness, which on the board is a voice you cannot hear under `play`.
+// 1280 is 5x unity, chosen by ear on a board across three listens. The
+// clip-free ceiling is 2.42x (the loudest utterance the engine makes at the
+// default voice peaks at 13520) and this is deliberately past it: what
+// saturates above the ceiling is the tips of the glottal impulses, and at 5x
+// that is ~1 % of a sentence's samples. Speech tolerates peak clipping far
+// better than a tone does, because what clips is the top of an impulse
+// rather than the body of a waveform -- which is why a loudhailer works.
+//
+// `ctest` writes `speech_mix_level.txt` with the whole gain-against-clipping
+// table, so retuning this is a lookup rather than a rebuild.
+//
+// Even at 5x the voice sits ~13 dB below a note at volume 15 in RMS, and
+// that part is physics rather than a setting: a square wave has a crest
+// factor of 1 and this has 7.85, so equal peaks can never be equal
+// loudness. A program that talks over music turns the music down (§8.5).
+#define SPEECH_MIX_GAIN 1280
+#define SPEECH_MIX_SHIFT 13
 
 #define OVERSAMPLE 2
 #define HALF_SLOTS SOUND_RING_HALF                  // carrier samples per half
@@ -278,10 +305,27 @@ static void __not_in_flash_func(mix_half)(uint32_t *half)
         voice_advance_block(&g_v[i]);
     }
 
+    // Speech is a ninth and tenth source, not a ninth voice: one block of
+    // samples, the same into both ears (say-design.md §8.5). NULL when
+    // nothing is being said, which is nearly always.
+    _Static_assert(BLOCK_FRAMES == SPEECH_BLOCK_FRAMES,
+                   "the speech engine's parameter block is the refill block (say-design.md 8.3)");
+    const int16_t *speech = speech_mix_block(BLOCK_FRAMES);
+
     uint32_t *out = half;
     for (int f = 0; f < BLOCK_FRAMES; f++)
     {
         int32_t left = 0, right = 0;
+        if (speech)
+        {
+            // The same multiply-then-shift the volume ladder above uses.
+            // §8.5 said to decide this by listening on the board rather than
+            // from a spreadsheet, and it was right to: the spreadsheet
+            // answer (match the peaks) came out ~20 dB quiet.
+            int32_t sp = ((int32_t)speech[f] * SPEECH_MIX_GAIN) >> SPEECH_MIX_SHIFT;
+            left += sp;
+            right += sp;
+        }
         for (int i = 0; i < MAX_VOICES; i++)
         {
             Voice *v = &g_v[i];
@@ -365,6 +409,11 @@ void sound_reclock(void)
 {
     sound_stop(0xFFFFFFFFu);
     sound_derive_rate();
+    // Every resonator coefficient is a function of the sample rate, so the
+    // speech engine has to be retuned too -- otherwise `hw.setcpu "fast`
+    // retunes the music and leaves the voice speaking at half pitch
+    // (say-design.md §8.4). One line, and an easy one to forget.
+    speech_reclock(g_mix_rate);
 }
 
 void sound_init(void)
@@ -388,6 +437,7 @@ void sound_init(void)
     }
 
     sound_derive_rate();
+    speech_init(g_mix_rate);
 
     // Pre-fill both halves with silence (mid level).
     for (int h = 0; h < 2; h++)

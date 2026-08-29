@@ -13,6 +13,13 @@
 //  diphthongs move, and the ten Berzerk words are rendered to .wav for the
 //  M1 listening gate (say-design.md §12).
 //
+//  M3 -- SpeechEngine, which is the same synthesizer made resumable so a
+//  refill IRQ can drive it. The load-bearing assertion is that the samples
+//  do not depend on how many the caller asks for at a time: the .wav gates
+//  above render whole utterances, the board renders 128 samples at a time,
+//  and the two are only the same evidence if those produce the same sound.
+//  Then the §5.5 voice knobs, §8.4's reclock, and the §9.2 refill cost.
+//
 //  The .wav files land in the build directory ctest runs from.
 //
 
@@ -20,8 +27,9 @@
 #include "core/speech_synth.h"
 
 #include <math.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <time.h>
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -278,6 +286,16 @@ static int render_words(const char *phonemes)
     return speech_render(frames, n, PITCH_HZ, SPEECH_SAMPLE_RATE_HZ, word_buf, WORD_SAMPLES);
 }
 
+static double rms_of(const int16_t *s, int n)
+{
+    double acc = 0.0;
+    for (int i = 0; i < n; i++)
+    {
+        acc += (double)s[i] * (double)s[i];
+    }
+    return (n > 0) ? sqrt(acc / (double)n) : 0.0;
+}
+
 static int16_t peak_of(const int16_t *s, int from, int to)
 {
     int16_t peak = 0;
@@ -459,6 +477,448 @@ void test_intruder_alert_renders_to_wav(void)
     write_wav_mono16("speech_intruder_alert.wav", word_buf, n, SPEECH_SAMPLE_RATE_HZ);
 }
 
+//==========================================================================
+// M3: the engine as the refill IRQ sees it
+//==========================================================================
+
+#define ENGINE_SAMPLES (2 * SPEECH_SAMPLE_RATE_HZ)
+static int16_t engine_a[ENGINE_SAMPLES];
+static int16_t engine_b[ENGINE_SAMPLES];
+
+static SpeechEngine g_engine;
+
+// Queue a phoneme string into an engine, as `sayphonemes` would.
+static int engine_queue_words(SpeechEngine *e, const char *phonemes)
+{
+    SpeechFrame frames[64];
+    int n = frames_from_string(phonemes, frames, 64);
+    return speech_engine_queue(e, frames, n);
+}
+
+// The claim the whole M3 refactor rests on: the block cadence is the
+// engine's own, so a caller asking for 128 samples at a time (the refill
+// IRQ) and a caller asking for all of them at once (the .wav gates above)
+// get the same audio, sample for sample. If this ever fails, the .wav files
+// stop being evidence about what the board plays.
+void test_the_refill_block_size_does_not_change_the_sound(void)
+{
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    engine_queue_words(&g_engine, "ih n t r uw d er _ ax l er t");
+    speech_engine_render(&g_engine, engine_a, ENGINE_SAMPLES);
+
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    engine_queue_words(&g_engine, "ih n t r uw d er _ ax l er t");
+    for (int i = 0; i < ENGINE_SAMPLES; i += SPEECH_BLOCK_FRAMES)
+    {
+        speech_engine_render(&g_engine, engine_b + i, SPEECH_BLOCK_FRAMES);
+    }
+
+    TEST_ASSERT_GREATER_THAN_INT16(3000, peak_of(engine_a, 0, ENGINE_SAMPLES));
+    for (int i = 0; i < ENGINE_SAMPLES; i++)
+    {
+        if (engine_a[i] != engine_b[i])
+        {
+            char msg[64];
+            snprintf(msg, sizeof msg, "sample %d", i);
+            TEST_FAIL_MESSAGE(msg);
+        }
+    }
+}
+
+// An odd request size the segment boundaries cannot align with, which is
+// what a mixer with a different block length would ask for.
+void test_an_odd_request_size_does_not_change_the_sound_either(void)
+{
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    engine_queue_words(&g_engine, "r ow b aa t");
+    speech_engine_render(&g_engine, engine_a, ENGINE_SAMPLES);
+
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    engine_queue_words(&g_engine, "r ow b aa t");
+    for (int i = 0; i < ENGINE_SAMPLES; i += 37)
+    {
+        int n = (ENGINE_SAMPLES - i) < 37 ? (ENGINE_SAMPLES - i) : 37;
+        speech_engine_render(&g_engine, engine_b + i, n);
+    }
+
+    TEST_ASSERT_EQUAL_INT16_ARRAY(engine_a, engine_b, ENGINE_SAMPLES);
+}
+
+// The IRQ runs whether or not anything is being said, so silence has to be
+// exactly zero rather than nearly zero -- a DC offset here would be a
+// permanent hiss under everything the PSG plays.
+void test_an_idle_engine_renders_digital_silence(void)
+{
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    TEST_ASSERT_FALSE(speech_engine_busy(&g_engine));
+
+    speech_engine_render(&g_engine, engine_a, SPEECH_BLOCK_FRAMES);
+    for (int i = 0; i < SPEECH_BLOCK_FRAMES; i++)
+    {
+        TEST_ASSERT_EQUAL_INT16(0, engine_a[i]);
+    }
+    TEST_ASSERT_FALSE(speech_engine_busy(&g_engine));
+}
+
+// `speaking?` is this, and the queue-full wait in `sayphonemes` is the
+// other half of it.
+void test_the_queue_fills_and_drains(void)
+{
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    TEST_ASSERT_EQUAL_INT(SPEECH_QUEUE_LEN, speech_engine_free_slots(&g_engine));
+
+    SpeechFrame f = {SPEECH_PH_AA, 0, 0, 1};
+    for (int i = 0; i < SPEECH_QUEUE_LEN; i++)
+    {
+        TEST_ASSERT_EQUAL_INT(1, speech_engine_queue(&g_engine, &f, 1));
+    }
+    TEST_ASSERT_EQUAL_INT(0, speech_engine_free_slots(&g_engine));
+    TEST_ASSERT_EQUAL_INT(0, speech_engine_queue(&g_engine, &f, 1)); // full
+    TEST_ASSERT_TRUE(speech_engine_busy(&g_engine));
+
+    // Rendering pulls phonemes out of it again.
+    speech_engine_render(&g_engine, engine_a, ENGINE_SAMPLES);
+    TEST_ASSERT_GREATER_THAN_INT(0, speech_engine_free_slots(&g_engine));
+}
+
+// `stopsound`: the utterance is abandoned and the queue cleared, but the
+// source fades rather than cutting, because cutting a vowel at full
+// amplitude is a click (§5.6).
+void test_stop_clears_the_queue_and_fades_rather_than_cutting(void)
+{
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    engine_queue_words(&g_engine, "aa aa aa aa aa aa");
+    speech_engine_render(&g_engine, engine_a, SPEECH_BLOCK_FRAMES * 4);
+    TEST_ASSERT_GREATER_THAN_INT16(3000, peak_of(engine_a, 0, SPEECH_BLOCK_FRAMES * 4));
+
+    speech_engine_stop(&g_engine);
+    TEST_ASSERT_EQUAL_INT(SPEECH_QUEUE_LEN, speech_engine_free_slots(&g_engine));
+    TEST_ASSERT_TRUE(speech_engine_busy(&g_engine)); // still fading
+
+    // One transition (20 ms) is enough for the fade, and after it the
+    // engine is idle and silent.
+    int fade = SPEECH_SAMPLE_RATE_HZ / 20; // 50 ms, comfortably past it
+    speech_engine_render(&g_engine, engine_a, fade);
+    TEST_ASSERT_FALSE(speech_engine_busy(&g_engine));
+    TEST_ASSERT_EQUAL_INT16(0, peak_of(engine_a, fade - 200, fade));
+}
+
+//==========================================================================
+// The §5.5 voice knobs
+//==========================================================================
+
+// How long the engine keeps talking, in samples: what `speed` scales.
+static int engine_length(const char *phonemes, const SpeechVoice *v)
+{
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    speech_engine_set_voice(&g_engine, v);
+    engine_queue_words(&g_engine, phonemes);
+
+    int n = 0;
+    while (speech_engine_busy(&g_engine) && n + SPEECH_BLOCK_FRAMES <= ENGINE_SAMPLES)
+    {
+        speech_engine_render(&g_engine, engine_a + n, SPEECH_BLOCK_FRAMES);
+        n += SPEECH_BLOCK_FRAMES;
+    }
+    return n;
+}
+
+void test_the_pitch_knob_moves_the_fundamental(void)
+{
+    SpeechVoice v = {50, SPEECH_VOICE_NOMINAL, SPEECH_VOICE_NOMINAL, SPEECH_VOICE_NOMINAL};
+    int n = SPEECH_SAMPLE_RATE_HZ / 4;
+
+    // 100 Hz: energy at 100 and 200, nothing at 150.
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    speech_engine_set_voice(&g_engine, &v);
+    engine_queue_words(&g_engine, "aa");
+    speech_engine_render(&g_engine, engine_a, n);
+    float low_at_100 = goertzel_power(engine_a, n, 100.0f, SPEECH_SAMPLE_RATE_HZ);
+    float low_at_150 = goertzel_power(engine_a, n, 150.0f, SPEECH_SAMPLE_RATE_HZ);
+
+    // 150 Hz: the comb moves with it, so 150 becomes a harmonic and 100 is
+    // no longer one.
+    v.pitch = 75;
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    speech_engine_set_voice(&g_engine, &v);
+    engine_queue_words(&g_engine, "aa");
+    speech_engine_render(&g_engine, engine_a, n);
+    float high_at_100 = goertzel_power(engine_a, n, 100.0f, SPEECH_SAMPLE_RATE_HZ);
+    float high_at_150 = goertzel_power(engine_a, n, 150.0f, SPEECH_SAMPLE_RATE_HZ);
+
+    TEST_ASSERT_GREATER_THAN_FLOAT(low_at_150, low_at_100);
+    TEST_ASSERT_GREATER_THAN_FLOAT(high_at_100, high_at_150);
+}
+
+void test_the_speed_knob_scales_the_duration(void)
+{
+    SpeechVoice v = {50, SPEECH_VOICE_NOMINAL, SPEECH_VOICE_NOMINAL, SPEECH_VOICE_NOMINAL};
+    int nominal = engine_length("ih n t r uw d er", &v);
+
+    v.speed = 255; // as fast as the knob goes, just under twice
+    int fast = engine_length("ih n t r uw d er", &v);
+
+    v.speed = SPEECH_VOICE_NOMINAL / 2; // half as fast
+    int slow = engine_length("ih n t r uw d er", &v);
+
+    TEST_ASSERT_GREATER_THAN_INT(0, fast);
+    // Within a block or two of the arithmetic: the closures a stop needs are
+    // the same length whatever the speed, so this is not exactly 2x.
+    TEST_ASSERT_LESS_THAN_INT(nominal, fast);
+    TEST_ASSERT_GREATER_THAN_INT(nominal, slow);
+    TEST_ASSERT_LESS_THAN_INT(nominal * 3 / 4, fast);
+}
+
+// `throat` scales F1 and `mouth` scales F2/F3, which is one cavity each.
+// The test is that the formant actually lands where the knob says: `aa` has
+// F1 at 730, and a throat of 64 (half of nominal) has to put it at 365.
+void test_the_mouth_and_throat_knobs_move_the_formants(void)
+{
+    SpeechVoice v = {50, SPEECH_VOICE_NOMINAL, SPEECH_VOICE_NOMINAL, SPEECH_VOICE_NOMINAL / 2};
+    int n = SPEECH_SAMPLE_RATE_HZ / 2;
+
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    speech_engine_set_voice(&g_engine, &v);
+    engine_queue_words(&g_engine, "aa");
+    speech_engine_render(&g_engine, engine_a, n);
+
+    float peak_f1 = 0.0f;
+    find_peak_harmonic(engine_a, n, SPEECH_SAMPLE_RATE_HZ, PITCH_HZ, 150.0f, 900.0f, &peak_f1);
+    TEST_ASSERT_FLOAT_WITHIN(0.10f * 365.0f, 365.0f, peak_f1); // 730 halved
+
+    // And `mouth` leaves F1 alone while it moves F2: `aa` has F2 at 1090,
+    // and a mouth of 192 puts it at 1635.
+    v.throat = SPEECH_VOICE_NOMINAL;
+    v.mouth = 3 * SPEECH_VOICE_NOMINAL / 2;
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    speech_engine_set_voice(&g_engine, &v);
+    engine_queue_words(&g_engine, "aa");
+    speech_engine_render(&g_engine, engine_a, n);
+
+    float peak_f2 = 0.0f;
+    find_peak_harmonic(engine_a, n, SPEECH_SAMPLE_RATE_HZ, PITCH_HZ, 1200.0f, 2100.0f, &peak_f2);
+    TEST_ASSERT_FLOAT_WITHIN(0.10f * 1635.0f, 1635.0f, peak_f2);
+}
+
+void test_the_voice_reads_back(void)
+{
+    SpeechVoice v = {30, 150, 200, 90};
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    speech_engine_set_voice(&g_engine, &v);
+
+    SpeechVoice got = speech_engine_get_voice(&g_engine);
+    TEST_ASSERT_EQUAL_UINT8(30, got.pitch);
+    TEST_ASSERT_EQUAL_UINT8(150, got.speed);
+    TEST_ASSERT_EQUAL_UINT8(200, got.mouth);
+    TEST_ASSERT_EQUAL_UINT8(90, got.throat);
+}
+
+//==========================================================================
+// §8.4: the mix rate follows clk_sys, so the engine follows the mix rate
+//==========================================================================
+
+// Every resonator coefficient is a function of the sample rate. If the
+// engine kept the old ones, `hw.setcpu "fast` would retune the music and
+// leave the voice speaking at half pitch -- the specific bug §8.4 names.
+// The check is that a formant stays at the same frequency *in Hz* when the
+// rate changes underneath it.
+void test_a_reclock_re_derives_the_coefficients(void)
+{
+    const float fast_rate = 2.0f * SPEECH_SAMPLE_RATE_HZ;
+    int n = (int)fast_rate / 2;
+
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+    speech_engine_set_rate(&g_engine, fast_rate);
+    TEST_ASSERT_FALSE(speech_engine_busy(&g_engine)); // in flight is abandoned
+
+    engine_queue_words(&g_engine, "aa");
+    speech_engine_render(&g_engine, engine_a, n);
+
+    float peak = 0.0f;
+    find_peak_harmonic(engine_a, n, fast_rate, PITCH_HZ, 300.0f, 1100.0f, &peak);
+    TEST_ASSERT_FLOAT_WITHIN(0.10f * 730.0f, 730.0f, peak); // `aa`'s F1, still
+}
+
+//==========================================================================
+// §9.2: the refill cost, measured rather than estimated
+//==========================================================================
+
+// sound-design.md §12.3's rule is that anything in the refill IRQ gets
+// measured. This is the host's half of the M3 gate: the board's own number
+// comes from a scope on the deadline, but a host figure this far under
+// 3.5 ms is what says the board measurement is worth making. Written to a
+// file because a number on a screen cannot be copied off one.
+void test_the_refill_block_cost(void)
+{
+    const int blocks = 2000;
+
+    speech_engine_init(&g_engine, SPEECH_SAMPLE_RATE_HZ);
+
+    clock_t start = clock();
+    int spoken = 0;
+    for (int i = 0; i < blocks; i++)
+    {
+        if (!speech_engine_busy(&g_engine))
+        {
+            // Keep it talking: an idle engine costs nothing and would
+            // measure nothing.
+            engine_queue_words(&g_engine, "ih n t r uw d er _ ax l er t");
+        }
+        speech_engine_render(&g_engine, engine_a, SPEECH_BLOCK_FRAMES);
+        spoken++;
+    }
+    double elapsed_us = (double)(clock() - start) * 1e6 / CLOCKS_PER_SEC;
+    double per_block_us = elapsed_us / (double)spoken;
+
+    FILE *f = fopen("speech_refill_cost.txt", "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fprintf(f, "P16 M3 -- speech refill cost (host)\n");
+    fprintf(f, "blocks:            %d\n", spoken);
+    fprintf(f, "samples per block: %d\n", SPEECH_BLOCK_FRAMES);
+    fprintf(f, "us per block:      %.2f\n", per_block_us);
+    fprintf(f, "us per sample:     %.4f\n", per_block_us / SPEECH_BLOCK_FRAMES);
+    fprintf(f, "deadline (us):     3500   (sound-design.md 12.3)\n");
+    fprintf(f, "budget used:       %.2f%%\n", 100.0 * per_block_us / 3500.0);
+    fclose(f);
+
+    // A host block that took a whole millisecond would mean the board has no
+    // chance, and is worth failing on rather than reporting.
+    TEST_ASSERT_LESS_THAN_FLOAT(1000.0f, (float)per_block_us);
+}
+
+//==========================================================================
+// The mixer level: what makes speech as loud as a voice (§8.5)
+//==========================================================================
+
+// This is the M1 source-balance finding again, one layer out, and it cost a
+// board listen to notice: **the level speech joins the mixer at is a
+// measurement, not a ratio you can reason out.** The reasoned answer was to
+// match peaks -- a full-scale int16 becomes a full-scale ear -- and on the
+// board that came out at about half the loudness of a note, because a PSG
+// square wave at volume 15 is +-peak on every sample (crest factor 1) and
+// speech is a resonated impulse train (crest factor 4 to 8). Equal peaks
+// are ~20 dB apart in RMS, and RMS is what the ear reads.
+//
+// So the numbers the mixer gain is set from get written down rather than
+// re-derived: the worst peak the engine makes at the default voice is what
+// caps the gain, and the RMS gap is what says how much of it is inherent.
+void test_the_mixer_level_has_numbers_behind_it(void)
+{
+    // The sentence the board test speaks.
+    int n = render_words("dh ax _ hh y uw m ax n oy d _ m ah s t _ n aa t _ ih s k ey p");
+    TEST_ASSERT_GREATER_THAN_INT(0, n);
+    int16_t sentence_peak = peak_of(word_buf, 0, n);
+    double sentence_rms = rms_of(word_buf, n);
+
+    // `z` is the loudest row (M1 finding 1 is why it is not louder still),
+    // and four of them is the loudest utterance the default voice makes.
+    int nz = render_words("z z z z");
+    int16_t worst_peak = peak_of(word_buf, 0, nz);
+
+    // A square at volume 15 has crest factor 1, so its RMS is its peak.
+    const double square_rms = 32767.0;
+
+    FILE *f = fopen("speech_mix_level.txt", "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fprintf(f, "P16 M3 -- the speech mixer level\n");
+    fprintf(f, "sentence peak:        %d\n", sentence_peak);
+    fprintf(f, "sentence rms:         %.1f\n", sentence_rms);
+    fprintf(f, "sentence crest:       %.2f\n", (double)sentence_peak / sentence_rms);
+    fprintf(f, "worst peak (z z z z): %d\n", worst_peak);
+    fprintf(f, "square rms (vol 15):  %.0f  (crest 1.00)\n", square_rms);
+    fprintf(f, "clip-free ceiling:    %.2fx\n", 32767.0 / (double)worst_peak);
+    fprintf(f, "\ndevices/picocalc/sound.c runs SPEECH_MIX_GAIN at 5.00x.\n");
+    fprintf(f, "Retuning it is a lookup in this table, not a rebuild:\n\n");
+    fprintf(f, "  gain   clipped   vs a note at volume 15\n");
+
+    // Re-render the sentence, since `worst_peak` above reused the buffer.
+    n = render_words("dh ax _ hh y uw m ax n oy d _ m ah s t _ n aa t _ ih s k ey p");
+    for (int g4 = 4; g4 <= 32; g4 += (g4 < 12 ? 2 : 4))
+    {
+        double gain = g4 / 4.0;
+        long clipped = 0;
+        double acc = 0.0;
+        for (int i = 0; i < n; i++)
+        {
+            // The mixer's ear is 11 bits, and PWM_PEAK is 1023.
+            double v = (double)word_buf[i] * gain / 32.0;
+            if (v > 1023.0) { v = 1023.0; clipped++; }
+            else if (v < -1024.0) { v = -1024.0; clipped++; }
+            acc += v * v;
+        }
+        double r = sqrt(acc / (double)n);
+        fprintf(f, "  %4.2fx  %6.3f%%   %+5.1f dB%s\n", gain,
+                100.0 * (double)clipped / (double)n, 20.0 * log10(r / 1023.0),
+                (g4 == 20) ? "   <- shipped" : "");
+    }
+    fclose(f);
+
+    // The clip-free ceiling, pinned where the table above found it. The
+    // mixer deliberately runs past it -- what saturates is impulse tips --
+    // but if a phoneme row is ever made louder, the ceiling moves and the
+    // shipped gain clips more than it was chosen to, so this fails and says
+    // to re-read the table.
+    TEST_ASSERT_LESS_OR_EQUAL_INT(32767, 2 * (int)worst_peak);
+    TEST_ASSERT_GREATER_THAN_INT(32767, 3 * (int)worst_peak);
+
+    // And the crest factor is the finding: if this ever drops near 1, the
+    // engine changed shape and the gain should be revisited.
+    TEST_ASSERT_GREATER_THAN_FLOAT(2.0f, (float)((double)sentence_peak / sentence_rms));
+}
+
+// B52: the voice got quieter at a higher mix rate.
+//
+// `hw.setcpu "fast` doubles clk_sys and so doubles the PSG mix rate, and the
+// board reported the voice noticeably quieter there. The cause is in the
+// resonator, not the mixer: `a = 1 - b - c` normalises the filter to unit
+// gain at DC, and it falls as **1/fs^2** (measured: 0.01563 at 36.6 kHz,
+// 0.00392 at 73.2 kHz), so an impulse of a fixed amplitude deposits a
+// quarter as much energy at twice the rate. The sources have to be scaled
+// with the rate to hold the loudness the listening gates were passed at.
+//
+// This is the assertion that pins it: the same utterance must come out at
+// the same loudness whatever rate it is rendered at.
+void test_the_mix_rate_does_not_change_the_loudness(void)
+{
+    const float rates[] = {
+        0.5f * SPEECH_SAMPLE_RATE_HZ, // a clock below stock
+        SPEECH_SAMPLE_RATE_HZ,        // 150 MHz, the gates' rate
+        2.0f * SPEECH_SAMPLE_RATE_HZ, // 300 MHz: `hw.setcpu "fast`
+    };
+
+    double ref_voiced = 0.0, ref_noise = 0.0;
+    for (int i = 0; i < 3; i++)
+    {
+        float fs = rates[i];
+        int n = (int)(fs / 4.0f); // a quarter second, whatever the rate
+
+        char msg[64];
+
+        // The voiced source, alone: a sustained vowel.
+        speech_render_sustained(SPEECH_PH_AA, PITCH_HZ, fs, word_buf, n);
+        double voiced = rms_of(word_buf, n);
+
+        // The noise source, alone: a sustained fricative.
+        speech_render_sustained(SPEECH_PH_S, PITCH_HZ, fs, word_buf, n);
+        double noise = rms_of(word_buf, n);
+
+        if (i == 0)
+        {
+            ref_voiced = voiced;
+            ref_noise = noise;
+            continue;
+        }
+
+        // Within 3 dB of the reference rate across a 4x span of rates. The
+        // impulse train compensates exactly and the noise source to about
+        // 6 %, which is why this is a dB bound rather than an equality.
+        snprintf(msg, sizeof msg, "voiced at %.0f Hz", (double)fs);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.41f, 1.0f, (float)(voiced / ref_voiced), msg);
+        snprintf(msg, sizeof msg, "noise at %.0f Hz", (double)fs);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.41f, 1.0f, (float)(noise / ref_noise), msg);
+    }
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -474,5 +934,18 @@ int main(void)
     RUN_TEST(test_a_diphthong_moves);
     RUN_TEST(test_ten_berzerk_words_render_to_wav);
     RUN_TEST(test_intruder_alert_renders_to_wav);
+    RUN_TEST(test_the_refill_block_size_does_not_change_the_sound);
+    RUN_TEST(test_an_odd_request_size_does_not_change_the_sound_either);
+    RUN_TEST(test_an_idle_engine_renders_digital_silence);
+    RUN_TEST(test_the_queue_fills_and_drains);
+    RUN_TEST(test_stop_clears_the_queue_and_fades_rather_than_cutting);
+    RUN_TEST(test_the_pitch_knob_moves_the_fundamental);
+    RUN_TEST(test_the_speed_knob_scales_the_duration);
+    RUN_TEST(test_the_mouth_and_throat_knobs_move_the_formants);
+    RUN_TEST(test_the_voice_reads_back);
+    RUN_TEST(test_a_reclock_re_derives_the_coefficients);
+    RUN_TEST(test_the_refill_block_cost);
+    RUN_TEST(test_the_mixer_level_has_numbers_behind_it);
+    RUN_TEST(test_the_mix_rate_does_not_change_the_loudness);
     return UNITY_END();
 }

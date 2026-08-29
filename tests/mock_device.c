@@ -1424,6 +1424,15 @@ void mock_speech_stop(void)
     mock_state.speech.free_slots = SPEECH_QUEUE_LEN;
 }
 
+void mock_speech_voice(int pitch, int speed, int mouth, int throat)
+{
+    mock_state.speech.voice_pitch = pitch;
+    mock_state.speech.voice_speed = speed;
+    mock_state.speech.voice_mouth = mouth;
+    mock_state.speech.voice_throat = throat;
+    mock_state.speech.voice_count++;
+}
+
 void mock_speech_set_status(bool speaking, int free_slots)
 {
     mock_state.speech.speaking = speaking;

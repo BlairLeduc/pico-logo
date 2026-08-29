@@ -1,9 +1,20 @@
 # P16 — `say`: a speech synthesizer (design)
 
-Status: **M0 and M1 built** (2026-08-28), both listening gates passed.
-`core/speech_synth.c` is the whole 41-phoneme engine and `sayphonemes` /
-`speaking?` are live on the host; M2's rule engine, and M3's board
-integration, are not.
+Status: **DONE — M0 through M3 built and gated** (2026-08-28/29). M0's, M1's
+and M2's gates all passed; M3's cost half passed on hardware on 2026-08-29 at
+**111 µs of a 3.5 ms block at 150 MHz, and 47–49 µs of a 1.75 ms block at
+300**, and its listening half too — the board listens overturned §8.5's mixer
+level and found B63.
+`core/speech_synth.c` is the whole 41-phoneme engine, resumable so the refill
+IRQ can drive it;
+`core/phonemes.c` is the NRL rules in front of it;
+`devices/picocalc/speech.c` is the mixer slot. All six primitives —
+`say`, `sayphonemes`, `phonemes`, `speaking?`, `setvoice`, `voice` — are in
+the language. **M4 was Berzerk adopting it, and on 2026-08-29 it moved to
+[P15](roadmap.md#p15--berzerk-design-first)**, the game's own item: the
+engine is finished and Berzerk is not started, so the adoption is a game
+milestone. §11 below is what P15 builds, and it stays here because it is the
+worked example of the surface.
 
 [Berzerk §14.3](berzerk-design.md) asked for this and deliberately did not
 block on it: emulating the cabinet's speech part is the wrong target because
@@ -441,6 +452,27 @@ handle it. Recommend the second, because in practice nothing runs four
 full-volume voices under speech, and note it as something to listen for on the
 board at M3 rather than something to decide from a spreadsheet.
 
+> **M3 answered this, and the paragraph above asked the wrong question.** The
+> danger was never the accumulator overflowing; it was the *level*. Matching
+> speech's peak to a voice's peak — the obvious reading of "a fifth full-scale
+> source" — puts speech about **26 dB** below a full-volume note in RMS,
+> because a square wave at volume 15 is ±peak on every sample (crest factor 1)
+> and speech is a resonated impulse train (crest factor **7.9**, measured). On
+> the board that is a voice you cannot hear under `play`. The mixer takes a
+> measured gain rather than a shift (5×, past the 2.42× clip-free ceiling: at
+> that level ~1 % of a sentence's samples saturate, and they are impulse
+> tips), and the sentence in §8.5 that earned its keep is the last one:
+> *listen on the board rather than decide from a spreadsheet*.
+>
+> **The recommendation itself was right.** Four tone voices per ear at full
+> volume with speech over them produced no click at either edge of the
+> utterance and no crackle through it, so the existing saturation does cope
+> with a fifth source and the accumulator did not need widening.
+>
+> **What no gain can fix**: even at 5× the voice sits ~13 dB below a note at
+> volume 15 in RMS. That is the crest factor and it is physics, not a
+> setting. A program that talks over music has to turn the music down.
+
 ## 9. Cost
 
 ### 9.1 Memory
@@ -491,6 +523,19 @@ comes back unexpectedly high, the phoneme table and the synth inner loop are
 the `__not_in_flash_func` / SRAM candidates. **The 10 KB rule table never runs
 in IRQ context** — it runs in thread context at `say` time — and stays in
 flash regardless.
+
+> **M3 measured it: 111 µs a block on a PicoCalc at 150 MHz, 3.2 % of the
+> deadline.** The estimate above was **optimistic by about 1.9×** — ~130
+> cycles a sample against the ~70 budgeted — and the caveat in this very
+> paragraph is the likely reason: the engine runs from flash and pays XIP
+> misses in IRQ context, which is what a 38× host-to-board ratio looks like
+> against the front end's 20×. The escape hatch is nonetheless **not taken**,
+> deliberately: 3.2 % of the deadline is comfortable, and SRAM is the scarce
+> resource on every board (86.7 % on `pico2w`, 89.2 % on `pico2`, 91.6 % on
+> `pico+2w`) where flash is at 5.8–20.2 %, so moving ~5 KB into SRAM would
+> spend the scarce resource on headroom nothing needs. It stays available.
+> Measured on a Pico 2 W; the Plus 2 W, which has a different flash part, is
+> the board that would confirm or refute the XIP explanation.
 
 ### 9.3 The front end, at call time
 
@@ -558,6 +603,8 @@ own `help` text per the recurring checklist; `stopsound` gains a sentence and
 
 ## 11. What Berzerk does with it
 
+**This section is [P15](roadmap.md#p15--berzerk-design-first)'s to build**, as
+of the 2026-08-29 move; it is kept here as the worked example of §5's surface.
 Berzerk's ROM holds 30 words ($01–$1D) and assembles sentences from word
 indices at runtime ([berzerk-design.md](berzerk-design.md) §14.2). The faithful
 port is the same structure, and `sayphonemes`' append semantics make it
@@ -747,10 +794,176 @@ Two notes for whoever writes that file:
   listening, the `sound_reclock` hook, `setvoice`/`voice`, the reference
   sections. **Gate: the refill cost measured against 3.5 ms (§9.2), and no
   click with `say` and `play` running together.**
-- **M4 — Berzerk adopts it** (§11), which is the end-to-end exercise that
-  [sound-design.md](sound-design.md) §9's M4 was for the PSG.
 
-M0–M2 need no hardware, which is most of the work.
+  **Built 2026-08-28**, and **the gate is half-run**: the cost half is
+  measured and green, the listening half needs a PicoCalc and has not been
+  run. `devices/picocalc/speech.c`/`.h` is the wrapper, `sound.c` gained the
+  §8.5 slot and the §8.4 reclock line, `core/primitives_speech.c` gained
+  `setvoice`/`voice` behind a fourth device op, and the reference gained
+  their two sections. All three presets link and all 81 test binaries pass.
+
+  **The finding is that a resumable renderer is a different program.** M0–M2
+  wrote a whole utterance into a buffer in one call; an IRQ asks for 128
+  samples and expects to be told nothing. Turning the loop inside out is most
+  of the milestone, and it is `core/speech_synth.c`'s work rather than the
+  device's — the wrapper is 324 B of code, and what it wraps is a
+  `SpeechEngine` state machine that knows which segment of which phoneme it
+  is in.
+
+  1. **The block cadence has to be the engine's, not the caller's.** The
+     obvious port makes the retune boundary fall wherever the caller's
+     request ends — and then the audio depends on the mixer's block size,
+     which would quietly invalidate every `.wav` the M0 and M1 gates were
+     judged on. Holding the parameters for `SPEECH_BLOCK_FRAMES` *inside*
+     the engine makes "the file you listened to is what the board plays" a
+     test instead of a hope: rendering 128 at a time, 37 at a time, or all at
+     once now produces byte-identical output, and that assertion is the one
+     to keep green.
+  2. **§5.5's `[64 72 128 128]` is four knobs, not four numbers.** They are
+     SAM's *defaults*, and SAM's parameterisation is not ours: its speed is a
+     frame count, so larger is slower, and its pitch is a period. Copied
+     literally, `setvoice`'s speed knob would run backwards. So the knobs are
+     the ones §5.5 names and the scale is this engine's — pitch in Hz/2 (the
+     unit `SpeechFrame.pitch` already uses, so a frame's pitch and the voice
+     default are the same kind of number), and speed/mouth/throat as scales
+     against 128 with larger meaning faster and bigger. The default voice is
+     **`[50 128 128 128]`**.
+  3. **`mouth` and `throat` come out as one formant group each**, and that is
+     the acoustics rather than a simplification: F1 is the back cavity's
+     resonance and F2/F3 are the front's, so `throat` scales F1 and `mouth`
+     scales F2 and F3. A knob each is testable — a throat of 64 puts `aa`'s
+     730 Hz F1 at 365, and the test measures it there.
+  4. **§9.1's SRAM figure is 50 % low, and the missing item is the block
+     buffer.** The device holds **1,113 B**: an engine of 852 (516 of it the
+     queue, as predicted) plus a 256 B block of rendered samples the mixer
+     reads, which §9.1's table does not have a line for at all. The rest of
+     the overrun is the state machine itself — a straight-line renderer keeps
+     its parameter sets in locals, a resumable one has to hold six of them
+     (`seg_from`, `seg_to`, `cur`, `tgt`, `end`, `prev`) across a return.
+     0.2 % of SRAM, so it costs nothing, but §9.1's ~750 B was the wrong
+     shape rather than merely a bit small.
+  5. **The flash budget is over, and it is all code.** The whole feature
+     links at **~20.6 KB** against §9.1's ~13.5 KB. The *tables* came in
+     under — 7.0 KB of rules and exceptions against ~10 KB, 882 B of phoneme
+     table and names against ~500 B — and the ~3 KB "engine + rules code"
+     line is really **13.1 KB** (5.4 engine, 4.5 rules, 2.9 primitives,
+     0.3 device). Flash is not a constraint on any board and this changes
+     nothing, but the estimate was wrong by 4× on the only line that matters.
+  6. **§9.1's specific panic did not happen, again.** `speech_phoneme_table`
+     links at 492 B in `.rodata` and the rule table in flash; the only `.bss`
+     in the feature is the 1,113 B above and 4 B of `voice` shadow.
+
+  **The cost half of the gate is passed, on a board: 111 µs a 128-sample
+  block, 3.2 % of the 3.5 ms deadline.** `ctest` writes
+  `speech_refill_cost.txt` at **2.89 µs a block** on the host; a PicoCalc
+  with a **Pico 2 W** at 150 MHz, via `tests/logo/p16m3`, reads **111.2 µs** — 184 ms of difference
+  across twelve rounds totalling 5.8 s, with `ran dry` false.
+
+  **That figure replaces a wrong one, and the correction runs the other way.**
+  A single-round run first read 24.6 µs and this document reported §9.2's
+  ~60 µs estimate as conservative by 2.4×. It is not: **the estimate was
+  optimistic by about 1.9×.** The first reading rested on a 3 ms difference
+  measured with a 1 ms clock, which was flagged as good only to a factor of
+  two and turned out to be worse than that — a 3 ms reading where the truth
+  was near 15. Twelve summed rounds put the difference two orders of
+  magnitude above the quantisation and settle it. The lesson is the ordinary
+  one and worth the embarrassment of recording it: **a ratio taken from a
+  difference of a few clock ticks is not a measurement**, and the honest
+  response to "good to about a factor of two" is to take it again rather than
+  to publish the midpoint.
+
+  **And at 300 MHz it costs 47–49 µs of a 1,749 µs block — 2.7–2.8 %**, from
+  two runs that agreed within 5 %, which is also the first measurement of
+  what a single `p16m3` run is worth. The mix
+  rate comes straight off `clk_sys`, so `hw.setcpu "fast` halves the block
+  period *and* the deadline along with it; the duty percentage is therefore
+  the share of the deadline at either clock, and only the microseconds need
+  to know which one is running. (The first `fast` run was reported against a
+  hardcoded 3,500 µs and so read 93.7 µs — a bug in the measuring script, not
+  the engine, and `tests/logo/p16m3` now derives the period from `hw.cpu`.)
+  Overclocking makes speech *relatively* cheaper, not dearer: 3.2 % of the
+  deadline at 150 MHz against 2.7 % at 300.
+
+  Per sample, 111 µs is 868 ns, or **~130 cycles at 150 MHz against §9.2's
+  ~70**. The likely difference is the one §9.2 itself named: the engine runs
+  **from flash** and pays XIP cache misses in IRQ context. The host-to-board
+  ratio here is ~38×, where M2's front end was ~20×, and that gap is the
+  shape XIP misses have. **§9.2's `__not_in_flash_func` escape is still not
+  taken**, on a judgement rather than an oversight: 3.2 % of the deadline is
+  comfortable, the engine is ~5 KB, and SRAM is the scarce resource on every
+  board — 86.7 % on `pico2w` against 20.2 % of flash, 89.2 % on `pico2`, and
+  91.6 % on `pico+2w`. Trading the scarce resource for headroom nothing needs
+  would be the wrong way round. It stays available if a game ever wants it.
+
+  **All of these numbers are from the Pico 2 W, and the Pimoroni Pico Plus 2 W
+  is unmeasured.** That is a real gap rather than a formality here, because
+  the explanation offered above is XIP: the two boards carry different flash
+  parts, so if the ~130 cycles a sample really is cache misses, the Plus is
+  the board that would say so by disagreeing. Speech itself needs neither a
+  radio nor PSRAM, so it is the same engine on both. (Flash is safe for IRQ code here regardless: `picocalc_flash.c` masks
+  interrupts across every erase and program, so the refill cannot run with
+  XIP offline.) **§8.5's level was decided from a spreadsheet, and the
+  board overturned it — the seventh finding, and the one that needed
+  hardware.** The reasoned answer was to match peaks (a full-scale int16
+  becomes a full-scale ear, `32767 >> 5` is `PWM_PEAK`), and the first board
+  listen reported the voice at about half the loudness of a note. It is
+  worse than that: **speech sits 26.4 dB below a full-volume square in RMS**
+  at that gain, because the square's crest factor is 1 and the sentence's is
+  **7.85**, and RMS is what the ear reads as loudness. Matching peaks is
+  therefore *guaranteed* to make speech quiet, and no amount of care about
+  the accumulator would have found it. The mixer now takes a **measured
+  gain** in the multiply-and-shift form the volume ladder already uses
+  (`SPEECH_MIX_GAIN`) and `ctest` writes `speech_mix_level.txt` so the next
+  person to make a table row louder is told rather than surprised. Three board listens
+  settled it at **5×**, past the 2.42× where the loudest utterance clips:
+  what saturates above the ceiling is the tips of the glottal impulses, ~1 %
+  of a sentence's samples at that gain. Speech tolerates peak clipping far
+  better than a tone does, because what clips is the top of an impulse rather
+  than the body of a waveform — which is why a loudhailer works. The file
+  carries the whole gain-against-clipping table, so retuning is a lookup. **This is M1's source-balance finding one
+  layer out**: §8.1's "the balance is a measurement, not a ratio you can
+  reason out" is true of the mixer slot too.
+
+  The residual is inherent and worth saying plainly: **speech cannot be as
+  loud as a square wave at equal peak.** A game that speaks over music
+  should duck the music rather than expect the voice to win, which is the
+  adopting game's business — [P15](roadmap.md#p15--berzerk-design-first)'s,
+  now that M4 has moved there.
+
+  **The listening half passed on a Pico 2 W, and it took three sessions.**
+  Reported from the board, against `tests/logo/p16m3`:
+
+  - **§8.5's own question, answered by listening at last: no clicks.** Four
+    tone voices per ear at full volume with speech over the top produced
+    neither a click at the edges of the utterance nor a crackle through it.
+    §8.5 weighed widening the accumulator against leaving the existing
+    saturation to cope, recommended the second, and said to decide it on a
+    board — which is now done. The recommendation stands; only the *level* it
+    reasoned to was wrong.
+  - **B63's fix confirmed**: the same sentence at `normal` and at `fast`, each
+    paired with a reference note, came back at the same loudness and the same
+    speed. The note is what makes that judgeable — comparing loudness against
+    a memory three seconds old is the comparison that let B63 through the M0
+    and M1 gates in the first place.
+  - **The four knobs are audibly distinct**, so `setvoice` reaches the engine
+    and the §5.5 surface does what it says.
+
+  What is not separately confirmed is Q1, intelligibility through this
+  speaker and DAC rather than through a computer playing a `.wav`. M1's gate
+  covered intelligibility on rendered audio and every session since has been
+  sentences on a board, so nothing suggests a problem; it simply was not
+  reported as its own answer.
+- **M4 — Berzerk adopts it** (§11), which is the end-to-end exercise that
+  [sound-design.md](sound-design.md) §9's M4 was for the PSG. **Moved to
+  [P15](roadmap.md#p15--berzerk-design-first) on 2026-08-29**, where it lands
+  with Berzerk's own M6 (the sound) and M7 (the taunts). The PSG's M4 could
+  stay in `sound-design.md` because Space Invaders already existed; Berzerk is
+  a drafted design with nothing built, so keeping this one here would hold a
+  finished feature open against a game that has not started. Nothing in the
+  adoption can teach the engine anything more — §11 writes it out — so this
+  document ends at M3.
+
+M0–M2 needed no hardware, which was most of the work.
 
 ## 13. Rejected alternatives
 

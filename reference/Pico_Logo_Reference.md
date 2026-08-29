@@ -5596,7 +5596,7 @@ stopsound
 
 `command`
 
-Silences every voice (through its release), stops speaking, and clears all queued notes and phonemes. It does not change the envelopes or waveforms set with [`setenv`](#setenv) and [`setwave`](#setwave), so the timbre you chose survives.
+Silences every voice (through its release), stops speaking, and clears all queued notes and phonemes. It does not change the envelopes or waveforms set with [`setenv`](#setenv) and [`setwave`](#setwave), nor the voice set with [`setvoice`](#setvoice), so the timbre you chose survives.
 
 **Example**:
 
@@ -5711,6 +5711,54 @@ outputs `true` if something is currently being said or still queued to be said, 
 ?sayphonemes [f ay t l ay k ax r ow b aa t]
 ?show speaking?
 true
+```
+
+
+## setvoice
+
+setvoice [_pitch_ _speed_ _mouth_ _throat_]
+
+`command`
+
+Sets the voice everything spoken afterwards is spoken in. All four numbers are from 1 to 255, and the default voice is `[50 128 128 128]`.
+
+- _pitch_ is how high the voice is, counted in half-Hertz: 50 is a 100 Hz voice, which is a man's; 75 is higher, and 30 is a growl.
+- _speed_ is how fast it talks, where 128 is normal. Doubling it says everything in half the time.
+- _mouth_ and _throat_ change the shape of the speaker rather than the speed or the pitch. _mouth_ makes the front of the mouth bigger or smaller, and _throat_ does the same to the back of it. 128 each is an ordinary head; a small mouth and a big throat is a very different creature.
+
+Nothing here changes what is said, only who says it, and a voice you set stays set until you change it — [`stopsound`](#stopsound) does not put it back. Read it back with [`voice`](#voice).
+
+A robot is one line, and worth typing in to hear:
+
+**Example**:
+
+```logo
+?setvoice [30 150 200 90]
+?say [intruder alert]
+?setvoice [50 128 128 128]     ; back to the ordinary voice
+```
+
+
+## voice
+
+voice  
+
+`operation`
+
+outputs the current voice as the list [_pitch_ _speed_ _mouth_ _throat_], as set by [`setvoice`](#setvoice). This is how a procedure borrows a voice and gives it back:
+
+**Example**:
+
+```logo
+?show voice
+[50 128 128 128]
+to robot :sentence
+  local "was
+  make "was voice
+  setvoice [30 150 200 90]
+  say :sentence
+  setvoice :was
+end
 ```
 
 

@@ -189,6 +189,37 @@ static const uint8_t transition_ms[4] = {0, 20, 40, 60};
 #define SPEECH_VOICED_GAIN 40000.0f
 #define SPEECH_NOISE_GAIN 500.0f
 
+// Both of the above are the levels **at SPEECH_SAMPLE_RATE_HZ**, and neither
+// survives a change of sample rate on its own (B52). The resonator is
+// normalised to unit gain at DC, so its input coefficient `a = 1 - b - c`
+// falls as 1/fs^2 -- 0.01563 at 36.6 kHz against 0.00392 at 73.2 -- and the
+// same excitation deposits a quarter as much at twice the rate. Since
+// `hw.setcpu "fast` doubles the mix rate, that is a voice that loses 6 dB
+// the moment a program overclocks, which is what the board reported.
+//
+// The two sources need different compensation because they are different
+// kinds of signal, and both of these are measured against the ratios above
+// rather than taken on faith:
+//
+//   * The impulse train fires at a rate fixed in Hz, so what matters is the
+//     energy per impulse: scale it with fs, and the measured loudness comes
+//     back to within a percent across a 4x span of rates.
+//   * The noise source fires every sample, so doubling the rate spreads the
+//     same per-sample variance over twice the bandwidth and a fixed-Hz
+//     resonator sees half the power: scale it with the square root of fs.
+//     Measurement puts the true exponent nearer 0.59 than 0.5, so this is
+//     right to about 6 % rather than exactly -- worth a bound in the test
+//     and not worth a fudge factor in the code.
+//
+// At the stock rate both factors are exactly 1, so every .wav the M0 and M1
+// listening gates were judged on is unchanged.
+static void source_gains_for_rate(float sample_rate, float *voiced, float *noise)
+{
+    float ratio = sample_rate / (float)SPEECH_SAMPLE_RATE_HZ;
+    *voiced = SPEECH_VOICED_GAIN * ratio;
+    *noise = SPEECH_NOISE_GAIN * sqrtf(ratio);
+}
+
 // A stop's release is a transient, not sustained frication, and is louder
 // than a fricative for its instant -- so the same noise source is driven
 // harder for it. This is §8.1's "amplitude envelope on the noise source".
@@ -200,39 +231,27 @@ static const uint8_t transition_ms[4] = {0, 20, 40, 60};
 // than any vowel and clips -- which it never is in speech.
 #define SPEECH_VOICEBAR_LEVEL 0.30f
 
-// One interpolation target: everything that changes on a block boundary.
-typedef struct SpeechParams
-{
-    float f1, f2, f3;
-    float a1, a2, a3; // 0..1
-    float voiced;     // impulse-train source level, 0..1
-    float noise;      // noise source level, 0..1
-    bool noisy;       // pick the wider bandwidth set
-} SpeechParams;
-
-typedef struct SpeechState
-{
-    SpeechResonator r1, r2, r3;
-    float sample_rate;
-    float pitch_hz;
-    float phase;   // impulse-train phase, in samples
-    uint16_t lfsr; // noise shift register, the one the PSG noise voices use
-    int16_t *out;
-    int written;
-    int capacity;
-} SpeechState;
-
 static float amp_of(uint8_t a)
 {
     return (float)a / 255.0f;
 }
 
-static SpeechParams params_of(const SpeechPhoneme *p, float stress_scale)
+static float knob(uint8_t v)
+{
+    return (float)v / (float)SPEECH_VOICE_NOMINAL;
+}
+
+// The §6 table's parameters for one phoneme, with the stress scale and the
+// §5.5 voice knobs applied. `mouth` and `throat` scale the formants because
+// that is what the two cavities do -- F1 is the back cavity's resonance and
+// F2/F3 are the front's -- so one knob each is not a simplification, it is
+// the acoustics.
+static SpeechParams params_of(const SpeechPhoneme *p, float stress_scale, const SpeechVoice *voice)
 {
     SpeechParams s;
-    s.f1 = (float)p->f1;
-    s.f2 = (float)p->f2;
-    s.f3 = (float)p->f3;
+    s.f1 = (float)p->f1 * knob(voice->throat);
+    s.f2 = (float)p->f2 * knob(voice->mouth);
+    s.f3 = (float)p->f3 * knob(voice->mouth);
     s.a1 = amp_of(p->a1) * stress_scale;
     s.a2 = amp_of(p->a2) * stress_scale;
     s.a3 = amp_of(p->a3) * stress_scale;
@@ -258,9 +277,9 @@ static SpeechParams params_of(const SpeechPhoneme *p, float stress_scale)
 
 // The pause row at zero amplitude: what an utterance starts and ends on, and
 // what a stop's closure holds.
-static SpeechParams params_silent(void)
+static SpeechParams params_silent(const SpeechVoice *voice)
 {
-    SpeechParams s = params_of(&speech_phoneme_table[SPEECH_PH_PAUSE], 1.0f);
+    SpeechParams s = params_of(&speech_phoneme_table[SPEECH_PH_PAUSE], 1.0f, voice);
     s.voiced = 0.0f;
     s.noise = 0.0f;
     return s;
@@ -286,70 +305,377 @@ static int ms_to_samples(int ms, float sample_rate)
     return (int)((float)ms * sample_rate / 1000.0f);
 }
 
-// Render `count` samples while the parameters travel linearly from `from` to
-// `to`, re-deriving the resonator coefficients once per block (§8.3) and
-// holding them flat across it. Stops early, and silently, when the caller's
-// buffer is full -- an utterance longer than the buffer is truncated, not
-// wrapped.
-static void render_segment(SpeechState *st, const SpeechParams *from, const SpeechParams *to, int count)
+// Stress 0..3 scales amplitude and duration around an unmarked phoneme
+// (stress 1), which is what a SpeechFrame's `stress` field means (§10).
+static const float stress_amp[4] = {0.70f, 1.0f, 1.15f, 1.30f};
+static const float stress_dur[4] = {0.80f, 1.0f, 1.20f, 1.40f};
+
+//==========================================================================
+// The engine
+//==========================================================================
+//
+// A phoneme is two to four segments -- optionally a closure, then a
+// transition, then a body -- and a segment is a straight line between two
+// SpeechParams. The engine is that walk made resumable: it knows which
+// segment it is on and how far into it, so it can be asked for 128 samples
+// at a time by a refill IRQ, or for a whole utterance at once by a test.
+//
+// Coefficients are re-derived every SPEECH_BLOCK_FRAMES samples and at every
+// segment start, and never in between (§8.3). Because that cadence is the
+// engine's own and not the caller's, the samples that come out are the same
+// whatever size the caller asks in -- which is the property that lets the
+// .wav gates keep judging what the board will play.
+
+// The ring holds SPEECH_QUEUE_LEN usable slots; one more is reserved so
+// "full" and "empty" are distinguishable, as the PSG sequencer's ring is.
+#define SPEECH_QRING (SPEECH_QUEUE_LEN + 1)
+
+// A phoneme is at most four segments, so this many advances always either
+// reaches a segment with samples in it or runs the queue dry.
+#define SPEECH_ADVANCE_GUARD 8
+
+static const SpeechVoice speech_voice_default = {
+    SPEECH_VOICE_PITCH_DEFAULT, SPEECH_VOICE_NOMINAL, SPEECH_VOICE_NOMINAL, SPEECH_VOICE_NOMINAL};
+
+static bool queue_pop(SpeechEngine *e, SpeechFrame *out)
 {
-    for (int done = 0; done < count; done += SPEECH_BLOCK_FRAMES)
+    if (e->head == e->tail)
     {
-        int block = count - done;
-        if (block > SPEECH_BLOCK_FRAMES)
+        return false;
+    }
+    *out = e->q[e->head];
+    e->head = (uint16_t)((e->head + 1) % SPEECH_QRING);
+    return true;
+}
+
+static void begin_segment(SpeechEngine *e, const SpeechParams *from, const SpeechParams *to,
+                          int len, SpeechStage stage)
+{
+    e->seg_from = *from;
+    e->seg_to = *to;
+    e->seg_len = len < 0 ? 0 : len;
+    e->seg_done = 0;
+    e->stage = (uint8_t)stage;
+    e->block_left = 0; // a new segment always retunes
+}
+
+// Where the parameters are right now, mid-segment: what an interruption
+// (`stopsound`) has to fade from if it is not to click.
+static SpeechParams params_now(const SpeechEngine *e)
+{
+    float t = (e->seg_len > 0) ? (float)e->seg_done / (float)e->seg_len : 1.0f;
+    return params_lerp(&e->seg_from, &e->seg_to, t);
+}
+
+// Pop the next phoneme and lay out its segments. With the queue dry this
+// starts the tail fade instead, or does nothing if the engine is already
+// idle.
+static void engine_start_phoneme(SpeechEngine *e)
+{
+    SpeechFrame f;
+    const SpeechPhoneme *p = NULL;
+    while (queue_pop(e, &f))
+    {
+        if (f.phoneme < SPEECH_PH_COUNT)
         {
-            block = SPEECH_BLOCK_FRAMES;
+            p = &speech_phoneme_table[f.phoneme];
+            break; // an id we have no row for is skipped, not sounded
         }
-        if (st->written + block > st->capacity)
+    }
+
+    if (!p)
+    {
+        if (e->stage == SPEECH_STAGE_IDLE)
         {
-            block = st->capacity - st->written;
-        }
-        if (block <= 0)
-        {
+            e->seg_len = e->seg_done = 0;
             return;
         }
+        // Fade the tail out over one transition rather than cutting it, so
+        // an utterance ends without a click. A `say` that arrives during the
+        // fade waits for it -- 20 ms, which is a word boundary, not a gap.
+        SpeechParams sil = params_silent(&e->voice);
+        begin_segment(e, &e->prev, &sil, ms_to_samples(transition_ms[1], e->sample_rate),
+                      SPEECH_STAGE_FADE);
+        return;
+    }
 
-        // Parameters are those at the middle of the block, so a ramp is
-        // centred on its nominal path rather than lagging it by a block.
-        float t = (count > 1) ? ((float)done + (float)block * 0.5f) / (float)count : 1.0f;
-        SpeechParams p = params_lerp(from, to, t);
+    int stress = f.stress & 3;
+    e->pitch_hz = f.pitch ? (float)f.pitch * 2.0f : e->base_pitch_hz;
 
-        const float *bw = p.noisy ? bw_noisy : bw_voiced;
-        speech_resonator_tune(&st->r1, p.f1, bw[0], st->sample_rate);
-        speech_resonator_tune(&st->r2, p.f2, bw[1], st->sample_rate);
-        speech_resonator_tune(&st->r3, p.f3, bw[2], st->sample_rate);
+    // `speed` scales the transitions with the phonemes: speaking faster is
+    // moving the tract faster, not holding vowels briefly and gliding
+    // between them at leisure.
+    float speed = knob(e->voice.speed);
+    float dur_scale = stress_dur[stress] / (speed > 0.0f ? speed : 1.0f);
 
-        float period = st->sample_rate / st->pitch_hz;
-        for (int i = 0; i < block; i++)
+    e->tgt = params_of(p, stress_amp[stress], &e->voice);
+    int dur_ms = f.dur_ms ? f.dur_ms : p->dur_ms;
+    e->dur = ms_to_samples((int)((float)dur_ms * dur_scale), e->sample_rate);
+    if (e->dur < 1)
+    {
+        e->dur = 1;
+    }
+
+    // The transition takes the shorter of the two classes: the more
+    // constrained phoneme of the pair decides how fast the tract can move
+    // between them.
+    e->cls = (p->flags & SPEECH_F_TRANS_MASK) >> SPEECH_F_TRANS_SHIFT;
+    int trans_ms = transition_ms[e->cls < e->prev_class ? e->cls : e->prev_class];
+    e->trans = ms_to_samples((int)((float)trans_ms * dur_scale), e->sample_rate);
+    if (e->trans > e->dur)
+    {
+        e->trans = e->dur;
+    }
+
+    // The body of the phoneme: a glide for a diphthong, a decay for a stop's
+    // burst, a hold for everything else.
+    e->end = e->tgt;
+    if (p->glide_to != SPEECH_PH_NONE)
+    {
+        e->end = params_of(&speech_phoneme_table[p->glide_to], stress_amp[stress], &e->voice);
+    }
+    else if ((p->flags & SPEECH_F_STOP) && !(p->flags & SPEECH_F_FRICATIVE))
+    {
+        e->end.a1 = e->end.a2 = e->end.a3 = 0.0f; // a burst decays; frication does not
+    }
+
+    // A stop closes first. The closure resets what the transition comes
+    // from, which is why a vowel into a stop sounds nothing like a vowel
+    // into a nasal even though both interpolate the same way.
+    if (p->flags & SPEECH_F_STOP)
+    {
+        SpeechParams sil = params_silent(&e->voice);
+        begin_segment(e, &e->prev, &sil, ms_to_samples(SPEECH_CUT_MS, e->sample_rate),
+                      SPEECH_STAGE_CUT);
+    }
+    else
+    {
+        begin_segment(e, &e->prev, &e->tgt, e->trans, SPEECH_STAGE_TRANSITION);
+    }
+}
+
+// The segment that just finished decides the next one.
+static void engine_advance(SpeechEngine *e)
+{
+    switch ((SpeechStage)e->stage)
+    {
+    case SPEECH_STAGE_CUT:
+        // The rest of the closure is silence, and it has to be silence
+        // rather than a fade: the silence is the cue that says "stop".
+        begin_segment(e, &e->seg_to, &e->seg_to,
+                      ms_to_samples(SPEECH_CLOSURE_MS - SPEECH_CUT_MS, e->sample_rate),
+                      SPEECH_STAGE_CLOSURE);
+        return;
+
+    case SPEECH_STAGE_CLOSURE:
+        e->prev = params_silent(&e->voice);
+        begin_segment(e, &e->prev, &e->tgt, e->trans, SPEECH_STAGE_TRANSITION);
+        return;
+
+    case SPEECH_STAGE_TRANSITION:
+        begin_segment(e, &e->tgt, &e->end, e->dur - e->trans, SPEECH_STAGE_BODY);
+        return;
+
+    case SPEECH_STAGE_BODY:
+        e->prev = e->end;
+        e->prev_class = e->cls;
+        engine_start_phoneme(e);
+        return;
+
+    case SPEECH_STAGE_FADE:
+        e->stage = SPEECH_STAGE_IDLE;
+        e->seg_len = e->seg_done = 0;
+        e->prev = params_silent(&e->voice);
+        e->prev_class = 0;
+        return;
+
+    case SPEECH_STAGE_IDLE:
+    default:
+        engine_start_phoneme(e);
+        return;
+    }
+}
+
+void speech_engine_init(SpeechEngine *e, float sample_rate_hz)
+{
+    SpeechResonator zero = {0, 0, 0, 0, 0};
+    e->r1 = zero;
+    e->r2 = zero;
+    e->r3 = zero;
+    e->sample_rate = sample_rate_hz;
+    source_gains_for_rate(sample_rate_hz, &e->voiced_gain, &e->noise_gain);
+    e->voice = speech_voice_default;
+    e->base_pitch_hz = (float)e->voice.pitch * 2.0f;
+    e->pitch_hz = e->base_pitch_hz;
+    e->phase = 0.0f;
+    e->lfsr = 0xACE1u; // the PSG's noise seed
+    e->stage = SPEECH_STAGE_IDLE;
+    e->seg_len = e->seg_done = 0;
+    e->block_left = 0;
+    e->dur = e->trans = 0;
+    e->cls = e->prev_class = 0;
+    e->prev = e->tgt = e->end = e->seg_from = e->seg_to = e->cur = params_silent(&e->voice);
+    e->head = e->tail = 0;
+}
+
+void speech_engine_set_rate(SpeechEngine *e, float sample_rate_hz)
+{
+    // Everything in flight was generated at the old rate and every
+    // coefficient is a function of the new one, so the utterance is
+    // abandoned rather than left to slide -- which is exactly what
+    // sound_reclock does to the voices, and for the same reason (§8.4).
+    SpeechVoice v = e->voice;
+    speech_engine_init(e, sample_rate_hz);
+    e->voice = v;
+    e->base_pitch_hz = (float)v.pitch * 2.0f;
+    e->pitch_hz = e->base_pitch_hz;
+}
+
+void speech_engine_set_voice(SpeechEngine *e, const SpeechVoice *v)
+{
+    e->voice = *v;
+    if (e->voice.speed == 0)
+    {
+        e->voice.speed = 1; // a zero here would divide the duration scale
+    }
+    e->base_pitch_hz = (float)(e->voice.pitch ? e->voice.pitch : SPEECH_VOICE_PITCH_DEFAULT) * 2.0f;
+    if (e->stage == SPEECH_STAGE_IDLE)
+    {
+        e->pitch_hz = e->base_pitch_hz;
+    }
+}
+
+SpeechVoice speech_engine_get_voice(const SpeechEngine *e)
+{
+    return e->voice;
+}
+
+int speech_engine_free_slots(const SpeechEngine *e)
+{
+    return (int)((uint16_t)(e->head - e->tail - 1 + SPEECH_QRING) % SPEECH_QRING);
+}
+
+int speech_engine_queue(SpeechEngine *e, const SpeechFrame *frames, int n)
+{
+    if (!frames || n <= 0)
+    {
+        return 0;
+    }
+    int accepted = 0;
+    for (int i = 0; i < n; i++)
+    {
+        if (speech_engine_free_slots(e) == 0)
+        {
+            break;
+        }
+        e->q[e->tail] = frames[i];
+        e->tail = (uint16_t)((e->tail + 1) % SPEECH_QRING);
+        accepted++;
+    }
+    return accepted;
+}
+
+bool speech_engine_busy(const SpeechEngine *e)
+{
+    return e->stage != SPEECH_STAGE_IDLE || e->head != e->tail;
+}
+
+void speech_engine_stop(SpeechEngine *e)
+{
+    e->head = e->tail = 0;
+    if (e->stage == SPEECH_STAGE_IDLE || e->stage == SPEECH_STAGE_FADE)
+    {
+        return;
+    }
+    SpeechParams now = params_now(e);
+    SpeechParams sil = params_silent(&e->voice);
+    begin_segment(e, &now, &sil, ms_to_samples(transition_ms[1], e->sample_rate),
+                  SPEECH_STAGE_FADE);
+}
+
+void speech_engine_render(SpeechEngine *e, int16_t *out, int count)
+{
+    int done = 0;
+
+    while (done < count)
+    {
+        for (int guard = 0; e->seg_done >= e->seg_len && guard < SPEECH_ADVANCE_GUARD; guard++)
+        {
+            engine_advance(e);
+            if (e->stage == SPEECH_STAGE_IDLE)
+            {
+                break;
+            }
+        }
+        if (e->seg_done >= e->seg_len)
+        {
+            break; // idle (or nothing the guard could reach): silence from here
+        }
+
+        // A chunk runs to whichever comes first: the end of the segment, the
+        // end of the parameter block, or the end of what was asked for.
+        if (e->block_left <= 0)
+        {
+            // Parameters at the middle of the block, so a ramp is centred on
+            // its nominal path rather than lagging it by a block.
+            int span = e->seg_len - e->seg_done;
+            if (span > SPEECH_BLOCK_FRAMES)
+            {
+                span = SPEECH_BLOCK_FRAMES;
+            }
+            float t = (e->seg_len > 1)
+                          ? ((float)e->seg_done + (float)span * 0.5f) / (float)e->seg_len
+                          : 1.0f;
+            e->cur = params_lerp(&e->seg_from, &e->seg_to, t);
+            const float *bw = e->cur.noisy ? bw_noisy : bw_voiced;
+            speech_resonator_tune(&e->r1, e->cur.f1, bw[0], e->sample_rate);
+            speech_resonator_tune(&e->r2, e->cur.f2, bw[1], e->sample_rate);
+            speech_resonator_tune(&e->r3, e->cur.f3, bw[2], e->sample_rate);
+            e->block_left = SPEECH_BLOCK_FRAMES;
+        }
+
+        int chunk = e->seg_len - e->seg_done;
+        if (chunk > e->block_left)
+        {
+            chunk = e->block_left;
+        }
+        if (chunk > count - done)
+        {
+            chunk = count - done;
+        }
+
+        const SpeechParams *p = &e->cur;
+        float period = e->sample_rate / e->pitch_hz;
+        for (int i = 0; i < chunk; i++)
         {
             // Voiced source: an impulse train at the fundamental. A discrete
             // impulse has energy at every harmonic up to Nyquist, which is
             // §8.1's "shaped so it has energy across the formant range".
             float voiced = 0.0f;
-            st->phase += 1.0f;
-            if (st->phase >= period)
+            e->phase += 1.0f;
+            if (e->phase >= period)
             {
-                st->phase -= period;
-                voiced = SPEECH_VOICED_GAIN;
+                e->phase -= period;
+                voiced = e->voiced_gain;
             }
 
             // Unvoiced source: the same 16-bit LFSR the PSG noise voices use
             // (sound-design.md §4), clocked every sample so it is white
             // across the whole band the formants sit in.
-            uint16_t fb = (uint16_t)((st->lfsr ^ (st->lfsr >> 2) ^ (st->lfsr >> 3) ^ (st->lfsr >> 5)) & 1u);
-            st->lfsr = (uint16_t)((st->lfsr >> 1) | (fb << 15));
-            float noise = (st->lfsr & 1u) ? SPEECH_NOISE_GAIN : -SPEECH_NOISE_GAIN;
+            uint16_t fb = (uint16_t)((e->lfsr ^ (e->lfsr >> 2) ^ (e->lfsr >> 3) ^ (e->lfsr >> 5)) & 1u);
+            e->lfsr = (uint16_t)((e->lfsr >> 1) | (fb << 15));
+            float noise = (e->lfsr & 1u) ? e->noise_gain : -e->noise_gain;
 
-            float source = voiced * p.voiced + noise * p.noise;
+            float source = voiced * p->voiced + noise * p->noise;
 
             // Alternating sign on the parallel branches (Klatt's convention):
             // each two-pole resonator also shifts phase, and without the
             // alternation adjacent branches partially cancel near their
             // shared boundary and shift the composite peak onto the wrong
             // harmonic -- measured directly against the M0 Goertzel gate.
-            float y = p.a1 * speech_resonator_step(&st->r1, source) -
-                      p.a2 * speech_resonator_step(&st->r2, source) +
-                      p.a3 * speech_resonator_step(&st->r3, source);
+            float y = p->a1 * speech_resonator_step(&e->r1, source) -
+                      p->a2 * speech_resonator_step(&e->r2, source) +
+                      p->a3 * speech_resonator_step(&e->r3, source);
 
             if (y > 32767.0f)
             {
@@ -359,107 +685,65 @@ static void render_segment(SpeechState *st, const SpeechParams *from, const Spee
             {
                 y = -32768.0f;
             }
-            st->out[st->written++] = (int16_t)y;
+            out[done++] = (int16_t)y;
         }
+        e->seg_done += chunk;
+        e->block_left -= chunk;
+    }
+
+    while (done < count)
+    {
+        out[done++] = 0;
     }
 }
 
-static void state_init(SpeechState *st, float pitch_hz, float sample_rate_hz, int16_t *out, int max_samples)
-{
-    SpeechResonator zero = {0};
-    st->r1 = zero;
-    st->r2 = zero;
-    st->r3 = zero;
-    st->sample_rate = sample_rate_hz;
-    st->pitch_hz = pitch_hz;
-    st->phase = 0.0f;
-    st->lfsr = 0xACE1u; // the PSG's noise seed
-    st->out = out;
-    st->written = 0;
-    st->capacity = max_samples;
-}
-
-// Stress 0..3 scales amplitude and duration around an unmarked phoneme
-// (stress 1), which is what a SpeechFrame's `stress` field means (§10).
-static const float stress_amp[4] = {0.70f, 1.0f, 1.15f, 1.30f};
-static const float stress_dur[4] = {0.80f, 1.0f, 1.20f, 1.40f};
+//==========================================================================
+// Offline rendering: the engine, run to completion
+//==========================================================================
 
 int speech_render(const SpeechFrame *frames, int n, float pitch_hz, float sample_rate_hz,
                   int16_t *out, int max_samples)
 {
-    SpeechState st;
-    state_init(&st, pitch_hz, sample_rate_hz, out, max_samples);
+    // ~900 B of stack, which is why this is the host's entry point and not
+    // the board's: the board drives the same engine from .bss (§9.1).
+    SpeechEngine e;
+    speech_engine_init(&e, sample_rate_hz);
+    SpeechVoice v = speech_voice_default;
+    v.pitch = (uint8_t)(pitch_hz / 2.0f + 0.5f);
+    speech_engine_set_voice(&e, &v);
 
-    SpeechParams silence = params_silent();
-    SpeechParams prev = silence;
-    int prev_class = 0;
-
-    for (int i = 0; i < n && st.written < st.capacity; i++)
+    int written = 0;
+    int queued = 0;
+    while (written < max_samples)
     {
-        int id = frames[i].phoneme;
-        if (id >= SPEECH_PH_COUNT)
+        queued += speech_engine_queue(&e, frames + queued, n - queued);
+        if (!speech_engine_busy(&e))
         {
-            continue; // an id we have no row for is skipped, not sounded
+            break;
         }
-        const SpeechPhoneme *p = &speech_phoneme_table[id];
-        int stress = frames[i].stress & 3;
-
-        st.pitch_hz = frames[i].pitch ? (float)frames[i].pitch * 2.0f : pitch_hz;
-
-        SpeechParams tgt = params_of(p, stress_amp[stress]);
-        int dur_ms = frames[i].dur_ms ? frames[i].dur_ms : p->dur_ms;
-        int dur = ms_to_samples((int)((float)dur_ms * stress_dur[stress]), sample_rate_hz);
-
-        // A stop closes first. The closure resets what the transition comes
-        // from, which is why a vowel into a stop sounds nothing like a vowel
-        // into a nasal even though both interpolate the same way.
-        if (p->flags & SPEECH_F_STOP)
+        int want = max_samples - written;
+        if (want > SPEECH_BLOCK_FRAMES)
         {
-            render_segment(&st, &prev, &silence, ms_to_samples(SPEECH_CUT_MS, sample_rate_hz));
-            render_segment(&st, &silence, &silence, ms_to_samples(SPEECH_CLOSURE_MS - SPEECH_CUT_MS, sample_rate_hz));
-            prev = silence;
+            want = SPEECH_BLOCK_FRAMES;
         }
-
-        // The transition takes the shorter of the two classes: the more
-        // constrained phoneme of the pair decides how fast the tract can
-        // move between them.
-        int cls = (p->flags & SPEECH_F_TRANS_MASK) >> SPEECH_F_TRANS_SHIFT;
-        int trans_ms = transition_ms[cls < prev_class ? cls : prev_class];
-        int trans = ms_to_samples(trans_ms, sample_rate_hz);
-        if (trans > dur)
-        {
-            trans = dur;
-        }
-        render_segment(&st, &prev, &tgt, trans);
-
-        // Then the body of the phoneme: a glide for a diphthong, a decay for
-        // a stop's burst, a hold for everything else.
-        SpeechParams end = tgt;
-        if (p->glide_to != SPEECH_PH_NONE)
-        {
-            end = params_of(&speech_phoneme_table[p->glide_to], stress_amp[stress]);
-        }
-        else if ((p->flags & SPEECH_F_STOP) && !(p->flags & SPEECH_F_FRICATIVE))
-        {
-            end.a1 = end.a2 = end.a3 = 0.0f; // a burst decays; frication does not
-        }
-        render_segment(&st, &tgt, &end, dur - trans);
-
-        prev = end;
-        prev_class = cls;
+        speech_engine_render(&e, out + written, want);
+        written += want;
     }
-
-    // Fade the tail out over one transition rather than cutting it, so an
-    // utterance ends without a click.
-    render_segment(&st, &prev, &silence, ms_to_samples(transition_ms[1], sample_rate_hz));
-    return st.written;
+    return written;
 }
 
 void speech_render_sustained(SpeechPhonemeId id, float pitch_hz, float sample_rate_hz,
                              int16_t *out, int sample_count)
 {
-    SpeechState st;
-    state_init(&st, pitch_hz, sample_rate_hz, out, sample_count);
-    SpeechParams p = params_of(&speech_phoneme_table[id], 1.0f);
-    render_segment(&st, &p, &p, sample_count);
+    SpeechEngine e;
+    speech_engine_init(&e, sample_rate_hz);
+    SpeechVoice v = speech_voice_default;
+    v.pitch = (uint8_t)(pitch_hz / 2.0f + 0.5f);
+    speech_engine_set_voice(&e, &v);
+
+    // One segment, the phoneme held flat: no transition in and none out,
+    // which is what the §10 formant assertion needs to measure.
+    SpeechParams p = params_of(&speech_phoneme_table[id], 1.0f, &e.voice);
+    begin_segment(&e, &p, &p, sample_count, SPEECH_STAGE_BODY);
+    speech_engine_render(&e, out, sample_count);
 }

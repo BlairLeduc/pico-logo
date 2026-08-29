@@ -1,0 +1,435 @@
+; P16 M3 -- the half of the gate that needs a board.
+;
+;   load "p16m3
+;   p16m3
+;
+; docs/say-design.md section 12 gates M3 on two things: the refill cost
+; measured against 3.5 ms, and no click with `say` and `play` running
+; together.  The cost half is already green on the host -- ctest writes
+; speech_refill_cost.txt at 2.5 us a 128-sample block -- and the rest of it
+; cannot be run without a PicoCalc and an ear.  This is that rest.
+;
+; FIVE QUESTIONS, and the first is not rhetorical:
+;
+;   Q1  Is it intelligible THROUGH THIS SPEAKER?  The M1 gate was passed on
+;       .wav files played through a computer.  The PicoCalc's speaker is
+;       small and its DAC is an 11-bit PWM at 36.6 kHz, and a formant
+;       synthesizer is exactly the kind of signal that survives one and not
+;       the other.  If M3 fails anywhere, the odds are it is here.
+;   Q2  Does it click against `play`?  Section 8.5 sized the mixer
+;       accumulator for four full-volume voices and speech is a fifth
+;       source per ear.  It recommended leaving the existing saturation to
+;       handle it AND said to listen on the board rather than decide from a
+;       spreadsheet.  This is that listen.
+;   Q2d Where does the voice sit against the volume ladder?  The first
+;       board listen reported it at about half the loudness of a note, which
+;       is how the peak-matched gain was found to be 26 dB quiet.  The gain
+;       is measured now (see speech_mix_level.txt from ctest), so this asks
+;       for a bracket rather than an impression: which two volumes of the
+;       same note does the voice fall between?
+;   Q3  Does `hw.setcpu` retune the voice?  Every resonator coefficient is a
+;       function of the mix rate (section 8.4).  If the reclock hook were
+;       missing, `fast` would leave the voice speaking at half pitch --
+;       which is not subtle, and is the point of testing it.
+;   Q4  Do the four `setvoice` knobs do what they say?  The host tests
+;       measure them with a Goertzel.  Whether [30 150 200 90] is a robot
+;       rather than a fault is not a thing a Goertzel can answer.
+;   Q5  What does the refill actually cost on this board?
+;
+; WHAT A FAILURE SOUNDS LIKE, since a listening test is only as good as
+; knowing what counts as one:
+;
+;   Q2b  A click or pop at the instant the speech starts, and again as it
+;        ends, is the fifth source per ear hitting the mixer's saturation.
+;        A buzz or crackle THROUGHOUT the overlap that is not there in Q2a
+;        is the same thing sustained.  What is NOT a failure: the slight
+;        edge speech has on its own now -- the mixer runs at 5x, past the
+;        2.42x clip-free ceiling, so about 1 % of samples clip by design.
+;        Q2a is the control for exactly that, so listen to it first.
+;   Q3   Quieter at `fast` is B63 come back.  LOWER or SLOWER at `fast` is
+;        worse and different: it means the coefficients are not being
+;        re-derived at all, so the resonators are tuned for half the rate
+;        they are running at.
+;   Q4   Each knob has one job.  `pitch` moves the fundamental and nothing
+;        else; `speed` changes the duration without moving the pitch, which
+;        is the thing a tape recorder cannot do; `throat` scales F1 and
+;        `mouth` scales F2 and F3, so they change who is speaking rather
+;        than how fast or how high.  A knob doing NOTHING audible is the
+;        failure -- it means `setvoice` is not reaching the engine.  A voice
+;        at an extreme being hard to understand is not a failure.
+;
+; HOW Q5 IS MEASURED, because it is indirect and the number means nothing if
+; you do not know which number it is.  Nothing in Logo can time an
+; interrupt.  What it can do is time a fixed loop twice -- once silent, once
+; speaking -- and read the difference as cycles the refill IRQ took away
+; from the interpreter.  That is the IRQ's DUTY, and the per-block figure is
+; the duty times the block period:
+;
+;   per block us = 3500 * (speaking - silent) / speaking
+;
+; `ticks` counts whole milliseconds and the difference being looked for is a
+; few of them, so one pair of readings is only good to about a factor of two.
+; p16.rounds pairs are summed instead, which grows the difference with the
+; count and the quantisation with its square root.
+;
+; The silent baseline already contains the PSG mixer, which runs every block
+; whether or not anything sounds, so the difference is speech's own cost and
+; is comparable with section 9.2's ~60 us estimate directly.
+;
+; The measurement is only worth reading if the utterance lasted the whole
+; loop, so p16m3.cost checks `speaking?` afterwards and says so in the
+; report.  A run that reports `ran dry` as true is a run to throw away and
+; take again with a smaller p16.n.
+;
+; ONE THING THAT IS DELIBERATE AND LOOKS LIKE A BUG.  Q3 does not speak
+; ACROSS the clock change.  `hw.setcpu` abandons the utterance on purpose --
+; the samples already in the ring were built at the old rate -- so the test
+; is the same sentence said at each speed and compared, not one sentence
+; held through the change.
+;
+; ORDER MATTERS.  Q5 writes its report BEFORE Q3 overclocks, per the
+; `hw.setcpu` warning in the reference: a board that will not run at 300 MHz
+; stops, and an unwritten file is lost with it.
+
+make "p16.n 4000
+make "p16.words [intruder alert humanoid chicken robot fight escape destroy shoot kill]
+make "p16.line [the humanoid must not escape]
+
+
+; ------------------------------------------------------------------
+; Q1 -- intelligibility through this speaker
+; ------------------------------------------------------------------
+
+; Wait out an utterance.  `stop` inside `repeat` leaves the procedure, which
+; is what ends this early; the count is a fence against a stuck engine.
+to p16m3.hush
+  repeat 400 [if not speaking? [stop] wait 6]
+end
+
+to p16m3.hear
+  pr [Q1 ten words, one every 2 seconds.]
+  pr [Write down what you hear, THEN look.]
+  pr []
+  wait 120
+  foreach :p16.words [[w] say :w wait 120]
+  wait 60
+  pr :p16.words
+  pr []
+  pr [Q1b what Berzerk says.]
+  say [intruder alert. intruder alert.]
+  p16m3.hush
+  wait 30
+  say :p16.line
+  p16m3.hush
+end
+
+
+; ------------------------------------------------------------------
+; Q2 -- the click test (section 8.5)
+; ------------------------------------------------------------------
+
+; Speech alone, at the level it comes out at.  The vowels are the loudest
+; thing it makes, so clipping shows up on them first.
+to p16m3.mix.alone
+  pr [Q2a speech alone.  A rasp on the]
+  pr [vowels would be clipping.]
+  say :p16.line
+  p16m3.hush
+  wait 60
+end
+
+; Four voices per ear at full volume is the case section 8.5 sized the
+; accumulator for; speech is the fifth.  If its recommendation was wrong,
+; this is where it is audible.
+to p16m3.mix.under
+  pr [Q2b four full voices, speech over.]
+  pr [Listen at the START and END of the]
+  pr [speech.  A click there is the fifth]
+  pr [source hitting the saturation.]
+  (sound 0 262 5000 15)
+  (sound 1 330 5000 15)
+  (sound 2 392 5000 15)
+  (sound 3 200 5000 15)
+  wait 60
+  say :p16.line
+  p16m3.hush
+  wait 60
+  stopsound
+end
+
+; "About half the volume of the notes" was the first board report, and it was
+; right: the level had been set by matching PEAKS, and a square wave's crest
+; factor is 1 against speech's 7.85, so equal peaks are 26 dB apart in the RMS
+; the ear reads.  The gain is measured now.  This brackets what is left, so
+; the next report is a number: the same note at four volumes, and speech
+; between them.  Say which two volumes the voice sits between.
+to p16m3.mix.level
+  pr [Q2d where does the voice sit?]
+  pr [A note at 15, 12, 9 and 6, then the]
+  pr [voice.  Which two is it between?]
+  wait 30
+  foreach [15 12 9 6] [[v] (sound 0 330 700 :v) wait 100]
+  wait 60
+  say :p16.line
+  p16m3.hush
+  wait 40
+end
+
+; And the ordinary case: a tune under a voice, which is what a game does.
+to p16m3.mix.tune
+  pr [Q2c a tune under the voice.]
+  play [c e g c5 g e c e g c5 g e]
+  wait 30
+  say [destroy the intruder]
+  p16m3.hush
+  stopsound
+end
+
+to p16m3.mix
+  p16m3.mix.alone
+  p16m3.mix.level
+  p16m3.mix.under
+  p16m3.mix.tune
+end
+
+
+; ------------------------------------------------------------------
+; Q4 -- the four knobs
+; ------------------------------------------------------------------
+
+to p16m3.voice :name :knobs
+  pr (se :name :knobs)
+  setvoice :knobs
+  say :p16.line
+  p16m3.hush
+  wait 40
+end
+
+to p16m3.knobs
+  pr [Q4 one sentence, four voices.]
+  p16m3.voice "default [50 128 128 128]
+  p16m3.voice "robot [30 150 200 90]
+  p16m3.voice "child [80 128 128 128]
+  p16m3.voice "slow [50 64 128 128]
+  setvoice [50 128 128 128]
+  pr [default is a man, robot lower and]
+  pr [faster, child higher, slow the]
+  pr [default at half speed.]
+end
+
+
+; ------------------------------------------------------------------
+; Q5 -- what the refill costs on this board
+; ------------------------------------------------------------------
+
+; Milliseconds for a fixed loop.  The body is the one P10 M0 timed, so the
+; two sets of numbers stay comparable.
+to p16m3.loop
+  local "t0 local "x
+  make "x 0
+  make "t0 ticks
+  repeat :p16.n [make "x (:x + 1)]
+  output (ticks - :t0)
+end
+
+make "p16.silent 0
+make "p16.speaking 0
+make "p16.dry "false
+make "p16.rounds 12
+
+; Find a loop long enough to measure.  A reading of a few milliseconds is
+; mostly the clock's own resolution, and a reading of zero cannot be divided
+; by at all -- which is exactly what the host does with the default count.
+; Doubling until the silent loop takes 300 ms costs one hardware session
+; nothing and saves tuning p16.n by hand on the device.
+to p16m3.size
+  make "p16.silent p16m3.loop
+  if 300 < :p16.silent [stop]
+  if 400000 < :p16.n [stop]
+  make "p16.n (:p16.n * 2)
+  p16m3.size
+end
+
+; One silent reading and one speaking reading, back to back.
+;
+; `ticks` counts whole milliseconds, so each reading quantises to +-1 ms --
+; and the difference being looked for is only a few ms, which leaves a single
+; pair good to about a factor of two.  Rounds are summed instead: the
+; difference grows with the count and the quantisation with its square root.
+; Taking the two readings adjacent, rather than all the silent ones and then
+; all the speaking ones, also cancels any slow drift between them.
+to p16m3.round
+  stopsound
+  wait 20
+  make "p16.silent (:p16.silent + p16m3.loop)
+
+  ; 128 phonemes is about eight seconds, which has to outlast one loop or
+  ; the reading is diluted by the silence after it.
+  say :p16.line
+  say [destroy the humanoid before it can escape]
+  make "p16.speaking (:p16.speaking + p16m3.loop)
+  if not speaking? [make "p16.dry "true]
+  stopsound
+end
+
+to p16m3.cost
+  stopsound
+  wait 30
+
+  ; Size the loop first, then throw that reading away: it is not one of the
+  ; rounds, and p16m3.size leaves its own timing in p16.silent.
+  p16m3.size
+  make "p16.silent 0
+  make "p16.speaking 0
+  make "p16.dry "false
+  repeat :p16.rounds [p16m3.round]
+end
+
+; The share of the wall clock the refill IRQ took, as a percentage.  A
+; speaking reading of zero means the loop was too short to time at all, and
+; then there is no number rather than a wrong one.
+to p16m3.duty
+  if 1 > :p16.speaking [output "unmeasured]
+  ; A speaking run no slower than the silent one means the utterance never
+  ; sounded (a silent device) or the loop is short enough that jitter swamps
+  ; the difference.  Either way there is no reading here.
+  if not (:p16.silent < :p16.speaking) [output "unmeasured]
+  output ((100 * (:p16.speaking - :p16.silent)) / :p16.speaking)
+end
+
+; A refill block is 128 samples at the mix rate, and the mix rate comes
+; straight off clk_sys -- so `fast` halves the block period along with
+; everything else.  Getting this wrong reports a `fast` run as costing twice
+; what it does, which is exactly what the first `fast` run here did.
+;
+;   normal  150 MHz  36.6 kHz  128/36600 = 3.5 ms
+;   fast    300 MHz  73.2 kHz  128/73200 = 1.75 ms
+;
+; The deadline is one ring half, so it moves with it: the duty percentage is
+; the share of the deadline at either clock, and only the microseconds need
+; to know which one is running.
+to p16m3.blockus
+  if "fast = p16m3.cpu [output 1749]
+  output 3500
+end
+
+; That share of one refill block, in microseconds: the figure say-design 9.2
+; predicts at about 60.
+to p16m3.perblock
+  output ((p16m3.blockus * p16m3.duty) / 100)
+end
+
+; The host has no clock to read or set, so a dry run there gets `unknown`
+; rather than an error -- the idiom P13 M0 already uses.
+to p16m3.cpu
+  local "c
+  make "c "unknown
+  catch "error [make "c hw.cpu]
+  output :c
+end
+
+to p16m3.setcpu :which
+  catch "error [hw.setcpu :which]
+end
+
+to p16m3.report
+  local "d
+  make "d p16m3.duty
+  pr [P16 M3 speech on the board]
+  pr (se [cpu] p16m3.cpu)
+  pr (se [loop count] :p16.n)
+  pr (se [rounds] :p16.rounds)
+  pr (se [silent total] :p16.silent [ms])
+  pr (se [speaking total] :p16.speaking [ms])
+  pr (se [difference] (:p16.speaking - :p16.silent) [ms])
+  ifelse "unmeasured = :d [
+    pr [the loop was too short to time]
+  ] [
+    pr (se [refill duty] :d [percent])
+    pr (se [per block] p16m3.perblock [us])
+    pr (se [deadline] p16m3.blockus [us])
+    pr (se [budget used] :d [percent])
+  ]
+  pr (se [ran dry] :p16.dry)
+  pr []
+  pr [The duty IS the share of the deadline,]
+  pr [at either clock: both the block and the]
+  pr [deadline follow clk_sys.]
+  pr []
+  pr [design 9.2 predicted 60 us a block.]
+  pr [Measured 2026 08 29, Pico 2 W:]
+  pr [normal, 111 us of 3500, 3.2 percent]
+  pr [fast, 47 to 49 us of 1749, 2.8 pct]
+  pr [Two fast runs agreed within 5 pct,]
+  pr [which is this method's repeatability.]
+  pr [The host measures 2.89 us a block.]
+  pr [A ran dry of true invalidates the]
+  pr [run: lower p16.n and take it again.]
+end
+
+
+; ------------------------------------------------------------------
+; Q3 -- the reclock (LAST, because it overclocks)
+; ------------------------------------------------------------------
+
+; A note, then the sentence, at one cpu speed.
+;
+; The note is the point.  Judging whether the voice is quieter at `fast` by
+; remembering how it sounded three seconds ago is exactly the comparison ears
+; are worst at, and it is the one that let B63 sit undetected through the M0
+; and M1 gates.  The PSG's own level is already rate-correct, so pairing the
+; two turns it into a WITHIN-clock comparison: the question is not "is the
+; voice quieter than it was" but "is the voice still as loud as that note",
+; asked twice, half a second apart each time.
+to p16m3.clock.at :which
+  p16m3.setcpu :which
+  wait 60
+  pr (se [asked for] :which [got] p16m3.cpu)
+  (sound 0 330 600 8)
+  wait 90
+  say :p16.line
+  p16m3.hush
+  wait 60
+end
+
+to p16m3.clock
+  pr [Q3 a note and a sentence at each cpu]
+  pr [speed.  The voice must sit the same]
+  pr [way against the note both times.]
+  pr []
+  pr [quieter at fast is B63 again.]
+  pr [lower or slower at fast is the]
+  pr [reclock hook missing altogether.]
+  pr []
+  p16m3.clock.at "normal
+  p16m3.clock.at "fast
+  p16m3.clock.at "normal
+end
+
+
+; ------------------------------------------------------------------
+
+to p16m3
+  textscreen
+  p16m3.hear
+  pr []
+  p16m3.mix
+  pr []
+  p16m3.knobs
+  pr []
+  p16m3.cost
+
+  ; Written before Q3 overclocks, not after.
+  open "p16m3.txt
+  setwrite "p16m3.txt
+  p16m3.report
+  setwrite []
+  close "p16m3.txt
+  p16m3.report
+  pr [Also written to p16m3.txt]
+  pr []
+  p16m3.clock
+  pr []
+  pr [Done.  Q1 to Q4 are ears.]
+  pr [Q5 is in p16m3.txt.]
+end

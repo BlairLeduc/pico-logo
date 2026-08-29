@@ -10,6 +10,11 @@
 //  `say :text` == `sayphonemes phonemes :text` is assertable here -- over
 //  the mock log, which is the only place it is observable.
 //
+//  M3 added `setvoice`/`voice`. What the knobs do to the sound is
+//  test_speech_synth.c's business; what is testable here is the shape --
+//  validation, the round trip through the core-side shadow, and that the
+//  device hears about it.
+//
 
 #include "test_scaffold.h"
 #include "core/speech_synth.h"
@@ -328,6 +333,86 @@ void test_speech_is_silent_and_successful_with_no_device_ops(void)
     ops->speech_stop = saved_stop;
 }
 
+//==========================================================================
+// setvoice / voice (M3, say-design.md §5.5)
+//==========================================================================
+
+void test_voice_starts_at_the_default(void)
+{
+    Value v = eval_string("voice").value;
+    TEST_ASSERT_EQUAL_STRING("[50 128 128 128]", value_to_string(v));
+}
+
+void test_setvoice_sets_all_four_knobs(void)
+{
+    Result r = run_string("setvoice [30 150 200 90]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("[30 150 200 90]", value_to_string(eval_string("voice").value));
+}
+
+void test_setvoice_reaches_the_device(void)
+{
+    run_string("setvoice [30 150 200 90]");
+
+    const MockDeviceState *s = spk();
+    TEST_ASSERT_EQUAL_INT(1, s->speech.voice_count);
+    TEST_ASSERT_EQUAL_INT(30, s->speech.voice_pitch);
+    TEST_ASSERT_EQUAL_INT(150, s->speech.voice_speed);
+    TEST_ASSERT_EQUAL_INT(200, s->speech.voice_mouth);
+    TEST_ASSERT_EQUAL_INT(90, s->speech.voice_throat);
+}
+
+// All four are 1..255, which is one rule rather than four.
+void test_setvoice_rejects_a_knob_out_of_range(void)
+{
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setvoice [0 128 128 128]").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setvoice [50 256 128 128]").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setvoice [50 128 -1 128]").status);
+
+    // And none of them got through.
+    TEST_ASSERT_EQUAL_STRING("[50 128 128 128]", value_to_string(eval_string("voice").value));
+    TEST_ASSERT_EQUAL_INT(0, spk()->speech.voice_count);
+}
+
+void test_setvoice_wants_exactly_four_numbers(void)
+{
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setvoice [50 128 128]").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setvoice [50 128 128 128 128]").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setvoice [50 128 128 loud]").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setvoice []").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setvoice 50").status);
+}
+
+void test_voice_takes_no_input(void)
+{
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("show (voice 1)").status);
+}
+
+// §5.6: `stopsound`'s promise not to touch the timbre extends to the voice.
+void test_stopsound_leaves_the_voice_alone(void)
+{
+    run_string("setvoice [30 150 200 90]");
+    run_string("sayphonemes [ax l er t]");
+    run_string("stopsound");
+    TEST_ASSERT_EQUAL_STRING("[30 150 200 90]", value_to_string(eval_string("voice").value));
+}
+
+// A board with no speech engine still answers `voice`, because the shadow is
+// core-side -- the same arrangement `env` has (primitives_sound.c).
+void test_setvoice_is_silent_and_readable_with_no_device_op(void)
+{
+    LogoIO *io = primitives_get_io();
+    LogoHardwareOps *ops = io->hardware->ops;
+    void (*saved)(int, int, int, int) = ops->speech_voice;
+    ops->speech_voice = NULL;
+
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("setvoice [30 150 200 90]").status);
+    TEST_ASSERT_EQUAL_STRING("[30 150 200 90]", value_to_string(eval_string("voice").value));
+    TEST_ASSERT_EQUAL_INT(0, spk()->speech.voice_count);
+
+    ops->speech_voice = saved;
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -358,5 +443,13 @@ int main(void)
     RUN_TEST(test_speaking_takes_no_input);
     RUN_TEST(test_stopsound_stops_speech_too);
     RUN_TEST(test_speech_is_silent_and_successful_with_no_device_ops);
+    RUN_TEST(test_voice_starts_at_the_default);
+    RUN_TEST(test_setvoice_sets_all_four_knobs);
+    RUN_TEST(test_setvoice_reaches_the_device);
+    RUN_TEST(test_setvoice_rejects_a_knob_out_of_range);
+    RUN_TEST(test_setvoice_wants_exactly_four_numbers);
+    RUN_TEST(test_voice_takes_no_input);
+    RUN_TEST(test_stopsound_leaves_the_voice_alone);
+    RUN_TEST(test_setvoice_is_silent_and_readable_with_no_device_op);
     return UNITY_END();
 }
