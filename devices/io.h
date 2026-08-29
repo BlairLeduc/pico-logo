@@ -230,6 +230,15 @@ extern "C"
     // Returns false on failure or if unsupported.
     bool logo_io_fs_image_restore(const LogoIO *io, LogoStream *in);
 
+    // Walk every live block of the internal root volume as a consistency check.
+    // Returns true if the walk completed. `*blocks` receives the number of live
+    // blocks visited; on failure `*code` carries the backend's error code and
+    // `*last_block` the last block visited. Any out-pointer may be NULL. Returns
+    // false with *code left alone if the backend has no such check.
+    bool logo_io_fs_check(const LogoIO *io, uint32_t *blocks, long *last_block,
+                          int *code, LogoFsBadFileFn on_bad_file,
+                          void *user_data);
+
     // Get file size, returns -1 on error
     long logo_io_file_size(const LogoIO *io, const char *pathname);
     

@@ -6471,7 +6471,7 @@ free
 
 Outputs a two-element list `[free_blocks block_size]` describing the filesystem that holds the current directory, or - if _pathname_ is given - the filesystem that holds _pathname_. `free_blocks` is the number of free allocation blocks; `block_size` is the size of one block in bytes. A block is the filesystem's own allocation unit (a flash block on the internal `/` filesystem, a cluster on the `/sd` card), so block sizes differ between volumes - multiply the two to get free bytes and compare across volumes.
 
-Reports `There is no SD card` if asked about `/sd` when no card is present.
+Reports `There is no SD card` if asked about `/sd` when no card is present, and `I'm having trouble with the disk` if a volume that is present can't report its free space.
 
 **Example**:
 
@@ -6591,6 +6591,45 @@ The image may come from a device with a smaller internal filesystem than this on
 ```logo
 ?.restore "/sd/2026-06-30.bak
 ```
+
+
+## fscheck (fsck)
+
+fscheck  
+(fscheck "scan)  
+fsck  
+
+`command`
+
+Checks the internal filesystem (`/`) and prints what it found. It only reads: nothing is repaired, moved or erased.
+
+```logo
+?fscheck
+Internal filesystem: OK
+  blocks read 103
+```
+
+The check walks every block the filesystem considers live - the same walk that block allocation and free-space reporting both perform. That makes `fscheck` the thing to run when [`free`](#free) reports `I'm having trouble with the disk`, when [`backup`](#backup) fails, or when writing to a file stops after the first few hundred bytes: all three are that one walk failing. Reading, listing and opening files do not walk anything, so they can keep working while the filesystem is damaged.
+
+A damaged volume reports the filesystem's own error code - a negative LittleFS code, such as `-84` for corrupt data or `-5` for an I/O error - and where the walk stopped:
+
+```logo
+?fscheck
+Internal filesystem: DAMAGED
+  blocks read 103
+  error       -84
+  stopped on  a null block pointer
+  unreadable  /sketches/rocks (412 bytes)
+  1 file cannot be read; erase it with erasefile
+```
+
+`stopped on a null block pointer` means a piece of metadata named a block that was never written, holding the value erased flash reads as. Paired with `-84`, that is a file whose recorded length is not zero but whose data pointer is blank. Otherwise the walk names the last block it read *successfully*, so the damage lies just beyond it in walk order, not at it.
+
+Whenever the walk fails, `fscheck` goes on to read every file end to end and name the ones that fail, since that is what identifies the file to erase. `erasefile` on a file named here should let the walk complete; run `fscheck` again to confirm. Copy anything you want to keep to the SD card with [`copyfile`](#copyfile) first - [`backup`](#backup) cannot rescue a damaged volume, because imaging runs the same walk.
+
+`(fscheck "scan)` forces that file pass even when the walk succeeds. It is worth doing because **the walk never reads a file's data blocks**, so a volume can walk perfectly and still hold a file that cannot be read. The pass reads the whole volume, which is why it is not automatic on a healthy filesystem.
+
+`fsck` is an abbreviation for `fscheck`. Neither carries a leading period, because neither changes anything - unlike [`.restore`](#restore), which does. `fscheck` always examines the internal filesystem, whatever the current prefix; the SD card has no equivalent check and is not affected. Any input other than `scan` reports `fscheck doesn't like ... as input`.
 
 
 ## pofile

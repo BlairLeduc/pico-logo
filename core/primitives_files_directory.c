@@ -772,13 +772,120 @@ static Result prim_free(Evaluator *eval, int argc, Value *args)
     uint32_t free_blocks = 0, block_size = 0;
     if (!logo_io_free_blocks(io, path, &free_blocks, &block_size))
     {
-        // Most commonly: no SD card for a /sd path.
-        return result_error(ERR_NO_SD_CARD);
+        // Only a removable volume can genuinely be absent. An internal volume
+        // that can't report its free space is a disk problem, and saying "there
+        // is no SD card" about it sends the reader looking at the wrong slot.
+        if (logo_io_is_external_path(io, path) && !logo_io_mount_available(io, path))
+        {
+            return result_error(ERR_NO_SD_CARD);
+        }
+        return result_error(ERR_DISK_TROUBLE);
     }
 
     Node list = mem_cons(number_to_word((float)free_blocks),
                          mem_cons(number_to_word((float)block_size), NODE_NIL));
     return result_ok(value_list(list));
+}
+
+// Collects the files a scan could not read, printing each as it is found so a
+// long scan shows progress rather than going quiet.
+typedef struct FsckScanContext
+{
+    LogoIO *io;
+    int count;
+} FsckScanContext;
+
+static bool fsck_report_bad_file(const char *path, long size, void *user_data)
+{
+    FsckScanContext *ctx = (FsckScanContext *)user_data;
+    char line[LOGO_STREAM_NAME_MAX + 40];
+    snprintf(line, sizeof(line), "  unreadable  %s (%ld bytes)\n", path, size);
+    logo_io_console_write(ctx->io, line);
+    ctx->count++;
+    return true; // find them all
+}
+
+// fscheck            - walks the internal filesystem and prints what it found.
+// (fscheck "scan)    - also reads every file end to end and names the ones that
+//                      fail. The walk never touches a file's data blocks, so
+//                      that pass finds damage the walk structurally cannot see;
+//                      it is opt-in because it reads the whole volume.
+// fsck               - abbreviation for fscheck.
+//
+// Neither form changes anything: a damaged file is named, never erased.
+static Result prim_fscheck(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    LogoIO *io = primitives_get_io();
+    if (!io)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+    }
+
+    bool scan_files = false;
+    if (argc >= 1)
+    {
+        REQUIRE_WORD(args[0]);
+        const char *what = mem_word_ptr(args[0].as.node);
+        if (strcasecmp(what, "scan") != 0)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+        }
+        scan_files = true;
+    }
+
+    // A walk that fails always wants the file scan: naming the bad file is the
+    // whole point, and there is no reason to make the reader ask twice.
+    uint32_t blocks = 0;
+    long last_block = 0;
+    int code = 0;
+    if (!logo_io_fs_check(io, &blocks, &last_block, &code, NULL, NULL) && code == 0)
+    {
+        return result_error_arg(ERR_UNSUPPORTED_ON_DEVICE, NULL, NULL);
+    }
+
+    char line[96];
+    snprintf(line, sizeof(line), "Internal filesystem: %s\n",
+             code == 0 ? "OK" : "DAMAGED");
+    logo_io_console_write(io, line);
+    snprintf(line, sizeof(line), "  blocks read %lu\n", (unsigned long)blocks);
+    logo_io_console_write(io, line);
+
+    if (code != 0)
+    {
+        snprintf(line, sizeof(line), "  error       %d\n", code);
+        logo_io_console_write(io, line);
+        if (last_block < 0)
+        {
+            // The erased-flash value where a block number belongs: metadata
+            // naming a block that was never written.
+            logo_io_console_write(io, "  stopped on  a null block pointer\n");
+        }
+        else
+        {
+            snprintf(line, sizeof(line), "  stopped on  block %ld\n", last_block);
+            logo_io_console_write(io, line);
+        }
+    }
+
+    if (code != 0 || scan_files)
+    {
+        FsckScanContext ctx = {io, 0};
+        logo_io_fs_check(io, NULL, NULL, NULL, fsck_report_bad_file, &ctx);
+        if (ctx.count == 0)
+        {
+            logo_io_console_write(io, "  every file reads back\n");
+        }
+        else
+        {
+            snprintf(line, sizeof(line), "  %d file%s cannot be read; erase %s\n",
+                     ctx.count, ctx.count == 1 ? "" : "s",
+                     ctx.count == 1 ? "it with erasefile" : "them with erasefile");
+            logo_io_console_write(io, line);
+        }
+    }
+
+    return result_none();
 }
 
 //==========================================================================
@@ -808,4 +915,6 @@ void primitives_files_directory_init(void)
     primitive_register("copyfile", 2, prim_copyfile);
     primitive_register("backup", 1, prim_backup);
     primitive_register(".restore", 1, prim_restore);
+    primitive_register("fscheck", 0, prim_fscheck);
+    primitive_register("fsck", 0, prim_fscheck);
 }

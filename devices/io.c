@@ -1114,6 +1114,17 @@ bool logo_io_fs_image_restore(const LogoIO *io, LogoStream *in)
     return io->storage->ops->fs_image_restore(in);
 }
 
+bool logo_io_fs_check(const LogoIO *io, uint32_t *blocks, long *last_block,
+                      int *code, LogoFsBadFileFn on_bad_file, void *user_data)
+{
+    if (!io || !io->storage || !io->storage->ops->fs_check)
+    {
+        return false;
+    }
+    return io->storage->ops->fs_check(blocks, last_block, code, on_bad_file,
+                                      user_data);
+}
+
 long logo_io_file_size(const LogoIO *io, const char *pathname)
 {
     if (!io || !io->storage || !pathname)

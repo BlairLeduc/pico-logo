@@ -405,6 +405,12 @@ extern "C" {
 #define LOGO_CPU_KHZ_NORMAL  150000u
 #define LOGO_CPU_KHZ_FAST    300000u
 
+// How deep `fscheck`'s per-file scan will recurse. Each level costs one lfs_dir_t
+// plus one lfs_info (~320 bytes of stack), so the cap is what keeps a deep or
+// damaged directory tree from running the stack out on a board. The internal
+// filesystem is a flat root plus the odd subdirectory, so four is generous.
+#define LOGO_FSCK_MAX_DEPTH 4
+
 #ifdef __cplusplus
 }
 

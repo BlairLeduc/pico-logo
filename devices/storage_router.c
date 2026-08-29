@@ -247,6 +247,14 @@ static bool router_fs_image_restore(LogoStream *in)
     return g_root_ops->fs_image_restore && g_root_ops->fs_image_restore(in);
 }
 
+// Like imaging, the consistency walk is a property of the internal root volume.
+static bool router_fs_check(uint32_t *blocks, long *last_block, int *code,
+                            LogoFsBadFileFn on_bad_file, void *user_data)
+{
+    return g_root_ops->fs_check &&
+           g_root_ops->fs_check(blocks, last_block, code, on_bad_file, user_data);
+}
+
 static const LogoStorageOps router_ops = {
     .open = router_open,
     .file_exists = router_file_exists,
@@ -262,6 +270,7 @@ static const LogoStorageOps router_ops = {
     .is_external = router_is_external,
     .fs_image_backup = router_fs_image_backup,
     .fs_image_restore = router_fs_image_restore,
+    .fs_check = router_fs_check,
 };
 
 void logo_storage_router_init(LogoStorage *router,
