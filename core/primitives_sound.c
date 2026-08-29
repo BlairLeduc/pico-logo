@@ -4,7 +4,9 @@
 //
 //  Sound primitives (P8): the stereo PSG surface -- sound, setenv/env,
 //  setwave/wave, play, playing?, stopsound. `toot` stays in
-//  primitives_hardware.c but shares the same engine via sound_gate.
+//  primitives_hardware.c but shares the same engine via sound_gate;
+//  `stopsound` also stops speech (P16), whose own primitives are in
+//  primitives_speech.c.
 //
 //  Semantics live here; the device engine renders. Argument validation,
 //  the tell-style voice-list fan-out, the note-word parser (core/notation.c)
@@ -576,8 +578,11 @@ static Result prim_playing(Evaluator *eval, int argc, Value *args)
 // stopsound
 //==========================================================================
 
-// stopsound -- silence every voice through its release and clear the queues.
-// Timbre (envelopes/waveforms) is left untouched (docs/sound-design.md Q4).
+// stopsound -- silence every voice through its release, abandon any
+// utterance, and clear both queues. Timbre (envelopes/waveforms, and the
+// speech voice) is left untouched (docs/sound-design.md Q4,
+// docs/say-design.md §5.6). There is no separate `stopspeech`: there is one
+// "shut up" in the language and it means all of it.
 static Result prim_stopsound(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
@@ -587,6 +592,10 @@ static Result prim_stopsound(Evaluator *eval, int argc, Value *args)
     if (ops && ops->sound_stop)
     {
         ops->sound_stop((1u << MAX_VOICES) - 1u); // all voices
+    }
+    if (ops && ops->speech_stop)
+    {
+        ops->speech_stop();
     }
     return result_none();
 }

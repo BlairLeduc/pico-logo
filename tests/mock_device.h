@@ -187,6 +187,11 @@ extern "C"
     #define MOCK_SOUND_MAX_GATES 64
     #define MOCK_SOUND_MAX_QUEUED 512
 
+    // Speech (P16) recording cap: the flat log of accepted phonemes. A
+    // sentence is a few dozen, so this holds several utterances' worth for
+    // an append-on-second-call assertion.
+    #define MOCK_SPEECH_MAX_QUEUED 512
+
     typedef struct MockTurtleState
     {
         float x, y;
@@ -468,6 +473,32 @@ extern "C"
             uint32_t last_stop_mask;
             int stop_count;
         } sound;
+
+        // Speech synthesizer (P16) tracking, mirroring the sound ops above:
+        // every accepted phoneme is logged in order, and status is
+        // scriptable so a test can drive `speaking?` and the `sayphonemes`
+        // queue-full wait without hardware.
+        struct
+        {
+            SpeechFrame queued[MOCK_SPEECH_MAX_QUEUED];
+            int queued_count;
+
+            bool speaking;   // scriptable (backs speech_status -> speaking?)
+            int free_slots;  // default SPEECH_QUEUE_LEN
+            int stop_count;  // speech_stop calls
+
+            // The last §5.5 knobs set, and how many times: `setvoice`
+            // reaching the device is the only thing a host test can see of
+            // it, since the host has no engine to hear.
+            int voice_pitch, voice_speed, voice_mouth, voice_throat;
+            int voice_count;
+
+            // The last `setsayvolume` to reach the device, and how many
+            // times. -1 until one does, so a test can tell "set to 15" from
+            // "never set".
+            int volume;
+            int volume_count;
+        } speech;
     } MockDeviceState;
 
     //
@@ -673,6 +704,19 @@ extern "C"
     void mock_sound_set_status(int voice, bool sounding, int free_slots);
     int mock_sound_gate_count(void);
     void mock_sound_clear_gates(void);
+
+    //
+    // Speech (P16) mock operations (for use by test_scaffold in mock_hardware_ops)
+    //
+    int mock_speech_queue(const SpeechFrame *frames, int n);
+    SpeechStatus mock_speech_status(void);
+    void mock_speech_stop(void);
+    void mock_speech_voice(int pitch, int speed, int mouth, int throat);
+    void mock_speech_volume(int volume);
+
+    // Script the engine's status so tests can drive `speaking?` and the
+    // `sayphonemes` queue-full wait without hardware.
+    void mock_speech_set_status(bool speaking, int free_slots);
 
 #ifdef __cplusplus
 }

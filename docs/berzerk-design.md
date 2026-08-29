@@ -1,6 +1,9 @@
 # Berzerk in Pico Logo (design)
 
 Status: **DESIGN, nothing built.** M0 is a measurement and it is the gate.
+**§14.3's `say` primitive shipped as [P16](say-design.md) on 2026-08-29**, and
+its adoption — that item's M4 — moved here the same day, so this game speaks:
+§14.2 and the M6/M7 rows of §19.
 
 Berzerk is the third vector game in this tree and the first one that is not a
 vector game in its own cabinet. Asteroids and Battlezone were XY machines
@@ -687,14 +690,41 @@ LIKE A ROBOT`), assembled into sentences at runtime:
   `<THE CHICKEN|IT|THE HUMANOID|THE INTRUDER>` on a countdown
   (`GENERATE_ROBOT_SPEECH`, $2B97, `TALK_TIMER`).
 
-**What ships in v1: the text.** Split-screen line 26, centred, for about a
+**What ships in v1: the voice and the text.** This section was written to ship
+text alone, because §14.3's speech engine did not exist; it does now
+([say-design.md](say-design.md), done 2026-08-29), so v1 speaks each sentence
+with `say` **and** captions it on split-screen line 26, centred, for about a
 second — which is exactly what the Vectrex port does (`HumanoidString`, "GOT
-YOU HUMANOID"), and it preserves the sentence *assembly*, which is the part
-that makes the taunts feel alive. It costs one `setcursor` and one `type`.
+YOU HUMANOID"). The caption is not a leftover: the arcade's speech is famously
+hard to make out, and a player who cannot hear the room should still be told
+they are a chicken. Either way the sentence *assembly* is preserved, which is
+the part that makes the taunts feel alive.
+
+The vocabulary is **one property list, not thirty procedures** — §18's
+procedure ceiling is why — and a sentence is a list of word names:
+
+```logo
+to speak :words
+  if empty? :words [stop]
+  sayphonemes gprop "ph first :words
+  speak butfirst :words
+end
+```
+
+`GENERATE_ROBOT_SPEECH` ($2B97) is then `speak` over two `pick`s.
+[say-design.md](say-design.md) §11 is the long form, including why the words
+are stored as phoneme lists rather than as text.
 
 ### 14.3 Speech in the interpreter, priced
 
-Raised while this was being written, and it deserves a straight answer.
+**Settled: B was taken.** [say-design.md](say-design.md) is the design and it
+was built and gated between 2026-08-28 and 2026-08-29 — `say`, `phonemes`,
+`sayphonemes`, `speaking?`, `setvoice`, `voice`, over a 41-phoneme formant
+engine and NRL Report 7948's letter-to-sound rules, as a ninth source in the
+PSG's refill IRQ. Two numbers below came out wrong and are worth carrying: the
+flash cost is ~20 KB rather than ~10 KB (the rule table is most of the
+difference), and `SAY` is **Terrapin Logo**'s, not Apple Logo's — Apple Logo II
+is silent. The rest of this section is the reasoning that chose B, kept.
 
 **The output path is not the problem.** The PSG is PWM slice 5 at an 11-bit,
 73.2 kHz carrier with a **36.6 kHz software mix rate** and a DMA half-buffer
@@ -727,9 +757,10 @@ for the frame state, one voice slot in the mixer, and a `say`/`sayphonemes`
 pair in the reference.
 
 **It is a separate design and a separate roadmap entry**, and Berzerk must not
-block on it. §14.2's on-screen text is the shipped behaviour; if `say` lands,
-Berzerk's five sentences become five calls and the text stays as a caption. The
-sentence-assembly code is written once either way.
+block on it. That held: `say` landed before this game was started, so §14.2's
+five sentences are five calls and the on-screen text stays as a caption, which
+is the outcome this paragraph named. The sentence-assembly code was written
+once either way.
 
 ## 15. Frame budget
 
@@ -842,9 +873,12 @@ The user has put interpreter work on the table. Berzerk's answer is unusual:
   demonstrated need.** What would change that verdict is a *mutation*
   primitive: `.setitem` on a list is the write half and Berzerk does ~40 a
   frame. M0 prices `.setitem` explicitly, because nothing in the tree has.
-- **A `say` primitive (§14.3).** The one genuinely new thing this game asks
-  for, and it is a language feature with its own justification. It buys the
-  frame **nothing** and the game a great deal.
+- **A `say` primitive (§14.3).** The one genuinely new thing this game asked
+  for, and it is a language feature with its own justification. **Shipped
+  2026-08-29**, before this game was started, so it is a dependency that is
+  already met. It buys the frame **nothing** and the game a great deal, and at
+  ~0.25 ms to translate a sentence ([say-design.md](say-design.md) §9.3) a
+  spoken taunt is affordable inside the frame loop.
 
 **Verdict: Berzerk needs no interpreter change to ship.** It has one to ask
 for, and that one is not on the frame's critical path.
@@ -859,7 +893,7 @@ Cut from the arcade, with the reason:
 | **The screen scroll between rooms** | `SCROLL_UP`/`DOWN`/`LEFT`/`RIGHT` ($2175–$2419) slide the whole bitmap. Here that is a full-screen present per step — eight steps is 112 ms — and the room has to be drawn twice during it. Reconsidered at M7 as a four-step slide if the budget allows; a cut to `clean` and rebuild otherwise |
 | **Colour** | The cabinet colours the walls per difficulty out of the table's fifth column and the man per player. White on black, like Asteroids and Battlezone |
 | **The 2600's twelve game variations** | Rebound Otto, invincible Otto, no Otto, non-shooting robots — all 2600 inventions. The arcade has one Otto and he is invincible |
-| **Speech** | §14.2/§14.3. Text now, a voice if `say` lands |
+| ~~**Speech**~~ | **Uncut 2026-08-29.** `say` landed ([say-design.md](say-design.md)) before this game was written, so §14.2 speaks *and* captions |
 | **Coins, bookkeeping, CMOS, the demo attract mode, the cocktail cabinet, four languages** | Cabinet furniture. The attract screen is Asteroids' and Battlezone's — title, controls, top ten |
 | **The Vectrex's blocked doors** | Malban's addition at high skill, not the arcade's |
 
@@ -901,8 +935,8 @@ Each leaves `ctest --preset=tests` green, and each ends with a board reading.
 | M3 | The robots | Seek, `IQ`, the count cycle, robots killing robots |
 | M4 | The bolts | Both bolt kinds, the three firing windows, the alignment rule confirmed against MAME (§10.2) |
 | M5 | Evil Otto | The timer arithmetic, walls ignored, robots eaten |
-| M6 | The campaign and the sound | Both difficulty tables, lives, bonus, the attract screen, the effects off the ROM |
-| M7 | Polish | The taunts, the deaths, the play test, and the scroll if it fits |
+| M6 | The campaign, the sound and the voice | Both difficulty tables, lives, bonus, the attract screen, the effects off the ROM, and §14.2's four fixed sentences spoken with `say` and captioned |
+| M7 | Polish | The taunts (spoken, over two `pick`s), the deaths, the play test, and the scroll if it fits |
 
 ### M0 — the harness, and what it must answer
 

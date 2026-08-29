@@ -1,0 +1,135 @@
+; setsayvolume -- the board half of say-design.md 5.8.
+;
+;   load "p16vol
+;   p16vol
+;
+; The host tests prove the primitive: the scale, the errors, the readback,
+; and that the level reaches the device op.  What they cannot prove is that
+; the number does the thing its name says, because the multiply it changes
+; is in the refill IRQ and what comes out is a sound.  This is that.
+;
+; THREE QUESTIONS:
+;
+;   Q1  Is the ladder a ladder?  0..15 is the same 2 dB-per-step table the
+;       eight voices use, so each step down should be a small, even drop --
+;       not four steps of nothing and then silence.
+;   Q2  Is 15 unchanged?  The default is the level three board listens
+;       settled on (say-design.md 8.5), so the voice at 15 must sound
+;       exactly as loud as it did before there was a volume to set.  A
+;       reference note makes that judgeable instead of a memory.
+;   Q3  Does the knob solve the problem it was added for?  8.5's finding
+;       was that speech cannot match a square wave at equal peaks, so a
+;       program that talks over music turns the music down.  Q3 does it
+;       both ways round: the tune down, then the voice down under it.
+;
+; WHAT A FAILURE SOUNDS LIKE:
+;
+;   Q1  Steps that are not there, or a cliff between two of them, means the
+;       ladder is not being indexed -- a fixed gain with a mute at 0 sounds
+;       exactly like that.  0 must be silent, and the pause must be the
+;       length of the sentence: silence early means the utterance was cut
+;       rather than turned down.
+;   Q2  Any difference at 15 against the note is a regression in the mixer
+;       slot, not in this primitive.
+;   Q3  A click at the instant a level changes mid-utterance is the step in
+;       the gain.  It is a known cost of taking effect at once and it is
+;       worth reporting; it is not worth failing the gate over.
+
+make "p16vol.line [the humanoid must not escape]
+
+to p16vol.hush
+  repeat 400 [if not speaking? [stop] wait 6]
+end
+
+to p16vol.at :v
+  setsayvolume :v
+  pr se [volume] sayvolume
+  say :p16vol.line
+  p16vol.hush
+  wait 40
+end
+
+
+; ------------------------------------------------------------------
+; Q1 -- the ladder
+; ------------------------------------------------------------------
+
+to p16vol.ladder
+  pr [Q1 the same sentence at six levels.]
+  pr [Even steps down, then silence.]
+  wait 60
+  foreach [15 12 9 6 3 0] [[v] p16vol.at :v]
+  setsayvolume 15
+end
+
+
+; ------------------------------------------------------------------
+; Q2 -- 15 is where it was
+; ------------------------------------------------------------------
+
+to p16vol.default
+  pr [Q2 a note at 15, then the voice at]
+  pr [15.  Same as it ever was?]
+  wait 30
+  (sound 0 330 700 15)
+  wait 100
+  setsayvolume 15
+  say :p16vol.line
+  p16vol.hush
+  wait 40
+end
+
+
+; ------------------------------------------------------------------
+; Q3 -- what it was added for
+; ------------------------------------------------------------------
+
+to p16vol.duck
+  pr [Q3a the tune ducked, voice at 15.]
+  play [v6 c e g c5 g e c e g c5 g e]
+  wait 30
+  setsayvolume 15
+  say :p16vol.line
+  p16vol.hush
+  stopsound
+  wait 60
+  pr [Q3b the tune at 15, voice at 6.]
+  pr [This is the one that should be hard]
+  pr [to follow, and that is the finding.]
+  play [v15 c e g c5 g e c e g c5 g e]
+  wait 30
+  setsayvolume 6
+  say :p16vol.line
+  p16vol.hush
+  stopsound
+  setsayvolume 15
+end
+
+; Mid-utterance, which the reference promises takes effect at once.
+to p16vol.during
+  pr [Q3c turned down while speaking.]
+  pr [A click at the change is worth]
+  pr [reporting.]
+  wait 30
+  setsayvolume 15
+  say [intruder alert. intruder alert.]
+  wait 90
+  setsayvolume 4
+  p16vol.hush
+  setsayvolume 15
+  wait 40
+end
+
+
+to p16vol
+  cs
+  pr [P16 5.8 setsayvolume]
+  pr []
+  p16vol.ladder
+  p16vol.default
+  p16vol.duck
+  p16vol.during
+  pr []
+  pr [Done.  sayvolume is back at 15.]
+  pr se [sayvolume] sayvolume
+end

@@ -5428,7 +5428,7 @@ If one frequency is provided the same tone is produced on both left and right ch
 
 `toot` does not block. If a second `toot` is requested, Logo will wait until the previous `toot` completes. 
 
-`toot` is the simplest way to make a sound. For volume, envelopes, waveforms, noise, and background music, see [`sound`](#sound), [`setenv`](#setenv), [`setwave`](#setwave), and [`play`](#play).
+`toot` is the simplest way to make a sound. For volume, envelopes, waveforms, noise, and background music, see [`sound`](#sound), [`setenv`](#setenv), [`setwave`](#setwave), and [`play`](#play). For a speaking voice, see [`say`](#say).
 
 > The actual frequency range is 100Hz to 2000Hz. If the input is outside this range, no tone is produced and but `toot` behaves as if a rest is requested. By convention, a rest is produced using a frequency of 0Hz.
 
@@ -5596,13 +5596,214 @@ stopsound
 
 `command`
 
-Silences every voice (through its release) and clears all queued notes. It does not change the envelopes or waveforms set with [`setenv`](#setenv) and [`setwave`](#setwave), so the timbre you chose survives.
+Silences every voice (through its release), stops speaking, and clears all queued notes and phonemes. It does not change the envelopes or waveforms set with [`setenv`](#setenv) and [`setwave`](#setwave), nor the voice set with [`setvoice`](#setvoice) or its loudness set with [`setsayvolume`](#setsayvolume), so the timbre you chose survives.
 
 **Example**:
 
 ```logo
 ?play [c d e f g a b c6]
 ?stopsound
+```
+
+
+## say
+
+say _text_
+
+`command`
+
+Speaks _text_ out loud in the background: Logo continues at once, without waiting for it to finish. Calling `say` again appends to what is already being said, so a sentence can be assembled a word at a time.
+
+_text_ can be a word or a list:
+
+```logo
+?say "chicken
+?say [intruder alert]
+```
+
+Numbers are spoken a digit at a time, so `say 42` says "four two". A `.`, `!` or `?` puts a pause in; other punctuation is ignored, and so is any character the rules cannot pronounce.
+
+`say` works out the pronunciation from the spelling, and English spelling being what it is, about one word in ten comes out wrong. When that happens, look at what it decided with [`phonemes`](#phonemes) and say your own version with [`sayphonemes`](#sayphonemes) — these three are meant to be used together. Use [`speaking?`](#speaking-speakingp) to tell when it has finished, and [`stopsound`](#stopsound) to cut it short. [`setvoice`](#setvoice) changes who is speaking and [`setsayvolume`](#setsayvolume) how loudly.
+
+On a machine with no speaker, `say` does nothing at all, and your program keeps running.
+
+**Example**:
+
+```logo
+?say [the humanoid must not escape]
+to taunt :words
+  say :words
+  wait 30
+end
+```
+
+
+## sayphonemes
+
+sayphonemes [_phonemes_]
+
+`command`
+
+Speaks a list of _phonemes_ in the background: they are added to the utterance and Logo continues at once. Calling `sayphonemes` again appends to what is already being said, so a sentence can be assembled a word at a time.
+
+Each item in the list is one phoneme, written the way it is below. Anything else is an error, and the case does not matter.
+
+- Vowels are `iy ih ey eh ae aa ao ow uh uw ah ax er ay aw oy`.
+- Stops are `p b t d k g`, and affricates `ch jh`.
+- Fricatives are `f v th dh s z sh zh hh`.
+- Nasals are `m n ng`, and approximants `l r w y`.
+- `_` is a pause, which is how you put a gap between words.
+
+If the utterance is full, `sayphonemes` waits for room (you can interrupt it with the break key).
+
+Spelling a word out in phonemes is how you say something the machine has no business knowing how to pronounce, and how a game keeps a fixed vocabulary. Use [`speaking?`](#speaking-speakingp) to tell when it has finished, and [`stopsound`](#stopsound) to cut it short.
+
+**Example**:
+
+```logo
+?sayphonemes [ih n t r uw d er]
+?sayphonemes [ax l er t]
+; a game's vocabulary, one property list rather than
+; one procedure a word
+?pprop "ph "chicken [ch ih k ax n]
+?sayphonemes gprop "ph "chicken
+```
+
+
+## phonemes
+
+phonemes _text_
+
+`operation`
+
+outputs the list of phonemes [`say`](#say) would speak for _text_, without speaking anything. These two are the same thing:
+
+```logo
+say :text
+sayphonemes phonemes :text
+```
+
+so `phonemes` is how you find out why a word came out wrong, and [`sayphonemes`](#sayphonemes) is how you fix it: print the list, change the phonemes you disagree with, and say that instead.
+
+**Example**:
+
+```logo
+?show phonemes [hello]
+[hh eh l ow]
+?show phonemes "robot
+[r aa b aa t]
+?sayphonemes [r ow b ax t]
+```
+
+
+## speaking? (speakingp)
+
+speaking?  
+speakingp
+
+`operation`
+
+outputs `true` if something is currently being said or still queued to be said, and `false` otherwise. This pairs with [`when`](#when) to chain speech together: `when [not speaking?] [next.taunt]`.
+
+**Example**:
+
+```logo
+?sayphonemes [f ay t l ay k ax r ow b aa t]
+?show speaking?
+true
+```
+
+
+## setvoice
+
+setvoice [_pitch_ _speed_ _mouth_ _throat_]
+
+`command`
+
+Sets the voice everything spoken afterwards is spoken in. All four numbers are from 1 to 255, and the default voice is `[50 128 128 128]`.
+
+- _pitch_ is how high the voice is, counted in half-Hertz: 50 is a 100 Hz voice, which is a man's; 75 is higher, and 30 is a growl.
+- _speed_ is how fast it talks, where 128 is normal. Doubling it says everything in half the time.
+- _mouth_ and _throat_ change the shape of the speaker rather than the speed or the pitch. _mouth_ makes the front of the mouth bigger or smaller, and _throat_ does the same to the back of it. 128 each is an ordinary head; a small mouth and a big throat is a very different creature.
+
+Nothing here changes what is said, only who says it, and a voice you set stays set until you change it — [`stopsound`](#stopsound) does not put it back. Read it back with [`voice`](#voice).
+
+A robot is one line, and worth typing in to hear:
+
+**Example**:
+
+```logo
+?setvoice [30 150 200 90]
+?say [intruder alert]
+?setvoice [50 128 128 128]     ; back to the ordinary voice
+```
+
+
+## voice
+
+voice  
+
+`operation`
+
+outputs the current voice as the list [_pitch_ _speed_ _mouth_ _throat_], as set by [`setvoice`](#setvoice). This is how a procedure borrows a voice and gives it back:
+
+**Example**:
+
+```logo
+?show voice
+[50 128 128 128]
+to robot :sentence
+  local "was
+  make "was voice
+  setvoice [30 150 200 90]
+  say :sentence
+  setvoice :was
+end
+```
+
+
+## setsayvolume
+
+setsayvolume _level_
+
+`command`
+
+Sets how loud speech is, from 0 to 15 — the same scale as [`sound`](#sound), [`setenv`](#setenv)'s _sustain_ and `play`'s `v`. 15 is full and is where it starts; 0 is silent, and every step down is about 2 decibels quieter. It takes effect at once, even in the middle of a sentence, and it stays set until you change it — [`stopsound`](#stopsound) does not put it back.
+
+This is the loudness of the voice only. It does not touch the notes the eight voices are playing, which is what makes it useful: turn the music down under a line of speech and back up afterwards, or turn a distant robot down without changing the way it talks.
+
+Speech is quieter than a note at the same number, and that is not a fault in the setting. A square wave is at full swing on every sample and a voice is not, so a voice at 15 sits well below a note at 15. Set the music lower than you think you need to.
+
+**Example**:
+
+```logo
+?setsayvolume 8
+?say [i am far away]
+?setsayvolume 15
+?say [i am right here]
+```
+
+
+## sayvolume
+
+sayvolume  
+
+`operation`
+
+outputs how loud speech is, from 0 to 15, as set by [`setsayvolume`](#setsayvolume). This is how a procedure ducks the voice and puts it back:
+
+**Example**:
+
+```logo
+?show sayvolume
+15
+to whisper :sentence
+  local "was
+  make "was sayvolume
+  setsayvolume 5
+  say :sentence
+  setsayvolume :was
+end
 ```
 
 

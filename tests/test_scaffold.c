@@ -420,6 +420,12 @@ LogoHardwareOps mock_hardware_ops = {
     .sound_stop = mock_sound_stop,
     .sound_env = mock_sound_env,
     .sound_wave = mock_sound_wave,
+    // Speech synthesizer (P16) - scripted via the mock speech backend
+    .speech_queue = mock_speech_queue,
+    .speech_status = mock_speech_status,
+    .speech_stop = mock_speech_stop,
+    .speech_voice = mock_speech_voice,
+    .speech_volume = mock_speech_volume,
     // WiFi operations (always available in tests)
     .wifi_is_connected = mock_wifi_is_connected,
     .wifi_connect = mock_wifi_connect,
