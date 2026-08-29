@@ -1,0 +1,1381 @@
+; P15 M0 -- what a Berzerk frame costs, before any game code exists.
+;
+;   erall                        <-- REQUIRED, see below
+;   load "p15m0
+;   p15m0
+;
+; This is the gate in docs/berzerk-design.md section 19.  The design's whole
+; budget (section 15.2) is Battlezone's 150 MHz board figures divided by a
+; measured interpretation ratio of 2.06, and not one number in it has been
+; read off a board running THIS game's shapes.  Every figure below therefore
+; has a prediction attached to it, and the run is worth taking only because
+; some of them will be wrong -- Asteroids' section 12 was 72 % low on drawing
+; statements, and that correction is what M0 exists to make.
+;
+; SIX QUESTIONS, in the order section 19's M0 row asks them:
+;
+;   Q1  Which erase strategy wins?  Section 3 predicts clear-and-redraw and
+;       argues it from the row-span tracker: erase-in-place pays a second full
+;       drawing pass (predicted 6.8 ms) to save redrawing a static maze
+;       (predicted 0.8 ms).  6.8 against 0.8 is not close -- but P11 M0
+;       predicted the opposite of what it read, so both are measured, at 4 and
+;       11 robots, with body and present read apart.
+;   Q2  What is the frame at 1, 4, 8 and 11 robots?  The budget is `c + m.n`
+;       and the slope has to be arguable separately from the floor, because
+;       the two have different levers: the floor is the present and the walls,
+;       the slope is the robots.
+;   Q3  What does the split present cost?  Section 15.1 DERIVES 14.0 ms rather
+;       than measuring it -- full screen went 26.45 to 18.70 at 300 MHz, which
+;       splits as 10.95 ms of SPI wire and 15.5 ms of CPU, and three quarters
+;       of `10.95 + 15.5/2` is 14.0.  If this reads 13.5-14.5 the derivation
+;       held.  Anything else and the whole unit table is wrong before the game
+;       is written, so this is the first number to look at.
+;   Q4  What does the collision pair loop cost, on its own, at 7 x 11?
+;       Section 15.4 names it as the number most likely to be wrong: it is the
+;       only quadratic in the budget, priced at 4.0 ms with a cheap `abs(dy)`
+;       gate in front of the four comparisons that follow.
+;   Q5  What does `.setitem` cost on an eleven-element list?  Nothing in this
+;       tree has priced the write half of a list.  Battlezone measured `item`
+;       at ~16 us fixed plus 0.0041 us an element and concluded arrays were
+;       not worth it at four; Berzerk's lists are eleven long and it writes
+;       ~40 of them a frame, so section 16 wants the number before it repeats
+;       that verdict.
+;   Q6  Does the clock matter as much as section 15.5 says?  At 150 MHz the
+;       body doubles and the game is unplayable; the harness is run at both
+;       and the report carries the clock it ACTUALLY ran at, read back from
+;       the hardware rather than from the variable it was asked with.
+;
+; WHAT THIS DELIBERATELY DOES NOT DO, each taken from P11 M0 and P13 M0
+; because each was learned the hard way there:
+;
+;   * It presents with `refresh`, not `sync`.  The number wanted is the work,
+;     not the cadence; `sync` would wait out the rest of the frame and report
+;     the wait.
+;   * It clears with `clean`, not `cs`.  `cs` restores automatic refresh and
+;     would silently end the measurement.
+;   * It runs in `splitscreen` ON PURPOSE and says so in the report.  In text
+;     mode `screen_gfx_blit_dirty` returns immediately, so the present column
+;     reads zero and the frame figure is a Logo body with no present in it.
+;     Q3 measures `fullscreen` as its control and puts them side by side.
+;   * It holds the scene still.  Robots do not walk, bolts do not travel and
+;     Otto does not bounce between frames, so the dirty region is the same one
+;     every time and the present figure is not quietly averaging two different
+;     scenes.  Erase-in-place is what forces this: a figure that moved between
+;     the erase pass and the draw pass leaves residue the erase cannot take
+;     back, the residue widens the row spans, and the strategy section 3
+;     already predicts will lose would be measured with a thumb on the scale.
+;
+;     The LOGIC still runs in full -- seek, IQ, the move arithmetic, the wall
+;     lookup, the fire test, the bolt advance -- and `p15.moved`, `p15.probed`
+;     and `p15.hits` count it, so the report can say the logic was not
+;     skipped.  What is dropped is the STORE-BACK: five `.setitem` calls a
+;     frame at eleven robots and fourteen at seven bolts.  Q5 prices
+;     `.setitem` on its own precisely so those nineteen can be added back to
+;     the body figure by hand.
+;
+; ONE THING IT OVER-MEASURES, and it is worth knowing which way: every robot
+; in the series is drawn whole, in the middle of the playfield, with none of
+; them off screen.  A real room has robots against the walls, where `window`
+; skips out-of-bounds pixels per pixel.  So the drawing column is an upper
+; bound and the pessimism is deliberate.
+;
+; ONE THING THE DESIGN WILL PROBABLY FIND IT UNDER-COUNTED.  Section 15.2
+; budgets a robot at "place + 9 seg + 2 dots + dispatch", about 15 statements.
+; `rob.still` below draws those nine segments in about thirty, because three
+; pen-ups and eleven turns are statements too.  That gap is the single most
+; likely correction to come out of this run, and it is why the per-robot
+; figure is measured on its own (Q3's `one robot` line) as well as inside the
+; series.
+;
+; `erall` is not optional.  MAX_PROCEDURES is a hard 128 and a workspace still
+; holding another program can run out of procedure slots, at which point
+; `load` stops with `out of space` -- the procedure table talking, not memory.
+;
+; The report goes to `p15m0.txt` as well as the screen, because numbers on the
+; PicoCalc's display cannot be copied anywhere.  Runs append, so a session
+; accumulates in one file; note beside each which board it was.
+
+;==========================================================================
+; The playfield, at 1:1 with the cabinet (design section 5)
+;
+;   turtle x = arcade x - 126        x in [-122, +122]
+;   turtle y = 142 - arcade y        y in [ -62, +142]
+;
+; Two hundred and forty-four steps of 320 and two hundred and four rows of the
+; 240 `splitscreen` presents, centred at (0, +40).  Every constant taken from
+; the disassembly below therefore transfers verbatim in x and NEGATED in y,
+; and that sign is the one thing in this file worth checking twice.
+;
+; The 5 x 3 cell grid: column boundaries at turtle x = -70, -22, 26, 74 and
+; row boundaries at turtle y = 74, 6.
+
+make "p15.fg 254         ; white, as the cabinet's walls are at difficulty 0
+make "p15.bg 255         ; the background slot -- this is the eraser
+
+; WINDOW, not the default `wrap`.  A robot at the right-hand wall with its
+; probe box hanging 12 steps past it would otherwise have its segments folded
+; onto the far side of the screen, which reads as a rendering fault and which
+; no timing would show.  P13 M0 was caught by exactly this.
+window
+
+;==========================================================================
+; The room (design section 6)
+;
+; The best thing in the Berzerk ROM and it ports for nothing: the room is a
+; pure function of where you are.  RNG_SEED := ROOM_X + 256.ROOM_Y at every
+; room build ($2540), so the maze AND the robot placement that follows it
+; reproduce when you walk back in, and an infinite maze costs two globals.
+
+make "room.x 0
+make "room.y 0
+make "seed   0
+
+; MAZE_ZONES, 15 bytes, one per cell, 5 wide and row-major:
+;   bit 0 (1) = wall on this cell's LEFT     bit 2 (4) = wall on its TOP
+;   bit 1 (2) = wall on its RIGHT            bit 3 (8) = wall on its BOTTOM
+;
+; Built with `list` and never as a literal: a literal belongs to the stored
+; body of whatever procedure holds it and `.setitem` would scribble on it for
+; good.  Rebuilt from the $268C template at every room build, which happens
+; once a room and not once a frame.
+make "cell (list 5 4 4 4 6 1 0 0 0 2 9 8 8 8 10)
+
+; The eight interior segments, one per interior grid intersection: start point
+; in turtle steps, heading, length.  Four lists of eight rather than 32 names.
+make "seg.x (list 0 0 0 0 0 0 0 0)
+make "seg.y (list 0 0 0 0 0 0 0 0)
+make "seg.h (list 0 0 0 0 0 0 0 0)
+make "seg.l (list 0 0 0 0 0 0 0 0)
+
+; The generator at $2678: a 16-bit LCG whose output is the high byte.  It has
+; to be THIS one and not `random`, because the whole point is reproducing the
+; room, and `rerandom` reseeds a different stream that is not indexable by
+; room coordinate.
+;
+; 7 * 65535 + 12627 is 471 372, well inside the 2^24 a single-precision float
+; holds exactly, so the modulo is not rounding anything away.
+to rnd
+  make "seed modulo ((7 * :seed) + 12627) 65536
+  output int (:seed / 256)
+end
+
+to wall.set :idx :bit
+  .setitem :idx :cell bitor (item :idx :cell) :bit
+end
+
+; One intersection.  `c` is the column boundary 1-4 (between cells c-1 and c)
+; and `r` the row boundary 1-2 (between rows r-1 and r); `k` is which of the
+; eight slots this segment goes in.
+;
+; The four choices are $2617-$264B's `set` instructions against ix+0, ix+1,
+; ix+5 and ix+6 -- an index into the 5-wide array where +1 is the next column
+; and +5 the next row, which is what makes the mapping legible at all:
+;
+;   rand & 3 = 2   horizontal, one cell RIGHT: bottom of above-right, top of below-right
+;   rand & 3 = 3   horizontal, one cell LEFT:  bottom of above-left,  top of below-left
+;   rand & 3 = 0   vertical,   one cell ABOVE: right of above-left,   left of above-right
+;   rand & 3 = 1   vertical,   one cell BELOW: right of below-left,   left of below-right
+;
+; Nothing checks connectivity and nothing prevents a sealed pocket.  That is
+; the generator, and the rooms it makes are the rooms everybody remembers.
+to room.seg :k :c :r
+  local "w local "ix local "iy local "a local "b
+  make "w bitand rnd 3
+  make "ix (48 * :c) - 118          ; turtle x of the intersection
+  make "iy 142 - (68 * :r)          ; turtle y of the intersection
+  make "a (5 * (:r - 1)) + :c       ; cell above-left, 1-based
+  make "b (5 * :r) + :c             ; cell below-left, 1-based
+  .setitem :k :seg.x :ix
+  .setitem :k :seg.y :iy
+  if 2 = :w [
+    .setitem :k :seg.h 90  .setitem :k :seg.l 48
+    wall.set (:a + 1) 8  wall.set (:b + 1) 4  stop]
+  if 3 = :w [
+    .setitem :k :seg.h 270  .setitem :k :seg.l 48
+    wall.set :a 8  wall.set :b 4  stop]
+  if 0 = :w [
+    .setitem :k :seg.h 0  .setitem :k :seg.l 68
+    wall.set :a 2  wall.set (:a + 1) 1  stop]
+  .setitem :k :seg.h 180  .setitem :k :seg.l 68
+  wall.set :b 2  wall.set (:b + 1) 1
+end
+
+; CREATE_ROOM ($25EB) is called twice, once per interior row boundary, and
+; each call steps x by 48 while x < 220 -- so x = 56, 104, 152, 200.  Eight
+; intersections in all, and the ORDER matters, because it is the order the
+; generator is drawn from and the room only reproduces if it is kept.
+to setup.room
+  make "seed :room.x + (256 * :room.y)
+  make "cell (list 5 4 4 4 6 1 0 0 0 2 9 8 8 8 10)
+  room.seg 1 1 1  room.seg 2 2 1  room.seg 3 3 1  room.seg 4 4 1
+  room.seg 5 1 2  room.seg 6 2 2  room.seg 7 3 2  room.seg 8 4 2
+end
+
+; WALLINDEX ($1CE7): a point to a cell index, 1-based.  Four statements and no
+; pixels, which is section 6.3's whole point -- the cabinet did this with a
+; hardware pixel-intercept bit and we must not fake one with `colourunder`.
+;
+; The clamps are not defensive padding: `iq` probes points 4 steps outside the
+; robot, which at the wall are outside the playfield, and the arcade clamps
+; there too.
+to cell.at :x :y
+  local "c local "r
+  make "c int ((:x + 118) / 48)
+  make "r int ((142 - :y) / 68)
+  if 0 > :c [make "c 0]
+  if :c > 4 [make "c 4]
+  if 0 > :r [make "r 0]
+  if :r > 2 [make "r 2]
+  output (5 * :r) + :c + 1
+end
+
+;==========================================================================
+; The walls (design section 7.1)
+;
+; Sixteen segments at most: eight border runs and up to eight interior ones.
+; The border is one closed circuit with the pen toggling -- twelve statements
+; and no `setpos` after the first, against sixteen `setpos`-and-`fd` pairs if
+; each run were placed on its own.
+;
+; The doorway is the middle cell of each side: 48 steps wide on the top and
+; bottom, 68 tall on the left and right.  The top run is 100 + 48 + 96 rather
+; than a symmetric 98 + 48 + 98 because the cabinet's leftmost column is 52
+; arcade pixels and the other four are 48.
+;
+; PEN SIZE STAYS 1.  A 2-pixel pen reads better and costs round caps that
+; spill outside the stroke, which is the artefact that once made a
+; present-cost harness measure every frame as a full screen
+; (docs/hardware-notes.md section 9.1).
+to draw.border
+  pu setpos [-122 142] seth 90 pd
+  fd 100  pu fd 48  pd fd 96
+  rt 90
+  fd 68  pu fd 68  pd fd 68
+  rt 90
+  fd 96  pu fd 48  pd fd 100
+  rt 90
+  fd 68  pu fd 68  pd fd 68
+  pu
+end
+
+to draw.walls
+  local "i
+  draw.border
+  repeat 8 [
+    make "i repcount
+    pu setx item :i :seg.x  sety item :i :seg.y  seth item :i :seg.h
+    pd fd item :i :seg.l
+  ]
+  pu
+end
+
+;==========================================================================
+; The direction tables
+;
+; The arcade's four DURL bits -- LEFT 1, RIGHT 2, UP 4, DOWN 8 -- are a mask,
+; so there are sixteen of them and eight mean anything.  Every use is a table
+; lookup indexed by `mask + 1` rather than four `if`s: an `item` on a short
+; list is ~8 us at 300 MHz and an arithmetic statement is ~24, so a sixteen
+; entry table is cheaper than the two tests it replaces even before the third.
+;
+; TURTLE Y RUNS THE OTHER WAY from the cabinet's, so UP is +1 here.
+make "d.dx  (list 0 -1 1 0 0 -1 1 0 0 -1 1 0 0 -1 1 0)
+make "d.dy  (list 0 0 0 0 1 1 1 1 -1 -1 -1 -1 0 0 0 0)
+make "d.h   (list 0 270 90 0 0 315 45 0 180 225 135 180 0 270 90 0)
+
+; The five facing groups the ROM's sprite table has ($252D), as the index into
+; `r.models`.  Section 15.4: Asteroids measured its nine-way shape dispatch at
+; 360-398 us a rock a pass -- two calls and up to four `if`s each evaluating
+; an `item` -- which at eleven robots would be 2 ms and is not in the budget.
+; One `item` and one `run` replaces it.
+make "d.grp (list 1 4 5 1 2 4 5 2 3 4 5 3 1 4 5 1)
+
+; A list of LISTS, not of words.  `run item :g :r.models` then hands `run` the
+; stored sublist directly; `run (list item :g :r.models)` would allocate one
+; cell per robot per frame for nothing.
+make "r.models [[rob.still] [rob.up] [rob.down] [rob.left] [rob.right]]
+
+;==========================================================================
+; The robots (design sections 7.3 and 9)
+;
+; Eleven slots as parallel flat lists, the way Asteroids holds its rocks: seven
+; lists of eleven is seven globals where 88 named cells would be 88, and
+; section 18's ceiling is 254 with a 220 budget.
+;
+; A robot's stored position is the SPRITE'S TOP-LEFT CORNER, in turtle steps,
+; because that is what the arcade's probe offsets are cut against.
+
+make "r.x    (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.y    (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.dir  (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.state(list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.time (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.eye  (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.shot (list 0 0 0 0 0 0 0 0 0 0 0)
+
+; RobotStartingPositionTable, transcribed from the Vectrex port (its copy is
+; legible where the arcade's $23A0 is not).  Read as (y, x) pairs it is the
+; eleven cell centres that are NOT the four doorway cells -- 15 cells less the
+; middle of each side -- which is why there are exactly eleven robots.
+;
+; Cell centres in turtle steps: x = -96, -46, 2, 50, 98 and y = 108, 40, -28.
+make "rob.sx (list -96 -96 -46 -46 -46 2 50 50 50 98 98)
+make "rob.sy (list 108 -28 108 40 -28 40 108 40 -28 108 -28)
+
+; The eye row is the only one of the sprite's eleven bytes that animates:
+; 66 4E 1E 7E 78 71 across the eight standing frames ($1000) is two eyes
+; tracking left to right and back.  Six offsets, one `item` a frame, against
+; eight sprite frames in the cabinet.
+;
+; The table holds the WALK to the first eye rather than the eye's position,
+; so a model reaches it with `fd :eye.g` and no arithmetic at all.
+make "eye.c (list -1 0 1 1 0 -1)
+make "eye.i 1
+make "eye.g 0              ; hoisted once a frame, not once a robot
+
+;==========================================================================
+; The figures are the cabinet's own sprites (design section 7, rewritten
+; 2026-08-29 after M0)
+;
+; THIS FILE USED TO DRAW THE ROBOT AS ELEVEN PEN STROKES, and section 1's
+; thesis was that Berzerk's figures are line drawings pretending to be bitmaps
+; and that turning them back into lines is a restoration.  M0 priced that at
+; **2.00 ms a robot** against **0.26 ms** for the same figure stamped, and the
+; call was taken: the game is built to the arcade's bitmaps.
+;
+; The bytes below are the disassembly's, verbatim, with their addresses.  Each
+; sprite is `01` byte wide (8 pixels) and `0B` or `0C` rows tall, and the five
+; pattern tables at $1000-$1030 are exactly the five facing groups `d.grp`
+; already dispatched on -- standing, moving right, moving down, moving left,
+; moving up -- so nothing about the direction handling changes.
+;
+; `snapsh` AND NOT `putsh`, and the reason is size rather than taste.  `putsh`
+; takes a 16-byte spec and **doubles every pixel horizontally** on the way in
+; (`turtle_put_shape_data`, picocalc_console.c), so the cabinet's 8-wide robot
+; would render 16 wide -- twice the width in a 48-wide cell, which changes
+; dodging and robot-versus-wall collisions.  `snapsh` captures at the size it
+; is given.  So the bitmap is rendered once at startup with the pen and picked
+; up at 8 x 12, which is the cabinet's own sprite at the cabinet's own scale.
+;
+; The eye row is the second byte and it is what carries the facing: 66 centre,
+; 78 right, 1E left, 7E up.  The eight standing frames at $1000 differ in that
+; byte alone -- 66 4E 1E 7E 78 71 -- which is the animation, and M3's.
+
+; $10D1, the first standing frame.  Twelve rows so every robot costume is one
+; size; the eleven-row sprites carry a blank twelfth.
+make "rob.b.1 (list 60 102 255 189 189 189 60 36 36 36 102 0)     ; $10D1 still
+make "rob.b.2 (list 60 126 255 189 189 189 60 36 36 36 102 0)     ; $116F up
+make "rob.b.3 (list 60 102 255 189 189 189 60 36 36 38 32 96)     ; $1139 down
+make "rob.b.4 (list 60 30 255 189 189 189 60 36 36 36 108 0)      ; $1155 left
+make "rob.b.5 (list 60 120 255 189 189 189 60 36 36 36 54 0)      ; $112C right
+make "rob.bits (list :rob.b.1 :rob.b.2 :rob.b.3 :rob.b.4 :rob.b.5)
+
+; $10BF, the player standing still ($1046's only frame).  Sixteen rows.
+make "man.bits (list 24 24 0 60 90 90 90 24 24 24 24 24 24 24 28 16)
+
+make "bit.mask (list 128 64 32 16 8 4 2 1)
+
+; Render an 8-wide bitmap with its top-left corner at (:x, :y), one row at a
+; time, the turtle walking east with the pen following the bits.  One `fd` a
+; pixel and no `dot`, because `dot` takes a list and a list is a cons (section
+; 18) -- and this runs at startup, where ~400 statements a sprite is 10 ms
+; nobody sees, not in a frame.
+to render.sprite :bits :x :y
+  local "s.r local "s.b
+  repeat count :bits [
+    make "s.r repcount
+    make "s.b item :s.r :bits
+    pu  setx :x  sety :y - :s.r + 1  seth 90
+    repeat 8 [
+      ifelse 0 = bitand :s.b item repcount :bit.mask [pu] [pd]
+      fd 1
+    ]
+  ]
+  pu
+end
+
+;==========================================================================
+; The man (design section 7.4), Otto (7.5) and the bolts (7.2)
+;
+; The arcade carries NINE separate shooting sprites ($1309-$1380, indexed
+; through SR.TAB at $2067), one per direction the arms point.  In vector form
+; the arms are one segment drawn at the firing heading, so nine sprites
+; collapse to one `seth` and one stroke.  This is the clearest illustration in
+; the game of why Berzerk wants to be a vector game.
+
+make "p.x 0
+make "p.y 40
+make "p.dir 2              ; DURL bits, as a robot's
+make "p.fire 90            ; the heading the arms point
+
+; Otto is an `arc`, and the reference's own worked example draws precisely this
+; face.  His bounce is the arcade's: a vertical offset walked from a counter,
+; so he moves in a straight line and his DRAWING hops.
+make "o.x 0
+make "o.y 40
+make "o.on 1
+make "o.b 1
+make "o.bounce (list 0 4 6 7 8 9 9 9 10 9 9 9 8 7 6 4)
+
+to draw.otto
+  local "oy
+  make "oy :o.y + item :o.b :o.bounce
+  pu  setx :o.x  sety :oy  seth 0
+  pd  arc 360 6                          ; the head
+  pu  setx :o.x - 3  sety :oy + 1  pd  fd 2      ; the left eye
+  pu  setx :o.x + 3  sety :oy + 1  pd  fd 2      ; the right eye
+  pu  setx :o.x  sety :oy - 2  seth 90
+  pd  arc 180 4                          ; the grin
+  pu
+end
+
+; "Bolts are programatically plotted pixel-by-pixel on screen, starting from
+; the head at X,Y and ending at the tail at TailX,TailY.  They do not have
+; pattern data in ROM."  A Berzerk bolt IS a line segment; there was never a
+; sprite to convert.  MaxLength is 8 for the player ($1F7C) and 5 for a robot
+; ($2921), and that is the drawn length.
+
+make "b.x    (list 0 0 0 0 0 0 0)
+make "b.y    (list 0 0 0 0 0 0 0)
+make "b.dir  (list 0 0 0 0 0 0 0)
+make "b.len  (list 0 0 0 0 0 0 0)
+make "b.live (list 0 0 0 0 0 0 0)
+
+to draw.bolt :i
+  pu  setx item :i :b.x  sety item :i :b.y
+  seth item (item :i :b.dir) + 1 :d.h
+  pd  fd item :i :b.len
+  pu
+end
+
+to draw.bolts :n
+  repeat :n [draw.bolt repcount]
+end
+
+;==========================================================================
+; The stamped alternative
+;
+; ASKED FOR AFTER THE GATE FAILED, AND IT IS A MEASUREMENT RATHER THAN A
+; DECISION.  M0 read 2.01 ms to draw one robot at 300 MHz -- ~45 interpreted
+; statements for eleven strokes -- and eleven of those is 22.11 ms of a 31.98
+; ms drawing pass.  A `stamp` is a C-side blit, so the same robot ought to cost
+; five statements and the block copy.  This section prices that, and prices
+; nothing else: whether the game SHOULD take it is section 7.6's question and
+; not this file's.
+;
+; TURTLES CANNOT DO IT AND `stamp` CAN.  MAX_TURTLES is 8 (core/limits.h) and
+; the room holds eleven robots, a man, Otto and seven bolts.  One turtle per
+; robot is not close.  `stamp` copies the SELECTED turtle's shape into the
+; picture, so one turtle stamps all eleven.
+;
+; `snapsh` AND NOT `putsh`, and the reason is size as much as principle.  A
+; mono `putsh` bitmap renders at 16 x 16 (the rows are doubled from the user's
+; eight bits, picocalc_console.c), which is twice the cabinet's 8 x 11 and
+; breaks section 5's 1:1 -- and it doubles the dirty rectangle, in a
+; measurement whose subject is dirty rectangles.  A `snapsh` costume renders at
+; its own w x h.  It also keeps the design honest: the five `rob.*` procedures
+; below are still the artwork, still the ROM restored to lines, and `snapsh`
+; captures what they draw.  This is a render cache, not a reinterpretation.
+;
+; THE COSTUME IS CENTRED ON THE TURTLE, both at capture and at stamp, while a
+; robot's stored position is the sprite's top-left corner (the arcade's, and
+; what `iq` is cut against).  So a stamp costs two adds on top of its `setsh`
+; -- which is still five statements against forty-five.
+
+make "p15.cached "false
+
+; Slots 1-5 are the five facing groups, 6 is the man.  Fifteen slots exist and
+; the cabinet has far more sprites than that -- eight standing frames a robot,
+; nine shooting frames for the man, four explosion frames, Otto's bounce -- so
+; the slot budget is section 18's third ceiling and it is the one the bitmap
+; form introduced.  A re-`snapsh` costs ~2.7 ms, which is affordable at a room
+; transition and not in a frame.
+;
+; THE CAPTURE AND THE STAMP MUST USE THE SAME OFFSET, and it is not the origin.
+; A costume is centred on the turtle at both ends, while a robot's stored
+; position is the sprite's top-left corner -- the arcade's, and what `iq` is cut
+; against.  An 8 x 12 sprite drawn from (x, y) downward has its centre at
+; (x + 3.5, y - 5.5), and the 8 x 16 man's is at (x + 3.5, y - 7.5).
+to cache.models
+  local "c.i
+  setrefresh "manual
+  repeat 5 [
+    make "c.i repcount
+    clean
+    render.sprite (item :c.i :rob.bits) 0 0
+    pu  setx 3.5  sety -5.5  seth 0
+    snapsh :c.i 8 12
+  ]
+  clean
+  render.sprite :man.bits 0 0
+  pu  setx 3.5  sety -7.5  seth 0
+  snapsh 6 8 16
+  clean
+  make "p15.cached "true
+end
+
+to draw.robot :i
+  pu
+  setsh item (item :i :r.dir) + 1 :d.grp
+  setx (item :i :r.x) + 3.5
+  sety (item :i :r.y) - 5.5
+  stamp
+end
+
+to draw.robots :n
+  repeat :n [draw.robot repcount]
+end
+
+to draw.man
+  pu  setsh 6  setx :p.x + 3.5  sety :p.y - 7.5  stamp
+end
+
+; Bolts stay lines.  Section 7.2: a bolt IS a line segment, it was never a
+; sprite, and its drawn length GROWS to MaxLength -- so a fixed costume is
+; the wrong shape for it in both senses.
+to draw.actors :n
+  draw.robots :n
+  draw.man
+  if 0 < :o.on [draw.otto]
+  draw.bolts 7
+end
+
+; ERASING A STAMP IS NOT A PEN COLOUR.  A costume carries its own pixels, so
+; there is nothing to re-stamp in the background, and `snapsh` cannot capture
+; an eraser either -- background pixels become transparent by design.  The
+; cheapest thing that works is a wide pen stroke: pen size 8 down the sprite's
+; spine covers its 8 x 11 in one `fd`.
+;
+; Section 7.1's round-cap warning applies and is harmless HERE -- the caps
+; spill a pixel or two outside the stroke, and for an eraser spilling means
+; erasing slightly more background.  It would not be harmless for ink.
+to erase.actors :n
+  local "e.i
+  setpc :p15.bg
+  setpensize 8
+  repeat :n [
+    make "e.i repcount
+    pu  setx (item :e.i :r.x) + 4  sety item :e.i :r.y
+    seth 180  pd  fd 11
+  ]
+  pu  setx :p.x  sety :p.y + 3  seth 180  pd  fd 20
+  if 0 < :o.on [pu  setx :o.x  sety :o.y + 8  seth 180  pd  fd 16]
+  pu  setpensize 1
+  setpc :p15.bg
+  draw.bolts 7
+  setpc :p15.fg
+end
+
+to frame.clear :n
+  frame.logic :n
+  clean
+  setpc :p15.fg
+  draw.walls
+  draw.actors :n
+end
+
+to frame.inplace :n
+  frame.logic :n
+  erase.actors :n
+  setpc :p15.fg
+  draw.actors :n
+end
+
+
+;==========================================================================
+; The logic (design sections 9 and 10)
+
+make "p15.hits 0           ; the pair loop's answer, so it cannot be elided
+make "p15.moved 0          ; robots whose seek+IQ actually produced a direction
+make "p15.probed 0         ; pairs that got past the cheap gate, of 77 a frame
+
+; SEEK ($23EF) is the whole AI: two subtractions and four comparisons.  The
+; arcade's `player.y + 2` compensates for the player being taller than a
+; robot; turtle y runs the other way, so it is -2 here.
+;
+; Robots walk straight at you.  Their entire tactical repertoire is walking
+; into things, and section 9.3 says do not fix it.
+to seek :rx :ry
+  local "d
+  make "d 0
+  if :p.x > :rx [make "d 2]
+  if :rx > :p.x [make "d 1]
+  if (:p.y - 2) > :ry [make "d :d + 4]
+  if :ry > (:p.y - 2) [make "d :d + 8]
+  output :d
+end
+
+; IQ ($1C6E).  Probes the cell masks at the robot's four corners -- the
+; arcade's (-4,-4), (+12,-4), (+12,+15), (-4,+15), with y negated -- ORs them
+; in pairs and clears any desired direction whose edge is walled:
+;
+;   DOWN  blocked if (top-left | top-right)     has BOTTOM
+;   UP    blocked if (bottom-left | bottom-right) has TOP
+;   RIGHT blocked if (top-left | bottom-left)   has RIGHT
+;   LEFT  blocked if (top-right | bottom-right) has LEFT
+;
+; Never diagonal, which is the original code and which is why robots slide
+; into walls on corners.  That is a scoring mechanism, not a defect.
+;
+; The shortcut at $1C92 is kept: a robot in the player's own cell is not
+; probed at all, and that is the cheap path this loop takes most often when
+; the player is being chased into a corner.
+to iq :rx :ry :want
+  local "tl local "tr local "bl local "br local "d
+  if (cell.at :rx :ry) = (cell.at :p.x :p.y) [output :want]
+  make "tl item (cell.at (:rx - 4) (:ry + 4)) :cell
+  make "tr item (cell.at (:rx + 12) (:ry + 4)) :cell
+  make "bl item (cell.at (:rx - 4) (:ry - 15)) :cell
+  make "br item (cell.at (:rx + 12) (:ry - 15)) :cell
+  make "d :want
+  if 0 < bitand 8 (bitor :tl :tr) [make "d bitand :d 7]
+  if 0 < bitand 4 (bitor :bl :br) [make "d bitand :d 11]
+  if 0 < bitand 2 (bitor :tl :bl) [make "d bitand :d 13]
+  if 0 < bitand 1 (bitor :tr :br) [make "d bitand :d 14]
+  output :d
+end
+
+; SHOOT ($287F) refuses entirely unless one of three windows matches: `dx` in
+; -2..+5 for a vertical shot, `dy` in -4..+6 for a horizontal one, and
+; abs(dy) - abs(dx) in -10..+5 for a diagonal.  So a robot must be within a
+; few pixels of your row, your column or your diagonal.
+;
+; The 2600 manual's "robots cannot shoot on the diagonal" is right about the
+; 2600 and wrong about the arcade; the third window is right there.
+to fires? :rx :ry
+  local "dx local "dy
+  make "dx :p.x - :rx
+  make "dy :ry - :p.y
+  if 5 > :dx [if :dx > -2 [output "true]]
+  if 6 > :dy [if :dy > -4 [output "true]]
+  if 5 > ((abs :dy) - (abs :dx)) [if ((abs :dy) - (abs :dx)) > -10 [output "true]]
+  output "false
+end
+
+; One robot's whole turn: seek, IQ, the move, the fire test.  The position is
+; computed and NOT stored back -- see the header: the scene is held still so
+; the present figure is not averaging two different dirty regions, and
+; `p15.moved` counts the work so the report can say the logic was not skipped.
+to step.robot :i
+  local "rx local "ry local "d local "nx local "ny
+  make "rx item :i :r.x
+  make "ry item :i :r.y
+  make "d iq :rx :ry (seek :rx :ry)
+  .setitem :i :r.dir :d
+  make "nx :rx + (2 * item :d + 1 :d.dx)
+  make "ny :ry + (2 * item :d + 1 :d.dy)
+  if not 0 = :d [make "p15.moved :p15.moved + 1]
+  ; MODULO 60, AND IT IS NOT TIDINESS.  `.setitem` of a value the list has not
+  ; held before allocates a cell; the same value written back costs nothing.
+  ; An unbounded counter therefore conses once a frame per robot for as long as
+  ; the game runs, which is the second half of what emptied the pool on the
+  ; first board run.  The arcade's own TIME counter is bounded -- it runs at
+  ; 60 Hz and reloads -- so wrapping it is the more faithful port as well as
+  ; the one that does not leak.
+  .setitem :i :r.time modulo ((item :i :r.time) + 1) 60
+  if fires? :rx :ry [.setitem :i :r.shot 1]
+  ignore :nx
+  ignore :ny
+end
+
+to logic.robots :n
+  repeat :n [step.robot repcount]
+end
+
+; The player: input, move, wall, exit.  `pollkeys` is what a real frame reads;
+; here the direction is held so the scene does not move, and the four wall
+; tests and the four exit tests run in full.
+to step.player
+  local "d local "nx local "ny
+  make "d :p.dir
+  make "nx :p.x + (2 * item :d + 1 :d.dx)
+  make "ny :p.y + (2 * item :d + 1 :d.dy)
+  if 122 < abs :nx [make "room.x :room.x + 1]
+  if :ny > 142 [make "room.y :room.y + 1]
+  if -62 > :ny [make "room.y :room.y - 1]
+  ignore cell.at :nx :ny
+end
+
+; Otto: the move and the twelve contacts.  He walks through walls, so there is
+; no IQ in him -- his whole cost is the contact tests.
+to step.otto :n
+  local "i local "b
+  make "b 1 + modulo :o.b 16
+  ignore :b
+  repeat :n [
+    make "i repcount
+    if 12 > abs ((item :i :r.y) - :o.y) [
+      if 8 > abs ((item :i :r.x) - :o.x) [make "p15.hits :p15.hits + 1]
+    ]
+  ]
+end
+
+; THE ONLY QUADRATIC IN THE BUDGET (section 15.4), and the number the design
+; says is most likely wrong.  Seven bolts against eleven robots is 77 pairs;
+; the gate is one `abs(dy)` comparison in front of the four that follow, and
+; if that is not enough the fallback is bucketing robots by cell, which costs
+; bookkeeping the arcade does not do.
+;
+; A bolt checks the player first and then every robot ($15A4, $15AB), which is
+; what makes a robot's stray shot kill another robot and pay you for it.
+to pairs :nb :nr
+  local "i local "bx local "by
+  repeat :nb [
+    make "i repcount
+    make "bx item :i :b.x
+    make "by item :i :b.y
+    if 16 > abs (:by - :p.y) [if 8 > abs (:bx - :p.x) [make "p15.hits :p15.hits + 1]]
+    repeat :nr [
+      if 12 > abs ((item repcount :r.y) - :by) [
+        make "p15.probed :p15.probed + 1
+        if 8 > abs ((item repcount :r.x) - :bx) [make "p15.hits :p15.hits + 1]
+      ]
+    ]
+  ]
+end
+
+; A bolt advances one pixel a processing pass and its drawn length grows to
+; MaxLength.  HANDLE_PLAYER_BOLTS ($14F3) processes the array twice a frame --
+; two slots the first time and (mod + 2) and 7 the second -- so player bolts
+; travel at twice a robot bolt's speed until the score is high enough.  That
+; reading is inferred from the loop structure rather than read from a comment,
+; and M4 confirms it against MAME before it becomes a number in the game.
+to step.bolts :n
+  local "i local "d local "nx local "ny
+  repeat :n [
+    make "i repcount
+    make "d item :i :b.dir
+    make "nx (item :i :b.x) + (item :d + 1 :d.dx)
+    make "ny (item :i :b.y) + (item :d + 1 :d.dy)
+    ignore cell.at :nx :ny
+    ignore :nx
+    ignore :ny
+  ]
+end
+
+; The HUD, the timers and the difficulty lookup -- the flat ~1 ms the budget
+; carries and the only part of the frame that does not scale with anything.
+to step.hud
+  make "eye.i 1 + modulo :eye.i 6
+  make "eye.g item :eye.i :eye.c
+  make "p15.hits :p15.hits + 0
+end
+
+;==========================================================================
+; The scene
+;
+; Eleven robots on the cabinet's own eleven spawn cells, jittered by `random
+; and 31` in each axis exactly as $2127-$213D does -- but from the room's LCG
+; rather than the interpreter's, so a series point is reproducible and two
+; runs of the harness are comparable.
+;
+; `place.robots` forces exactly :n robots rather than running the rejection
+; sampler at $2117, because a series point has to be an exact count.  The
+; sampler itself is `spawn.count`, which nothing in the timing path calls and
+; which tests/test_p15m0.c checks against the table in section 9.1.
+
+to place.robots :n
+  local "i
+  repeat 11 [
+    make "i repcount
+    .setitem :i :r.x (item :i :rob.sx) + (bitand rnd 31) - 16
+    .setitem :i :r.y (item :i :rob.sy) + (bitand rnd 31) - 16
+    .setitem :i :r.dir 0
+    .setitem :i :r.state 0
+    .setitem :i :r.time 0
+    .setitem :i :r.eye 1
+    .setitem :i :r.shot 0
+    ifelse :i > :n [.setitem :i :r.state 0] [.setitem :i :r.state 1]
+  ]
+end
+
+; The rejection sampler at $2117-$2145.  The threshold is $434A and each room
+; adds 0x60 to it as BCD ($20D8), so it cycles 60, 20, 80, 40, 00 with period
+; five and the robot count is a five-room cycle rather than a ramp.
+to spawn.count :threshold
+  local "c
+  make "c 0
+  repeat 11 [if not (rnd) < :threshold [make "c :c + 1]]
+  output :c
+end
+
+to place.bolts :n
+  local "i
+  repeat 7 [
+    make "i repcount
+    .setitem :i :b.x -60 + (12 * :i)
+    .setitem :i :b.y 20 + (8 * :i)
+    .setitem :i :b.dir item :i (list 2 4 8 1 6 9 10)
+    .setitem :i :b.len 8
+    ifelse :i > :n [.setitem :i :b.live 0] [.setitem :i :b.live 1]
+  ]
+end
+
+;==========================================================================
+; The frame
+;
+; THE SERIES TIMES `frame.inplace`, which is section 3's answer once the
+; figures are stamps: with pen figures clear-and-redraw won at eleven robots
+; (102.18 ms against 110.35) because in-place pays a second drawing pass, and
+; with the figures stamped that pass is nearly free and in-place wins at every
+; count measured (77.43 against 85.15).  Both are still built, because Q1 is
+; what says so and a harness that measured only the winner could not.
+;
+; The scene is held still, so "where a figure was" and "where it is" are the
+; same place and the erase pass costs exactly what the game's would.
+
+make "p15.logic 0
+make "p15.draw 0
+
+to frame.logic :n
+  step.hud
+  step.player
+  logic.robots :n
+  step.bolts 7
+  pairs 7 :n
+  step.otto :n
+end
+
+; The chosen frame with the phase timers in it, so the logic pass reads apart
+; from the drawing pass.  It mirrors `frame.inplace` and not `frame.clear`,
+; because in-place is what section 3 now answers and the series has to time the
+; frame the game will run.
+to frame.split :n
+  local "t
+  make "t ticks
+  frame.logic :n
+  make "p15.logic ticks - :t
+  make "t ticks
+  erase.actors :n
+  setpc :p15.fg
+  draw.actors :n
+  make "p15.draw ticks - :t
+end
+
+;==========================================================================
+; The clock and the sensor
+;
+; THE CLOCK.  Set this to "normal or "fast and the whole run is taken at it;
+; leave it "same and the board is left wherever it already was.  "normal is
+; the stock 150 MHz and "fast is 300, which is an overclock outside the
+; RP2350's datasheet -- see `hw.setcpu` in the reference before using it.
+;
+; Section 15.5 makes 300 MHz a PRECONDITION rather than an optimisation: at
+; 150 the body doubles to 48 ms against a 19.2 ms present, which is 67 ms and
+; 15 fps with nothing to spare.  Both clocks are run because that claim is
+; itself a prediction.
+;
+; The report carries the clock it actually ran at, read back from the hardware
+; rather than from this variable, because a board that refused the change
+; would otherwise look like an overclock that bought nothing.
+make "p15m0.cpu "same
+make "p15m0.cpu.ran "unknown
+make "p15m0.temp0 0
+make "p15m0.temp1 0
+make "p15m0.psram "false
+
+; `tls?` is a fixed hardware capability (PSRAM holds mbedTLS's handshake heap),
+; unlike `wifi?`, which reports the live connection. It is the only board
+; property the language exposes, and it separates the one board whose memory
+; picture differs. The other two have to be noted by hand, which is what P13
+; M0's filenames already do.
+to read.psram
+  local "t
+  make "t "false
+  catch "error [make "t tls?]
+  output :t
+end
+make "p15m0.frames 60
+
+; Both of these degrade rather than fail: a board with no sensor, or one that
+; cannot retune, still runs the harness and reports 0 for what it could not
+; read.  A timing script that dies on its last line has wasted the session.
+to read.temp
+  local "t
+  make "t 0
+  catch "error [make "t hw.temperature]
+  output :t
+end
+
+to read.cpu
+  local "f
+  make "f "unknown
+  catch "error [make "f hw.cpu]
+  output :f
+end
+
+to set.cpu :which
+  if "same = :which [stop]
+  catch "error [hw.setcpu :which]
+end
+
+;==========================================================================
+; The calibration loops
+;
+; P11 M0's two, unchanged, so the numbers compare directly with 42-44.5 us and
+; 4.5-7 us at 150 MHz and with section 15.1's ~24 us and ~2.4 us at 300.
+
+to time.arith
+  local "t0 local "x
+  make "x 0
+  make "t0 ticks
+  repeat 2000 [make "x :x + 1]
+  output ((ticks - :t0) * 1000) / 2000
+end
+
+to time.bare
+  local "t0
+  make "t0 ticks
+  repeat 2000 []
+  output ((ticks - :t0) * 1000) / 2000
+end
+
+; Q5.  The write half of a list, which nothing in this tree has priced, beside
+; the read half so the two are directly comparable.  Eleven elements, which is
+; the length Berzerk's robot lists actually are.
+to time.setitem
+  local "t0
+  make "t0 ticks
+  repeat 2000 [.setitem 6 :r.time 1]
+  output ((ticks - :t0) * 1000) / 2000
+end
+
+to time.item
+  local "t0 local "x
+  make "t0 ticks
+  repeat 2000 [make "x item 6 :r.time]
+  output (((ticks - :t0) * 1000) / 2000) - :arith
+end
+
+; Q4, on its own and with no drawing in it.
+to time.pairs
+  local "t0
+  make "t0 ticks
+  repeat 100 [pairs 7 11]
+  output (ticks - :t0) / 100
+end
+
+to time.walls
+  local "t0
+  make "t0 ticks
+  repeat 100 [draw.walls]
+  output (ticks - :t0) / 100
+end
+
+; The per-robot figure the header flags: place, dispatch and nine segments,
+; measured on its own so the series' slope can be checked against it.
+to time.robot
+  local "t0
+  make "t0 ticks
+  repeat 100 [draw.robot 1]
+  output (ticks - :t0) / 100
+end
+
+; THE NUMBER THE FIRST BOARD RUN NEEDED AND DID NOT HAVE.  `p15m0` died with
+; `out of space` inside `rob.left` rather than reporting a figure, which costs
+; a hardware session.
+;
+; TWO RESOURCES, AND THE ONE THAT RUNS OUT IS THE WORD TABLE.  B25 (2026-08-13)
+; is the same failure in Asteroids and its finding is the important half: at
+; the moment that frame loop died there were **21,000 free nodes and 20 free
+; bytes of word table**, because `.setitem` of a *number* interns it
+; (`member_value_to_node`, `core/primitives_words_lists.c`).  So a harness that
+; watched `nodes` alone would have watched the resource that was fine.  Both
+; are read here, and `atoms` is the one to believe.
+;
+; It warms up before it counts.  The robot timers cycle through 60 values and
+; each is interned once, so a cold measurement charges the frame ~300 bytes
+; that a warm one does not spend at all -- measured over 400 frames, the first
+; run costs 312 bytes and every run after it costs zero, indefinitely.  A
+; harness that reported the cold figure would have said the frame leaks when
+; what it does is settle.
+make "p15.alloc.n 0        ; cells per 100 frames, warm
+make "p15.alloc.a 0        ; word-table bytes per 100 frames, warm
+
+to alloc.per.frame
+  local "a.n0 local "a.a0
+  recycle
+  repeat 100 [frame.inplace 11]    ; warm: intern the timer cycle
+  make "a.n0 nodes
+  make "a.a0 atoms
+  repeat 100 [frame.inplace 11]
+  make "p15.alloc.n :a.n0 - nodes
+  make "p15.alloc.a :a.a0 - atoms
+end
+
+; The stamped robot beside the drawn one, measured the same way so the two
+; numbers are directly comparable.
+to time.cache
+  local "t0
+  make "t0 ticks
+  cache.models
+  output ticks - :t0
+end
+
+to time.roomgen
+  local "t0
+  make "t0 ticks
+  repeat 100 [setup.room]
+  output (ticks - :t0) / 100
+end
+
+; Q3.  The present, in both screen modes over the same scene, because the
+; saving section 4 predicts is the DIFFERENCE and a single figure cannot show
+; it.  `clean` marks the whole canvas in manual mode either way; what changes
+; is how many rows the present is willing to send.
+to time.present
+  local "t0 local "total
+  make "total 0
+  repeat 20 [
+    frame.clear 11
+    make "t0 ticks
+    refresh
+    make "total :total + (ticks - :t0)
+  ]
+  output :total / 20
+end
+
+;==========================================================================
+; The series
+;
+; ACCUMULATOR NAMES ARE PREFIXED, and the prefix is load-bearing.  Logo is
+; dynamically scoped, so a `make` inside a procedure the frame calls finds the
+; CALLER's local and writes the accumulator instead of the global.  P13 M0 lost
+; its most important column to exactly that -- its body accumulator was called
+; `b` and `cam.setup` did `make "b ...` once a frame.  `local` protects a name
+; from the world; it does not protect the world from a name.
+;
+; So every accumulator here is `m.something`, and
+; test_the_frame_does_not_write_the_measure_accumulators walks the list.
+
+make "p15.n     (list 1 4 8 11)
+make "p15.body  (list 0 0 0 0)   ; frame.clear, untimed -- what the frame costs
+make "p15.inst  (list 0 0 0 0)   ; frame.split -- the same frame with the timers in
+make "p15.lgc   (list 0 0 0 0)
+make "p15.drw   (list 0 0 0 0)
+make "p15.pres  (list 0 0 0 0)
+make "p15.lo    (list 0 0 0 0)
+make "p15.hi    (list 0 0 0 0)
+
+; Q1's four columns, at the two counts section 3 asks for.
+make "p15.e.n   (list 4 11)
+make "p15.e.ib  (list 0 0)       ; erase in place -- body
+make "p15.e.ip  (list 0 0)       ; erase in place -- present
+make "p15.e.cb  (list 0 0)       ; clear + redraw -- body
+make "p15.e.cp  (list 0 0)       ; clear + redraw -- present
+
+; The same two counts again, with the figures stamped instead of drawn.
+       ; stamped, erase in place -- body
+       ; stamped, erase in place -- present
+       ; stamped, clear + redraw -- body
+       ; stamped, clear + redraw -- present
+
+to measure :slot
+  local "m.b local "m.l local "m.d local "m.r local "m.one local "m.t0
+  local "m.lo local "m.hi local "m.ins local "m.n
+  make "m.n item :slot :p15.n
+  ; Between points, never inside one. A frame that conses is a defect
+  ; `alloc.per.frame` reports, but a board session is too expensive to lose to
+  ; one, so the pool is handed back before each point rather than only at the
+  ; ends the way P13 M0 could afford to.
+  recycle
+  setrefresh "manual
+  make "m.b 0  make "m.l 0  make "m.d 0  make "m.r 0  make "m.ins 0
+  make "m.lo 99999  make "m.hi 0
+  repeat :p15m0.frames [
+    ; The untimed frame is the one the body, min and max columns report.
+    make "m.t0 ticks
+    frame.inplace :m.n
+    make "m.one ticks - :m.t0
+    make "m.b :m.b + :m.one
+    make "m.t0 ticks
+    refresh
+    make "m.r :m.r + (ticks - :m.t0)
+    make "m.one :m.one + (ticks - :m.t0)
+    if :m.one < :m.lo [make "m.lo :m.one]
+    if :m.one > :m.hi [make "m.hi :m.one]
+    ; The instrumented frame runs beside it, outside the figures above, purely
+    ; to split the logic pass from the drawing pass.
+    make "m.t0 ticks
+    frame.split :m.n
+    make "m.ins :m.ins + (ticks - :m.t0)
+    make "m.l :m.l + :p15.logic
+    make "m.d :m.d + :p15.draw
+    refresh
+  ]
+  .setitem :slot :p15.body :m.b / :p15m0.frames
+  .setitem :slot :p15.inst :m.ins / :p15m0.frames
+  .setitem :slot :p15.lgc :m.l / :p15m0.frames
+  .setitem :slot :p15.drw :m.d / :p15m0.frames
+  .setitem :slot :p15.pres :m.r / :p15m0.frames
+  .setitem :slot :p15.lo :m.lo
+  .setitem :slot :p15.hi :m.hi
+end
+
+; Q1.  The scene has to be on the canvas before an erase can take it away, or
+; the first frame erases nothing and the reading is one frame short.
+to measure.erase :slot
+  local "m.b local "m.r local "m.t0 local "m.n
+  make "m.n item :slot :p15.e.n
+  recycle
+  setrefresh "manual
+  frame.logic :m.n          ; settle `r.dir`, so the priming draw is the one
+  clean                     ; the first erase pass will be taking away
+  setpc :p15.fg
+  draw.walls
+  draw.actors :m.n
+  refresh
+
+  make "m.b 0  make "m.r 0
+  repeat :p15m0.frames [
+    make "m.t0 ticks
+    frame.inplace :m.n
+    make "m.b :m.b + (ticks - :m.t0)
+    make "m.t0 ticks
+    refresh
+    make "m.r :m.r + (ticks - :m.t0)
+  ]
+  .setitem :slot :p15.e.ib :m.b / :p15m0.frames
+  .setitem :slot :p15.e.ip :m.r / :p15m0.frames
+
+  make "m.b 0  make "m.r 0
+  repeat :p15m0.frames [
+    make "m.t0 ticks
+    frame.clear :m.n
+    make "m.b :m.b + (ticks - :m.t0)
+    make "m.t0 ticks
+    refresh
+    make "m.r :m.r + (ticks - :m.t0)
+  ]
+  .setitem :slot :p15.e.cb :m.b / :p15m0.frames
+  .setitem :slot :p15.e.cp :m.r / :p15m0.frames
+end
+
+;==========================================================================
+; The report
+;
+; Printed twice -- once to the file, once to the screen -- so it is one list of
+; lines rather than two that can drift apart.  Punctuation is spelled out in
+; words: every mark in a printed list is tokenised as a word of its own, so
+; `c+m.n` comes out as `c + m . n` and `--` as `- -`.
+;
+; AND NO SEMICOLONS, not even inside a list literal.  `;` starts a comment
+; wherever it appears, brackets included, so one of them in a `pr` line
+; swallows the whole rest of the procedure body into that line's list -- which
+; prints as a single enormous line of source and loses every report line after
+; it.  test_the_report_is_lines_and_not_one_swallowed_body is the guard.
+
+to line.for :slot
+  pr (se item :slot :p15.n [robots, seven bolts, Otto live])
+  pr (se [  body] item :slot :p15.body [ms   present] item :slot :p15.pres [ms])
+  pr (se [  of the body, logic] item :slot :p15.lgc
+      [ms and drawing] item :slot :p15.drw [ms])
+  pr (se [  the phase timers cost] (item :slot :p15.inst) - (item :slot :p15.body)
+      [ms and are not in the body figure])
+  pr (se [  frame] (item :slot :p15.body) + (item :slot :p15.pres)
+      [ms   min] item :slot :p15.lo [ms   max] item :slot :p15.hi [ms])
+end
+
+to erase.line.for :slot
+  pr (se item :slot :p15.e.n [robots])
+  pr (se [  erase in place  body] item :slot :p15.e.ib
+      [ms   present] item :slot :p15.e.ip [ms])
+  pr (se [  clear + redraw  body] item :slot :p15.e.cb
+      [ms   present] item :slot :p15.e.cp [ms])
+  pr (se [  frame  in place] (item :slot :p15.e.ib) + (item :slot :p15.e.ip)
+      [ms   clear redraw] (item :slot :p15.e.cb) + (item :slot :p15.e.cp) [ms])
+end
+
+; THE GATE IS A 300 MHz NUMBER, and the first board run was taken at `normal`
+; because `p15m0.cpu` defaults to `"same`.  A report that prints "processor
+; normal" in line three and then compares every figure against a `fast`
+; prediction invites exactly that reading, so the verdict is spelled out and a
+; run at the wrong clock says so rather than being quietly compared.
+;
+; The projection scales the BODY by P13 M0's measured 2.059 and leaves the
+; PRESENT alone, because the present is the SPI wire: P13 measured it moving
+; 19.62 -> 18.70 across the same doubling, which is the CPU share of it and
+; nothing else.
+; Q1 again, with the figures stamped.  Same shape as `measure.erase` so the
+; two tables can be read against each other line for line.
+to p15m0.verdict
+  local "v.f local "v.b
+  make "v.f (item 4 :p15.body) + (item 4 :p15.pres)
+  pr (se [the frame at eleven robots, seven bolts and Otto is] :v.f [ms])
+  ifelse "fast = :p15m0.cpu.ran [
+    ifelse 50 > :v.f [
+      pr [  inside the 50 ms gate. build the game, M1 next]
+    ] [
+      pr [  OVER the 50 ms gate. section 15.4's two numbers first,]
+      pr [  then section 17. this is the reading the gate turns on]
+    ]
+  ] [
+    make "v.b (item 4 :p15.body) / 2.06
+    pr [  THIS RUN WAS NOT AT 300 MHz, SO IT IS NOT THE GATE]
+    pr (se [  scaled by P13 M0's measured 2.06 the body would be] :v.b [ms])
+    pr (se [  and the frame about] :v.b + (item 4 :p15.pres)
+        [ms, against a 50 ms gate])
+    pr [  the present is the SPI wire and barely moves, so it is not scaled]
+    pr [  set p15m0.cpu to fast and run again for the number that counts]
+  ]
+end
+
+to p15m0.report
+  pr [P15 M0 what a Berzerk frame costs, before any game code exists]
+  pr (se [frames per point] :p15m0.frames [in splitscreen, present with refresh])
+  ifelse "unknown = :p15m0.cpu.ran [
+    pr [the clock could not be read, so these are at whatever it was]
+  ] [
+    pr (se [processor] :p15m0.cpu.ran [-- normal is 150 MHz, fast is 300])
+    if "fast = :p15m0.cpu.ran [pr [that is an overclock, outside the datasheet]]
+  ]
+  pr (se [die temperature] :p15m0.temp0 [C before,] :p15m0.temp1 [C after])
+  ifelse :p15m0.psram [
+    pr [PSRAM present, so this is a Pimoroni Pico Plus 2 W]
+  ] [
+    pr [no PSRAM, so this is a Pico 2 or a Pico 2 W -- note which]
+  ]
+  pr (se [the logic ran:] :p15.moved [robot moves,] :p15.probed
+      [pairs past the gate,] :p15.hits [contacts])
+  pr (se [100 warm frames spend] :p15.alloc.n [cells and] :p15.alloc.a
+      [word bytes, and both must be 0])
+  pr [  the word table is the one that runs out, not the node pool -- B25]
+  pr [  died with 21000 free nodes and 20 free bytes of word table]
+  pr [  the first board run of this harness died with out of space inside]
+  pr [  rob.left rather than reporting any of the numbers below]
+  pr []
+  pr [Q6 the calibration loops]
+  pr (se [  arithmetic statement] :arith [us, section 15.1 says 24 at fast])
+  pr (se [  bare repeat iteration] :bare [us, section 15.1 says 2.4 at fast])
+  pr []
+  pr [Q3 what the present costs, the control on section 15.1]
+  pr (se [  splitscreen] :pres.split [ms, P13 M0 measured 18.70 at fast])
+  pr (se [  fullscreen ] :pres.full [ms])
+  pr (se [  the split saving is] :pres.full - :pres.split [ms, section 4 says 4.7])
+  pr (se [  those are FULL canvas presents. the game's own, in place, is]
+      item 4 :p15.pres [ms in the series below])
+  pr [  section 15.1 used to predict 14.0 here and that was a mislabelled]
+  pr [  column, not a derivation: 18.70 is P13's splitscreen at fast, which]
+  pr [  this harness read back at 18.85. corrected in the design 2026-08-29]
+  pr []
+  pr [Q1 the two erase strategies, section 3]
+  erase.line.for 1
+  erase.line.for 2
+  pr [  section 3 predicts clear and redraw, 6.8 ms against 0.8]
+  pr [  P11 M0 predicted the opposite of what it read, which is why both ran]
+  pr []
+  pr [Q4 and Q5 the pieces]
+  pr (se [  the collision pair loop at 7 x 11] :prs [ms, section 15.2 says 4.0])
+  pr (se [  the border and eight interior walls] :wls [ms, section 15.2 says 0.8])
+  pr (se [  one room generated] :rmg [ms, and it happens once a room])
+  pr (se [  .setitem on an eleven element list] :sti [us])
+  pr (se [  item on an eleven element list] :itm [us, Battlezone measured 16 at 150])
+  pr []
+  pr [Q7 what the figures cost, and what they used to]
+  pr (se [  building the six costumes, once at startup] :cch [ms])
+  pr (se [  one robot stamped] :rbt [ms])
+  pr (se [  eleven of them] 11 * :rbt [ms, section 15.2 predicted 4.6])
+  pr [  the pen figures this file used to draw measured 2.00 ms a robot on]
+  pr [  a Pico 2 W at fast, and 22.0 for eleven, which is why the game is]
+  pr [  built to the cabinet's bitmaps -- see berzerk-design section 7]
+  pr []
+  pr [Q2 the series]
+  line.for 1
+  line.for 2
+  line.for 3
+  line.for 4
+  pr (se [  the slope is] ((item 4 :p15.body) - (item 1 :p15.body)) / 10
+      [ms a robot, over the ten between the ends])
+  pr (se [  the floor is] (item 1 :p15.body) + (item 1 :p15.pres)
+      [ms, which is the present, the walls and one robot])
+  pr []
+  pr [what the design predicts, berzerk-design section 15.2]
+  pr [  body 24 ms, present 14 ms, frame 38 ms at eleven robots]
+  pr [  of the body: logic 17.1 and drawing 6.8]
+  pr []
+  pr [the gate, section 15.3]
+  p15m0.verdict
+  pr []
+  pr (se [nodes at start] :n0 [at end] :n1 [after recycle] :n2)
+  pr (se [word bytes free] :w0 [at start,] :w1 [at end,] :w2 [after recycle])
+  pr [  the whole run, against the per-frame figures at the top: these two]
+  pr [  lines are what the harness itself spent, the report included]
+  pr []
+end
+
+to p15m0
+  local "n0 local "n1 local "n2 local "w0 local "w1 local "w2
+  local "arith local "bare local "prs local "rbt local "wls local "rmg
+  local "sti local "itm local "pres.split local "pres.full
+  local "cch
+  recycle
+  make "n0 nodes  make "w0 atoms
+
+  set.cpu :p15m0.cpu
+  make "p15m0.cpu.ran read.cpu
+  make "p15m0.temp0 read.temp
+  make "p15m0.psram read.psram
+
+  splitscreen
+  window
+  setrefresh "manual
+  clean
+
+  make "room.x 0  make "room.y 0
+  setup.room
+  place.robots 11
+  place.bolts 7
+  make "p15.hits 0
+  make "p15.moved 0
+  make "p15.probed 0
+
+  ; Before anything draws: every figure is a costume now, and `setsh` on an
+  ; empty slot has nothing to stamp.
+  make "cch time.cache
+
+  alloc.per.frame
+  make "arith time.arith
+  make "bare time.bare
+  make "sti time.setitem
+  make "itm time.item
+  make "prs time.pairs
+  make "rbt time.robot
+  make "wls time.walls
+  make "rmg time.roomgen
+
+  make "pres.split time.present
+  fullscreen
+  clean
+  make "pres.full time.present
+  splitscreen
+  clean
+
+  measure.erase 1
+  measure.erase 2
+
+  setsh 0
+
+  measure 1
+  measure 2
+  measure 3
+  measure 4
+
+  make "p15m0.temp1 read.temp
+  make "n1 nodes  make "w1 atoms
+  recycle
+  ; Read the recovered figure HERE, not inside the report: printing builds a
+  ; `sentence` per line, so a `nodes` evaluated down there reads the report's
+  ; own garbage back as if the recycle had under-recovered.  P10's script lost
+  ; its first hardware run to exactly that.
+  make "n2 nodes  make "w2 atoms
+
+  setrefresh "auto
+  textscreen
+  open "p15m0.txt
+  setwrite "p15m0.txt
+  p15m0.report
+  setwrite []
+  close "p15m0.txt
+  p15m0.report
+  pr [Also written to p15m0.txt]
+end

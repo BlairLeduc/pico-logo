@@ -120,6 +120,15 @@ add_logo_test(test_p13m0)
 target_compile_definitions(test_p13m0 PRIVATE
     P13M0_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p13m0")
 
+# Berzerk (P15), M0: the measurement harness that decides section 3's erase
+# strategy and reads section 15's frame budget off a board. What the host can
+# check is that the room generator reproduces, that `IQ` clears the right bits
+# and that the scene holds still -- the last of which the erase comparison
+# rests on and no board can see.
+add_logo_test(test_p15m0)
+target_compile_definitions(test_p15m0 PRIVATE
+    P15M0_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p15m0")
+
 # Battlezone (P13), M1: the world, the camera, the treads, the horizon and the
 # gunsight. The game is pure Logo -- what the host can check is that the
 # projection is RIGHT, which is the half of this milestone a board cannot see.

@@ -2594,7 +2594,7 @@ The leading dot marks `.setbf` as dangerous: pointing the tail back into the sam
 
 `command`
 
-`.setitem` destructively replaces the member of _list_ at position _integer_ (counting from 1) with _value_, in place - the same result as walking to that member with [`butfirst`](#butfirst-bf) and applying [`.setfirst`](#setfirst), but the walk is done for you. An error occurs if _integer_ is less than 1 or greater than the length of _list_. Unlike [`replace`](#replace), which returns a fresh list, `.setitem` outputs nothing and allocates nothing, so it can update one member of a long list cheaply.
+`.setitem` destructively replaces the member of _list_ at position _integer_ (counting from 1) with _value_, in place - the same result as walking to that member with [`butfirst`](#butfirst-bf) and applying [`.setfirst`](#setfirst), but the walk is done for you. An error occurs if _integer_ is less than 1 or greater than the length of _list_. Unlike [`replace`](#replace), which returns a fresh list, `.setitem` outputs nothing and allocates no list cells, so it can update one member of a long list cheaply. It is not free of *word* storage, though: storing a number the workspace has not held before interns it, which costs word-table bytes that only [`recycle`](#recycle) returns. Writing the same value back costs nothing, so a slot holding a bounded counter settles and a slot holding an ever-growing one does not — check [`atoms`](#atoms), not [`nodes`](#nodes), when budgeting a loop that writes numbers into lists.
 
 The leading dot marks `.setitem` as dangerous for the same reason as the other in-place setters: it overwrites a shared cell.
 
