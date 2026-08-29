@@ -688,6 +688,61 @@ Two notes for whoever writes that file:
   first.
 - **M2 — The front end.** The 329 rules, the exception list, `say` and
   `phonemes`; §9.3's cost measured. **Gate: the 200-word table at ≥ 90 %.**
+
+  **Built 2026-08-28**, `core/phonemes.c`/`.h` (the rules, the exception
+  list and the §5.1 handling of digits and punctuation), `say` and
+  `phonemes` in `core/primitives_speech.c`, and `tests/test_phonemes.c`.
+  **The gate is green with room**: the table is written at 241 words rather
+  than 200 and lands at **96.3 %**, or 94.2 % before the exception list had
+  anything in it. The nine misses that remain are all one thing —
+  unstressed vowels the rules do not reduce (`from` is "f r aa m", `second`
+  is "s eh k aa n d") — which is §14 R5's fence, not a mistyped rule.
+
+  The rules are stored the way the report writes them, one string a rule,
+  `left[item]right=phonemes`, with §6's lower-case ARPABET on the right.
+  A rule's right-hand side is therefore literally a Logo phoneme list, which
+  makes a rule checkable against the report by eye and makes `phonemes`
+  print exactly what the table says.
+
+  **The findings, all from the accuracy table rather than from reading:**
+
+  1. **The published table does not silence every doubled consonant.**
+     `LL`, `MM`, `NN`, `SS` and `GG` are in it; `TT`, `FF`, `PP`, `BB`,
+     `DD`, `RR` and `ZZ` are not, and without them "little" is
+     "l ih t t ax l" and "off" is "ao f f" — a stop articulated twice, which
+     is audibly wrong rather than subtly wrong. Seven rules.
+  2. **The report's cluster of rules for a final S looks redundant and is
+     not.** Collapsing them into "a vowel before a final S voices it" turns
+     "us" into "uz" and "famous" into "famouz"; `U[S] ` needs its own line,
+     which is exactly what the published table has.
+  3. **Inside a left context, the order of `:` and `^` decides the past
+     tense.** `:` is greedy and nothing backtracks, so `#:^E[D] ` matches
+     "walked" (the `^` takes the K, the `:` takes the L) and `#^:E[D] `
+     never matches anything at all — the `:` eats both consonants and
+     leaves the `^` nothing. The two differ by a transposition and one of
+     them silently costs every `-ed` its /t/.
+  4. **The exception list is a tenth of §7's budget, and that is the
+     rules' doing.** §7 sizes it at ~100 words, the irregular hundred; the
+     published rules already carry most of them as rules (`[ONE]`, `[SAID]`,
+     `[PEOP]`, `[TWO]`), so what the table actually earned was five —
+     `father`, `house`, `live`, `river`, `study` — on top of the six the
+     design names. Eleven entries, ~200 B, against a ~2 KB line item.
+
+  Two things §4 and §5.1 did not say and the code had to decide. **A list
+  is joined back into a sentence before the rules see it**, because some
+  rules read across the space (`" [THE] #"` is "the" before a vowel), so
+  `say [the apple]` is not `say "the` followed by `say "apple` — hence
+  `SPEECH_TEXT_MAX` and the join buffer. And **`say 3.5` says "three,
+  pause, five"**, which is what §5.1's two rules produce when they meet: a
+  period is a sentence pause and digits are spoken one at a time.
+
+  **The costs came in under §9.1 and §9.3.** The front end links at
+  **10.3 KB** of flash (3.5 KB of code, 5.0 KB of rule strings, 1.8 KB of
+  pointer arrays) against a ~13 KB line item, and its `.data` and `.bss` are
+  both **zero** — R4 did not happen. `ctest` writes
+  `speech_frontend_cost.txt`: **0.51 µs a letter** on the host, so even a
+  20× host-to-board penalty lands on §9.3's ~10 µs estimate, and the
+  conclusion it drew stands — Berzerk can call `say` in its frame loop.
 - **M3 — On the board.** Mixer integration, §8.5's headroom decided by
   listening, the `sound_reclock` hook, `setvoice`/`voice`, the reference
   sections. **Gate: the refill cost measured against 3.5 ms (§9.2), and no

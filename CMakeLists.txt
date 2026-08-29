@@ -96,6 +96,7 @@ add_library(logo_core
     core/primitives_speech.c
     core/notation.c
     core/speech_synth.c
+    core/phonemes.c
     core/primitives_logical.c
     core/primitives_bitwise.c
     core/primitives_outside_world.c
@@ -447,6 +448,7 @@ if(BUILD_FOR_HOST)
         core/primitives_speech.c
         core/notation.c
         core/speech_synth.c
+        core/phonemes.c
         core/primitives_logical.c
         core/primitives_bitwise.c
         core/primitives_outside_world.c
@@ -635,6 +637,7 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_speech.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/notation.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/speech_synth.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/phonemes.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_logical.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_bitwise.c
         ${CMAKE_CURRENT_SOURCE_DIR}/core/primitives_outside_world.c

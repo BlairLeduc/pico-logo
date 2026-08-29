@@ -5428,7 +5428,7 @@ If one frequency is provided the same tone is produced on both left and right ch
 
 `toot` does not block. If a second `toot` is requested, Logo will wait until the previous `toot` completes. 
 
-`toot` is the simplest way to make a sound. For volume, envelopes, waveforms, noise, and background music, see [`sound`](#sound), [`setenv`](#setenv), [`setwave`](#setwave), and [`play`](#play). For a speaking voice, see [`sayphonemes`](#sayphonemes).
+`toot` is the simplest way to make a sound. For volume, envelopes, waveforms, noise, and background music, see [`sound`](#sound), [`setenv`](#setenv), [`setwave`](#setwave), and [`play`](#play). For a speaking voice, see [`say`](#say).
 
 > The actual frequency range is 100Hz to 2000Hz. If the input is outside this range, no tone is produced and but `toot` behaves as if a rest is requested. By convention, a rest is produced using a frequency of 0Hz.
 
@@ -5606,6 +5606,38 @@ Silences every voice (through its release), stops speaking, and clears all queue
 ```
 
 
+## say
+
+say _text_
+
+`command`
+
+Speaks _text_ out loud in the background: Logo continues at once, without waiting for it to finish. Calling `say` again appends to what is already being said, so a sentence can be assembled a word at a time.
+
+_text_ can be a word or a list:
+
+```logo
+?say "chicken
+?say [intruder alert]
+```
+
+Numbers are spoken a digit at a time, so `say 42` says "four two". A `.`, `!` or `?` puts a pause in; other punctuation is ignored, and so is any character the rules cannot pronounce.
+
+`say` works out the pronunciation from the spelling, and English spelling being what it is, about one word in ten comes out wrong. When that happens, look at what it decided with [`phonemes`](#phonemes) and say your own version with [`sayphonemes`](#sayphonemes) — these three are meant to be used together. Use [`speaking?`](#speaking-speakingp) to tell when it has finished, and [`stopsound`](#stopsound) to cut it short.
+
+On a machine with no speaker, `say` does nothing at all, and your program keeps running.
+
+**Example**:
+
+```logo
+?say [the humanoid must not escape]
+to taunt :words
+  say :words
+  wait 30
+end
+```
+
+
 ## sayphonemes
 
 sayphonemes [_phonemes_]
@@ -5635,6 +5667,32 @@ Spelling a word out in phonemes is how you say something the machine has no busi
 ; one procedure a word
 ?pprop "ph "chicken [ch ih k ax n]
 ?sayphonemes gprop "ph "chicken
+```
+
+
+## phonemes
+
+phonemes _text_
+
+`operation`
+
+outputs the list of phonemes [`say`](#say) would speak for _text_, without speaking anything. These two are the same thing:
+
+```logo
+say :text
+sayphonemes phonemes :text
+```
+
+so `phonemes` is how you find out why a word came out wrong, and [`sayphonemes`](#sayphonemes) is how you fix it: print the list, change the phonemes you disagree with, and say that instead.
+
+**Example**:
+
+```logo
+?show phonemes [hello]
+[hh eh l ow]
+?show phonemes "robot
+[r aa b aa t]
+?sayphonemes [r ow b ax t]
 ```
 
 

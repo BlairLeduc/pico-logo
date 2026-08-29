@@ -6,12 +6,15 @@
 //  half of `stopsound` (core/primitives_sound.c), against the scripted mock
 //  speech backend. docs/say-design.md §10.
 //
-//  `say`, `phonemes` and the `say :text` == `sayphonemes phonemes :text`
-//  identity arrive with the rule engine at M2.
+//  M2 added `say` and `phonemes` in front of them, so the identity
+//  `say :text` == `sayphonemes phonemes :text` is assertable here -- over
+//  the mock log, which is the only place it is observable.
 //
 
 #include "test_scaffold.h"
 #include "core/speech_synth.h"
+
+#include <string.h>
 
 void setUp(void)
 {
@@ -117,6 +120,141 @@ void test_sayphonemes_waits_for_a_full_queue(void)
 }
 
 //==========================================================================
+// say and phonemes (§5.1, §5.2)
+//==========================================================================
+
+// Join a mock log slice into a phoneme string, so a failure reads as words.
+static void log_string(int from, int to, char *out, size_t size)
+{
+    const MockDeviceState *s = spk();
+    out[0] = '\0';
+    for (int i = from; i < to; i++)
+    {
+        if (i > from)
+        {
+            strncat(out, " ", size - strlen(out) - 1);
+        }
+        strncat(out, speech_phoneme_names[s->speech.queued[i].phoneme], size - strlen(out) - 1);
+    }
+}
+
+// Run one instruction and read back only what it added to the log, so a
+// test can say two things in a row.
+static void assert_say(const char *logo, const char *expected)
+{
+    int before = spk()->speech.queued_count;
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string(logo).status);
+    char got[256];
+    log_string(before, spk()->speech.queued_count, got, sizeof got);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(expected, got, logo);
+}
+
+void test_say_runs_a_list_through_the_rules(void)
+{
+    assert_say("say [hello]", "hh eh l ow");
+}
+
+void test_say_takes_a_word(void)
+{
+    assert_say("say \"chicken", "ch ih k eh n");
+}
+
+// A sentence, not a string of unrelated words: " [THE] #" reads the letter
+// after the space, which only works because the list is joined back up.
+void test_say_reads_across_the_space_between_words(void)
+{
+    assert_say("say [the apple]", "dh iy ae p ax l");
+    assert_say("say [the book]", "dh ax b uh k");
+}
+
+void test_say_speaks_a_number_as_digits(void)
+{
+    assert_say("say 42", "f ao r t uw");
+}
+
+// Appending, like `sayphonemes` and like `play` -- Berzerk assembles a
+// sentence a word at a time (§5.1).
+void test_say_appends_on_a_second_call(void)
+{
+    assert_say("say \"go", "g ow");
+    assert_say("say \"go", "g ow");
+    TEST_ASSERT_EQUAL_INT(4, spk()->speech.queued_count);
+}
+
+void test_say_accepts_an_empty_list(void)
+{
+    Result r = run_string("say []");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_INT(0, spk()->speech.queued_count);
+}
+
+void test_say_requires_an_input(void)
+{
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("say").status);
+}
+
+// The identity the reference gives as the definition (§5.3), asserted over
+// the mock log: the two halves must match phoneme for phoneme.
+void test_say_is_sayphonemes_of_phonemes(void)
+{
+    run_string("say [the humanoid must not escape]");
+    int half = spk()->speech.queued_count;
+    TEST_ASSERT_GREATER_THAN_INT(0, half);
+
+    run_string("sayphonemes phonemes [the humanoid must not escape]");
+    TEST_ASSERT_EQUAL_INT(2 * half, spk()->speech.queued_count);
+
+    char first[256], second[256];
+    log_string(0, half, first, sizeof first);
+    log_string(half, 2 * half, second, sizeof second);
+    TEST_ASSERT_EQUAL_STRING(first, second);
+}
+
+// A sentence longer than the SPEECH_TEXT_MAX join buffer is translated a
+// bufferful at a time, split between words, and nothing is lost.
+void test_say_streams_a_sentence_longer_than_the_join_buffer(void)
+{
+    run_string("say [the humanoid must not escape the humanoid must not escape "
+               "the humanoid must not escape the humanoid must not escape "
+               "the humanoid must not escape]");
+    int five = spk()->speech.queued_count;
+    run_string("say [the humanoid must not escape]");
+    int one = spk()->speech.queued_count - five;
+    TEST_ASSERT_EQUAL_INT(5 * one, five);
+}
+
+void test_phonemes_outputs_a_list_of_phoneme_words(void)
+{
+    Result r = eval_string("phonemes [hello]");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+
+    const char *expected[] = {"hh", "eh", "l", "ow"};
+    int i = 0;
+    for (Node l = mem_first_cell(r.value.as.node); !mem_is_nil(l); l = mem_next_cell(l), i++)
+    {
+        TEST_ASSERT_LESS_THAN_INT(4, i);
+        TEST_ASSERT_EQUAL_STRING(expected[i], mem_word_ptr(mem_car(l)));
+    }
+    TEST_ASSERT_EQUAL_INT(4, i);
+}
+
+// It says nothing: printing the phonemes is how you find out why a word
+// came out wrong, and doing that should not also speak it (§5.2).
+void test_phonemes_is_an_operation_and_makes_no_sound(void)
+{
+    eval_string("phonemes [hello]");
+    TEST_ASSERT_EQUAL_INT(0, spk()->speech.queued_count);
+}
+
+void test_phonemes_of_nothing_is_the_empty_list(void)
+{
+    Result r = eval_string("phonemes []");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
+}
+
+//==========================================================================
 // speaking?
 //==========================================================================
 
@@ -180,6 +318,7 @@ void test_speech_is_silent_and_successful_with_no_device_ops(void)
     ops->speech_stop = NULL;
 
     TEST_ASSERT_EQUAL(RESULT_NONE, run_string("sayphonemes [ax l er t]").status);
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("say [intruder alert]").status);
     TEST_ASSERT_EQUAL_STRING("false", mem_word_ptr(eval_string("speaking?").value.as.node));
     TEST_ASSERT_EQUAL(RESULT_NONE, run_string("stopsound").status);
     TEST_ASSERT_EQUAL_INT(0, spk()->speech.queued_count);
@@ -201,6 +340,18 @@ int main(void)
     RUN_TEST(test_sayphonemes_requires_a_list);
     RUN_TEST(test_sayphonemes_accepts_an_empty_list);
     RUN_TEST(test_sayphonemes_waits_for_a_full_queue);
+    RUN_TEST(test_say_runs_a_list_through_the_rules);
+    RUN_TEST(test_say_takes_a_word);
+    RUN_TEST(test_say_reads_across_the_space_between_words);
+    RUN_TEST(test_say_speaks_a_number_as_digits);
+    RUN_TEST(test_say_appends_on_a_second_call);
+    RUN_TEST(test_say_accepts_an_empty_list);
+    RUN_TEST(test_say_requires_an_input);
+    RUN_TEST(test_say_is_sayphonemes_of_phonemes);
+    RUN_TEST(test_say_streams_a_sentence_longer_than_the_join_buffer);
+    RUN_TEST(test_phonemes_outputs_a_list_of_phoneme_words);
+    RUN_TEST(test_phonemes_is_an_operation_and_makes_no_sound);
+    RUN_TEST(test_phonemes_of_nothing_is_the_empty_list);
     RUN_TEST(test_speaking_false_when_idle);
     RUN_TEST(test_speaking_true_after_sayphonemes);
     RUN_TEST(test_speakingp_is_the_same_primitive);

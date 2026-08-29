@@ -261,6 +261,17 @@ extern "C" {
 // utterance streams instead of failing.
 #define SPEECH_QUEUE_LEN 128
 
+// How much text `say` hands the letter-to-sound rules at a time
+// (docs/say-design.md §7). A Logo list is joined back into a sentence
+// before the rules see it, because some of them look across the space, and
+// this is that join buffer -- one stack frame in core/primitives_speech.c,
+// not a static.
+//
+// OVERFLOW: `say` does NOT error on a longer sentence -- it translates a
+// bufferful at a time, split between words, which is the same seam a
+// program already gets by calling `say` twice.
+#define SPEECH_TEXT_MAX 128
+
 // Vi mode (docs/vi-mode-design.md). Four fixed-capacity fields in `ViState`,
 // which is one static struct inside the editor.
 //

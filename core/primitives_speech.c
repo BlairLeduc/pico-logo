@@ -2,17 +2,22 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Speech primitives (P16), M1: sayphonemes and speaking?. `stopsound`'s
-//  speech half stays in primitives_sound.c, because there is one "shut up"
-//  in the language and it should mean all of it (docs/say-design.md §5.6).
+//  Speech primitives (P16): say, phonemes, sayphonemes and speaking?.
+//  `stopsound`'s speech half stays in primitives_sound.c, because there is
+//  one "shut up" in the language and it should mean all of it
+//  (docs/say-design.md §5.6).
 //
 //  This is the `play` split applied again: semantics here, rendering in the
 //  device. A phoneme word is resolved to a table index by core/speech_synth.c
 //  -- the mirror of core/notation.c resolving a note word to a SoundEvent --
 //  and the queue-full wait is the one `play` uses, for the same reason.
 //
-//  `say` and `phonemes` are M2's: they need the NRL letter-to-sound rules in
-//  front of this, and `say :text` is defined as `sayphonemes phonemes :text`.
+//  `say` and `phonemes` share everything but their last step: both run the
+//  text through core/phonemes.c's letter-to-sound rules, and then one queues
+//  the phonemes and the other conses them into a Logo list. That shared path
+//  is the identity the reference states as the definition (§5.3):
+//
+//      say :text   is   sayphonemes phonemes :text
 //
 
 #include "primitives.h"
@@ -20,8 +25,12 @@
 #include "error.h"
 #include "eval.h"
 #include "speech_synth.h"
+#include "phonemes.h"
+#include "format.h"
 #include "limits.h"
 #include "devices/io.h"
+
+#include <string.h>
 
 static LogoHardwareOps *speech_ops(void)
 {
@@ -66,6 +75,218 @@ static Result queue_frame_waiting(LogoIO *io, LogoHardwareOps *ops, const Speech
             logo_io_sleep(io, 2);
         }
     }
+}
+
+//==========================================================================
+// The front end: text in, phonemes out
+//==========================================================================
+
+// What to do with each phoneme the rules produce: `say` queues it,
+// `phonemes` conses it onto a list.
+typedef Result (*PhonemeSink)(void *ctx, uint8_t id);
+
+// Run a stretch of text through the rules. The engine streams -- it fills a
+// small buffer, says where to resume, and keeps its left context across the
+// seam because it is handed the whole string every time -- so a sentence of
+// any length costs 32 phonemes of stack here and nothing else.
+static Result translate_text(const char *text, PhonemeSink sink, void *ctx)
+{
+    uint8_t buf[32];
+    int pos = 0;
+
+    while (text[pos])
+    {
+        int next = pos;
+        int n = phonemes_translate(text, pos, buf, (int)sizeof buf, &next);
+        if (next <= pos)
+        {
+            break; // no progress: nothing left the rules can place
+        }
+        for (int i = 0; i < n; i++)
+        {
+            Result r = sink(ctx, buf[i]);
+            if (r.status != RESULT_NONE)
+            {
+                return r;
+            }
+        }
+        pos = next;
+    }
+    return result_none();
+}
+
+// A list is joined back into one stretch of text before the rules see it,
+// rather than translated a word at a time, because some rules look across
+// the space: " [THE] #" is "the" before a vowel. A list longer than the
+// buffer is translated a bufferful at a time, split between words, which is
+// the seam `say` already has when a program calls it twice.
+typedef struct TextJoin
+{
+    char buf[SPEECH_TEXT_MAX];
+    int len;
+    PhonemeSink sink;
+    void *ctx;
+} TextJoin;
+
+static Result join_flush(TextJoin *j)
+{
+    if (j->len == 0)
+    {
+        return result_none();
+    }
+    j->buf[j->len] = '\0';
+    j->len = 0;
+    return translate_text(j->buf, j->sink, j->ctx);
+}
+
+static Result join_word(TextJoin *j, const char *word)
+{
+    int n = (int)strlen(word);
+
+    // A word too long to join with anything is already a string of its own.
+    if (n + 1 >= (int)sizeof j->buf)
+    {
+        Result r = join_flush(j);
+        return (r.status != RESULT_NONE) ? r : translate_text(word, j->sink, j->ctx);
+    }
+    if (j->len + n + 1 >= (int)sizeof j->buf)
+    {
+        Result r = join_flush(j);
+        if (r.status != RESULT_NONE)
+        {
+            return r;
+        }
+    }
+    if (j->len > 0)
+    {
+        j->buf[j->len++] = ' ';
+    }
+    memcpy(j->buf + j->len, word, (size_t)n);
+    j->len += n;
+    return result_none();
+}
+
+static Result join_list(TextJoin *j, Node list)
+{
+    for (Node l = mem_first_cell(list); !mem_is_nil(l); l = mem_next_cell(l))
+    {
+        Node elem = mem_car(l);
+        Result r;
+        if (mem_is_word(elem))
+        {
+            const char *w = mem_word_ptr(elem);
+            r = w ? join_word(j, w) : result_error(ERR_OUT_OF_SPACE);
+        }
+        else
+        {
+            r = join_list(j, elem); // a nested list is just more words
+        }
+        if (r.status != RESULT_NONE)
+        {
+            return r;
+        }
+    }
+    return result_none();
+}
+
+// Translate `say`/`phonemes`'s argument -- a number, a word or a list --
+// into phonemes.
+static Result translate_value(Value v, PhonemeSink sink, void *ctx)
+{
+    if (v.type == VALUE_NUMBER)
+    {
+        // `say 42` is "four two", and the digits are the rules' business:
+        // all this has to do is spell the number the way `print` does.
+        char num[32];
+        format_number(num, sizeof num, v.as.number);
+        return translate_text(num, sink, ctx);
+    }
+    if (value_is_word(v))
+    {
+        const char *w = mem_word_ptr(v.as.node);
+        return w ? translate_text(w, sink, ctx) : result_error(ERR_OUT_OF_SPACE);
+    }
+
+    if (!value_is_list(v))
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(v));
+    }
+
+    TextJoin j;
+    j.len = 0;
+    j.sink = sink;
+    j.ctx = ctx;
+    Result r = join_list(&j, v.as.node);
+    return (r.status != RESULT_NONE) ? r : join_flush(&j);
+}
+
+//==========================================================================
+// The primitives
+//==========================================================================
+
+typedef struct SayContext
+{
+    LogoIO *io;
+    LogoHardwareOps *ops;
+} SayContext;
+
+static Result say_sink(void *ctx, uint8_t id)
+{
+    SayContext *c = (SayContext *)ctx;
+    // Stress 1 and the table's own duration and pitch: the fence in §14 R5
+    // is one voice with no sentence prosody, so the rules do not invent one.
+    SpeechFrame f = {id, 0, 0, 1};
+    return queue_frame_waiting(c->io, c->ops, &f);
+}
+
+// say [intruder alert]
+// say "chicken
+//
+// The letter-to-sound rules, then `sayphonemes`. Non-blocking and appending,
+// like everything else that makes a sound (§5.1).
+static Result prim_say(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    SayContext ctx = {primitives_get_io(), speech_ops()};
+    return translate_value(args[0], say_sink, &ctx);
+}
+
+typedef struct ListContext
+{
+    Node head;
+    Node tail;
+} ListContext;
+
+static Result list_sink(void *ctx, uint8_t id)
+{
+    ListContext *c = (ListContext *)ctx;
+    Node word = mem_atom_cstr(speech_phoneme_names[id]);
+    if (mem_is_nil(word) || !mem_list_append(&c->head, &c->tail, word))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
+    return result_none();
+}
+
+// show phonemes [hello]  ->  [hh eh l ow]
+//
+// The rules' output, as a Logo list. It exists so that the words the rules
+// get wrong are fixable in Logo rather than reportable as a defect: print
+// it, edit it, hand it back to `sayphonemes` (§5.2).
+static Result prim_phonemes(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+
+    ListContext ctx = {NODE_NIL, NODE_NIL};
+    Result r = translate_value(args[0], list_sink, &ctx);
+    if (r.status != RESULT_NONE)
+    {
+        return r;
+    }
+    return result_ok(value_list(ctx.head));
 }
 
 // sayphonemes [ih n t r uw d er]
@@ -136,6 +357,8 @@ static Result prim_speaking(Evaluator *eval, int argc, Value *args)
 
 void primitives_speech_init(void)
 {
+    primitive_register("say", 1, prim_say);
+    primitive_register("phonemes", 1, prim_phonemes);
     primitive_register("sayphonemes", 1, prim_sayphonemes);
     primitive_register("speaking?", 0, prim_speaking);
     primitive_register("speakingp", 0, prim_speaking);
