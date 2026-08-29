@@ -985,4 +985,5 @@ void primitives_editor_init(void)
     primitive_register("edn", 1, prim_edn);
     primitive_register("edns", 0, prim_edns);
     primitive_register("editfile", 1, prim_editfile);
+    primitive_register("edf", 1, prim_editfile);  // Abbreviation
 }

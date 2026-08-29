@@ -437,7 +437,7 @@ The node count and the editor buffer are listed per board below. They come out
 of the same RAM, so a board without PSRAM spends less on one to afford the
 other: nodes are what your procedures, variables and running programs are built
 from, and the editor buffer is the largest file [`edit`](#edit-ed) and
-[`editfile`](#editfile) can open. A board with PSRAM has to make no such choice.
+[`editfile`](#editfile-edf) can open. A board with PSRAM has to make no such choice.
 
 **Raspberry Pi Pico 2** - 4 MB flash, no radio.
 
@@ -467,7 +467,7 @@ from, and the editor buffer is the largest file [`edit`](#edit-ed) and
 - `http.get` and `http.post` over both `http://` and `https://`, so `tls?` outputs `true`
 - HTTP responses up to about 512 KB, held in PSRAM
 - Words may exceed 255 characters (for example the result of [`word`](#word) or an HTTP response body), held in PSRAM
-- 262144 characters of editor buffer, held in PSRAM, so [`editfile`](#editfile) opens much larger files. A board whose PSRAM does not come up at boot falls back to 16384, which is smaller than the boards that have no PSRAM to lose - it keeps its full workspace instead, since that is not the copy of the file it is editing
+- 262144 characters of editor buffer, held in PSRAM, so [`editfile`](#editfile-edf) opens much larger files. A board whose PSRAM does not come up at boot falls back to 16384, which is smaller than the boards that have no PSRAM to lose - it keeps its full workspace instead, since that is not the copy of the file it is editing
 - 64 KB of undo journal for [vi mode](#vi-mode), also in PSRAM, so `u` reaches hundreds of changes back rather than the handful 1 KB holds
 
 
@@ -477,7 +477,7 @@ from, and the editor buffer is the largest file [`edit`](#edit-ed) and
 
 This section describes the feature of Logo that lets you automatically load a file into your workspace when you start up Logo. You must call the file `startup`. There can be only one file with the name `startup`, although it can include commands to load other files.
 
-The default prefix is `/`, the root of the device's internal storage, so the `startup` file is located at `/startup`. You can change the `startup` file, with [`editfile`](#editfile).
+The default prefix is `/`, the root of the device's internal storage, so the `startup` file is located at `/startup`. You can change the `startup` file, with [`editfile`](#editfile-edf).
 
 ```logo
 >editfile "startup
@@ -624,7 +624,7 @@ In normal mode the bottom line also carries a ruler: the line the cursor is on, 
 - `:q` — cancel, but only when you have changed nothing; otherwise the bottom line says `E37: no write since last change`. `:q` never writes: nothing in the buffer is read back
 - `Brk` — cancel, from any mode. It is the one key whose meaning does not depend on which mode you are in, which is what makes the mode safe to be wrong about
 
-Under [`editfile`](#editfile) it writes the file and leaves you in the Editor, so you can save as you go, and the bottom line says `written`; a `Brk` after it cancels only what you have typed since. Everywhere else — [`edit`](#edit-ed), [`edall`](#edall), [`edn`](#edn), [`edns`](#edns) — the buffer has no file to be written to, so `:w` accepts it and leaves, as `:wq` does.
+Under [`editfile`](#editfile-edf) it writes the file and leaves you in the Editor, so you can save as you go, and the bottom line says `written`; a `Brk` after it cancels only what you have typed since. Everywhere else — [`edit`](#edit-ed), [`edall`](#edall), [`edn`](#edn), [`edns`](#edns) — the buffer has no file to be written to, so `:w` accepts it and leaves, as `:wq` does.
 
 #### Moving
 
@@ -950,7 +950,7 @@ setvimode _flag_
 
 Chooses which set of keys the Logo Editor uses. `setvimode true` selects the modal, vi-style layer described in [Vi Mode](#vi-mode); `setvimode false`, which is how Logo starts, selects the keys described in [Editing actions](#editing-actions).
 
-The setting applies to every command that opens the Editor — [`edit`](#edit-ed), [`edall`](#edall), [`edn`](#edn), [`edns`](#edns) and [`editfile`](#editfile) — and lasts until you change it or Logo restarts. Put it in your [startup](#startup) file to have it every time.
+The setting applies to every command that opens the Editor — [`edit`](#edit-ed), [`edall`](#edall), [`edn`](#edn), [`edns`](#edns) and [`editfile`](#editfile-edf) — and lasts until you change it or Logo restarts. Put it in your [startup](#startup) file to have it every time.
 
 **Example**:
 
@@ -6352,9 +6352,10 @@ Outputs the current file prefix, or `[]` if there is no prefix.
 ```
 
 
-## editfile
+## editfile (edf)
 
 editfile _pathname_
+edf _pathname_
 
 `command`
 
