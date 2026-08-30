@@ -542,24 +542,55 @@ end
 
 ; ERASING A STAMP IS NOT A PEN COLOUR.  A costume carries its own pixels, so
 ; there is nothing to re-stamp in the background, and `snapsh` cannot capture
-; an eraser either -- background pixels become transparent by design.  The
-; cheapest thing that works is a wide pen stroke: pen size 8 down the sprite's
-; spine covers its 8 x 11 in one `fd`.
+; an eraser either -- background pixels become transparent by design.  So the
+; erase is a background stroke over the sprite's own box.
 ;
-; Section 7.1's round-cap warning applies and is harmless HERE -- the caps
-; spill a pixel or two outside the stroke, and for an eraser spilling means
-; erasing slightly more background.  It would not be harmless for ink.
+; THREE STROKES OF PEN 3 AND NOT ONE OF PEN 8 (B65, fixed at M3 on 2026-08-30).
+; This file used to lay one pen-8 stroke down each figure's spine and call it
+; covered, and a wide pen in this interpreter is a filled DISC whose caps pinch
+; to a single pixel rather than squaring the end off -- so seventeen of the
+; man's 128 pixels and the same corners of every robot were never erased.  The
+; harness could not show it, because the scene is deliberately held still and
+; residue lands exactly where the next figure is drawn (section 19); a BOARD
+; showed it on the shipped game instead (B64).
+;
+; Pen 3 is the one wide pen that is an exact square -- radius 1.5, extent 1,
+; corner (1, 1) at 2 against 2.25 -- so a stroke of it is a rectangle three
+; wide by its length plus two.  Three of them at +1, +4 and +6 of the sprite's
+; left edge cover its eight columns exactly.
+;
+; AND THE MEASUREMENT IS THE POINT OF FIXING IT.  Section 3's verdict is
+; in-place against clear-and-redraw and it was decided on an erase pass that
+; was doing a third of its work: thirteen figures at three strokes each is 39
+; where this read 13.  Whether in-place still wins is the number this file now
+; reports honestly.
 to erase.actors :n
-  local "e.i
+  local "e.i local "e.x local "e.y
   setpc :p15.bg
-  setpensize 8
+  setpensize 3
+  seth 180
   repeat :n [
     make "e.i repcount
-    pu  setx (item :e.i :r.x) + 4  sety item :e.i :r.y
-    seth 180  pd  fd 11
+    make "e.x item :e.i :r.x
+    make "e.y (item :e.i :r.y) - 1
+    pu  setx :e.x + 1  sety :e.y  pd  fd 9
+    pu  setx :e.x + 4  sety :e.y  pd  fd 9
+    pu  setx :e.x + 6  sety :e.y  pd  fd 9
   ]
-  pu  setx :p.x  sety :p.y + 3  seth 180  pd  fd 20
-  if 0 < :o.on [pu  setx :o.x  sety :o.y + 8  seth 180  pd  fd 16]
+  make "e.y :p.y - 1
+  pu  setx :p.x + 1  sety :e.y  pd  fd 13
+  pu  setx :p.x + 4  sety :e.y  pd  fd 13
+  pu  setx :p.x + 6  sety :e.y  pd  fd 13
+  ; Otto is a pen drawing rather than a stamp and his bounce moves him, so
+  ; his box is the widest thing here: five strokes covering o.x -7..+7 and
+  ; o.y +9..-9, which is the span the single pen-8 stroke was aiming at.
+  if 0 < :o.on [
+    make "e.y :o.y + 8
+    pu  setx :o.x - 6  sety :e.y  pd  fd 17
+    pu  setx :o.x - 3  sety :e.y  pd  fd 17
+    pu  setx :o.x      sety :e.y  pd  fd 17
+    pu  setx :o.x + 3  sety :e.y  pd  fd 17
+    pu  setx :o.x + 6  sety :e.y  pd  fd 17]
   pu  setpensize 1
   setpc :p15.bg
   draw.bolts 7

@@ -1423,12 +1423,18 @@ void test_a_death_holds_for_the_arcades_45_ticks_and_then_respawns(void)
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(15.0f, num(":p.dying"),
         "the pause is not the arcade's 45 ticks at 20 fps");
 
+    // HIS OWN COSTUMES AND NOT EVERY STAMP.  Slots 1 to 4 are the man and
+    // 10 to 13 are the robots, and from M3 the last frame of a death rebuilds
+    // the room -- so counting stamps would count the crowd that came back
+    // with him.
     int stamps = 0;
     for (int i = 0; i < 15; i++)
     {
         mock_device_clear_graphics();
         frame();
-        stamps += mock_device_stamp_count();
+        for (int s = 0; s < mock_device_stamp_count(); s++)
+            if (mock_device_get_stamp(s)->shape <= 4)
+                stamps++;
     }
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":p.dying"), "the death did not end");
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, -96.0f, num(":p.x"), "he came back somewhere else");
@@ -1479,10 +1485,22 @@ void test_an_ordinary_frame_spends_no_cells(void)
 // The claim is bounded, not zero-per-frame, and the difference is the whole
 // point.  A frame that spends a handful of bytes and settles is fine; one that
 // spends a handful and keeps spending has a fuse on it however long the fuse
-// is, which is what M0's unbounded `r.time` counter was.  So: walk him for a
-// thousand frames in every direction, through rooms and into walls, and then
-// walk him for another thousand.  The second thousand must spend nothing at
-// all.
+// is, which is what M0's unbounded `r.time` counter was.  So: walk him in
+// every direction, through rooms and into walls, for four thousand frames, and
+// read the free word table at every thousand.
+//
+// IT WOBBLES RATHER THAN SETTLING FROM M3, and the wobble is `recycle` rather
+// than a leak.  M2 could assert exact equality because a death reset him in
+// place; from M3 a death REBUILDS THE ROOM (the arcade's own behaviour, and the
+// only thing that stops him respawning inside the robot that killed him), so a
+// death frame spends what a doorway spends and hands it back the way the
+// readout does.  A single reading taken mid-transient sits up to ~600 bytes
+// below the quiescent level, which is why this compares PEAKS across halves of
+// the run: a peak is a reading taken after a `recycle` and before the next
+// spend, and it is the level the table actually settles at.  Twenty thousand
+// frames of this hold ~25,180 either way.  What no wobble can hide is a trend:
+// one word a frame is four thousand words over this run, against a 256-BYTE
+// bound.
 void test_the_word_table_converges(void)
 {
     static const int ways[8][2] = {
@@ -1493,11 +1511,15 @@ void test_the_word_table_converges(void)
     in_room(9, 9);
     run("reset.man");
 
-    float atoms_at_first_thousand = 0.0f;
-    for (int i = 0; i < 2000; i++)
+    float early = 0.0f, late = 0.0f;
+    for (int i = 0; i < 8000; i++)
     {
-        if (i == 1000)
-            atoms_at_first_thousand = num("atoms");
+        if (i % 500 == 0)
+        {
+            float a = num("atoms");
+            if (i >= 500  && i < 4000 && a > early) early = a;
+            if (i >= 4000 && a > late)              late  = a;
+        }
         const int *way = ways[(i / 11) % 8];
         press(way[0]);
         if (way[1]) press(way[1]);
@@ -1506,12 +1528,12 @@ void test_the_word_table_converges(void)
         if (way[1]) release(way[1]);
     }
 
-    char msg[160];
+    char msg[224];
     snprintf(msg, sizeof(msg),
-             "the second thousand frames spent %g word-table bytes, so the set "
-             "of numbers the man can hold is not closed",
-             (double)(atoms_at_first_thousand - num("atoms")));
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(atoms_at_first_thousand, num("atoms"), msg);
+             "the free word table peaked at %g in the second half against %g in "
+             "the first, so the set of numbers the game can hold is not closed",
+             (double)late, (double)early);
+    TEST_ASSERT_TRUE_MESSAGE(late > early - 256.0f, msg);
 }
 
 //==========================================================================
@@ -1611,7 +1633,13 @@ void test_berzerk_puts_the_screen_back(void)
     run("berzerk");
     release(K_ESC);
 
+    // IT HAS TO HAVE PLAYED.  From M3 a board that will not take the fast
+    // clock is refused (§15.5), and a refusal skips `play.game` — which leaves
+    // every assertion below true for the wrong reason.  Eight costumes is
+    // `init.game` having run.
     const MockDeviceState *st = mock_device_get_state();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(8, st->costume.snap_count,
+        "the game never started, so this proved nothing about putting it back");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("auto", word_of("refreshmode"),
         "the game left the display in sync refresh");
     TEST_ASSERT_EQUAL_INT_MESSAGE(MOCK_SCREEN_TEXT, st->screen_mode,
@@ -1619,6 +1647,11 @@ void test_berzerk_puts_the_screen_back(void)
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_get_turtle(0)->shape,
         "the game left the turtle wearing the man");
     TEST_ASSERT_TRUE_MESSAGE(st->turtle.visible, "the game left the turtle hidden");
+
+    // And the clock, which is the one thing it changed about the machine
+    // rather than about the screen (B50).
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(LOGO_CPU_KHZ_NORMAL, mock_cpu_khz,
+        "the game left the board overclocked");
 }
 
 // WINDOW, not the default `wrap`.  M1 set it and nothing needed it; M2 cannot
@@ -1661,6 +1694,1096 @@ void test_the_game_is_inside_the_procedure_ceiling(void)
     snprintf(msg, sizeof(msg),
              "the game defines %d procedures, over the 100 budget", defs);
     TEST_ASSERT_TRUE_MESSAGE(defs <= 100, msg);
+}
+
+
+//==========================================================================
+// M3: the robots (design section 9)
+//==========================================================================
+
+// Empty every slot, so a test that wants two robots gets two and not two plus
+// whatever the last room build left behind.
+static void no_robots(void)
+{
+    run("repeat 11 [.setitem repcount :r.state 0]  make \"rob.live 0");
+}
+
+// One robot, placed by hand with a cold wall cache.
+static void robot_at(int i, float x, float y, int dir, int state)
+{
+    char cmd[320];
+    snprintf(cmd, sizeof(cmd),
+             ".setitem %d :r.x %g  .setitem %d :r.y %g  "
+             ".setitem %d :r.dir %d  .setitem %d :r.state %d  "
+             ".setitem %d :r.time 0  .setitem %d :r.tl 0  "
+             ".setitem %d :r.br 0  .setitem %d :r.blk 15",
+             i, (double)x, i, (double)y, i, dir, i, state, i, i, i, i);
+    run(cmd);
+}
+
+// `iq` reads `p.cell`, which the frame hoists once in `logic.robots`.  A test
+// that calls `iq` on its own has to hoist it too.
+static void hoist_player_cell(void)
+{
+    run("make \"p.cell cell.at :p.x :p.y");
+}
+
+// The fifteen masks, written straight in, so a wall test does not depend on
+// which room the generator happens to make.
+static void set_cells(const int m[15])
+{
+    char cmd[256];
+    int n = snprintf(cmd, sizeof(cmd), "make \"cell (list");
+    for (int i = 0; i < 15; i++)
+        n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " %d", m[i]);
+    snprintf(cmd + n, sizeof(cmd) - (size_t)n, ")");
+    run(cmd);
+}
+
+static int robot_state(int i)
+{
+    char e[48];
+    snprintf(e, sizeof(e), "item %d :r.state", i);
+    return (int)num(e);
+}
+
+static float robot_x(int i)
+{
+    char e[48];
+    snprintf(e, sizeof(e), "item %d :r.x", i);
+    return num(e);
+}
+
+static float robot_y(int i)
+{
+    char e[48];
+    snprintf(e, sizeof(e), "item %d :r.y", i);
+    return num(e);
+}
+
+// SEEK ($23EF) is the whole AI: two subtractions and four comparisons, and its
+// output is the DURL mask -- LEFT 1, RIGHT 2, UP 4, DOWN 8 -- with the two
+// halves added, which is what makes a diagonal.  Turtle y runs the other way
+// from the cabinet's, so UP is the larger y here.
+void test_a_robot_walks_straight_at_the_man(void)
+{
+    static const struct { float dx, dy; int want; } way[] = {
+        { -20.0f,  0.0f, 2 },        // west of him: walk east
+        {  20.0f,  0.0f, 1 },        // east of him: walk west
+        {   0.0f, 40.0f, 8 },        // above him: walk down
+        {   0.0f,-40.0f, 4 },        // below him: walk up
+        { -20.0f, 40.0f, 10 },       // above and west
+        {  20.0f, 40.0f, 9 },        // above and east
+        { -20.0f,-40.0f, 6 },        // below and west
+        {  20.0f,-40.0f, 5 },        // below and east
+    };
+    man_at(0, 0);
+    for (size_t k = 0; k < sizeof(way) / sizeof(way[0]); k++)
+    {
+        char e[96], msg[128];
+        // The robot sits at the man's own y less two, which is where seek's
+        // vertical comparison is neutral -- see the test below.
+        snprintf(e, sizeof(e), "seek %g %g",
+                 (double)way[k].dx, (double)(-2.0f + way[k].dy));
+        snprintf(msg, sizeof(msg), "a robot %g,%g from the man sought %g",
+                 (double)way[k].dx, (double)way[k].dy, (double)num(e));
+        // Read the direction the man is in, not the direction the robot is.
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)way[k].want, num(e), msg);
+    }
+}
+
+// `dy := (player.y + 2) - robot.y` is the arcade compensating for the player
+// being taller than a robot, and it is the one constant in SEEK that is not
+// zero.  Negated for turtle y, the neutral row is TWO BELOW his stored corner:
+// a robot exactly level with him is told to walk DOWN.
+void test_seek_aims_two_below_the_mans_corner(void)
+{
+    man_at(0, 0);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num("seek 0 -2"),
+        "the neutral row is not two below the man's stored corner");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(8.0f, num("seek 0 -1"),
+        "a robot one step above the neutral row is not sent down");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4.0f, num("seek 0 -3"),
+        "a robot one step below the neutral row is not sent up");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(8.0f, num("seek 0 0"),
+        "a robot level with the man is not sent down, so the +2 is missing");
+}
+
+// `IQ` ($1C6E) clears any desired direction whose edge is walled.  Cell 1 is
+// row 0 column 0 of the bare template and carries LEFT | TOP, so a robot in
+// the middle of it may go right and down and nothing else.
+void test_iq_clears_the_directions_a_wall_forbids(void)
+{
+    run("make \"cell wall.template");
+    no_robots();
+    man_at(2, 40);                  // cell 8, so the shortcut cannot fire
+    hoist_player_cell();
+    robot_at(1, -96, 108, 0, 1);    // the middle of cell 1
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(10.0f, num("iq 1 -96 108 15"),
+        "a robot in the top-left cell was not stopped by its LEFT and TOP walls");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2.0f, num("iq 1 -96 108 3"),
+        "iq cleared a bit the robot never asked for");
+}
+
+// AND IT CLEARS NOTHING IN OPEN GROUND.  Cell 8 is the middle of the bare
+// template and is walled on no side at all.
+void test_iq_leaves_an_open_cell_alone(void)
+{
+    run("make \"cell wall.template");
+    no_robots();
+    man_at(-96, 108);               // cell 1, so the shortcut cannot fire
+    hoist_player_cell();
+    robot_at(1, 2, 40, 0, 1);
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(15.0f, num("iq 1 2 40 15"),
+        "a robot in open ground lost a direction to a wall that is not there");
+}
+
+// THE $1C92 SHORTCUT: a robot in the player's own cell is not probed at all.
+// It is the ROM's, it is deliberately permissive, and design section 9.3 says
+// leave it -- it is the only way a robot can reach a wall (see below).
+void test_a_robot_in_the_players_cell_is_not_probed(void)
+{
+    run("make \"cell wall.template");
+    no_robots();
+    man_at(-96, 108);               // cell 1, walled LEFT and TOP
+    hoist_player_cell();
+    robot_at(1, -90, 104, 0, 1);    // cell 1 as well
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(15.0f, num("iq 1 -90 104 15"),
+        "the robot sharing the player's cell was probed anyway");
+}
+
+// THE SAVING THIS MILESTONE OWES THE BUDGET (design section 6.3): `cell.at` is
+// ten arithmetic statements and the straight port calls it six times a robot a
+// frame.  The blocked mask is cached and re-probed only when a corner crosses
+// a cell boundary, so what this test does is poison the cache and watch `iq`
+// hand the poison back -- which is the only way to see from outside that it
+// did not probe.
+void test_iq_reuses_its_answer_until_a_corner_crosses(void)
+{
+    run("make \"cell wall.template");
+    no_robots();
+    man_at(2, 40);
+    hoist_player_cell();
+    robot_at(1, -96, 108, 0, 1);
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(10.0f, num("iq 1 -96 108 15"), "the first probe");
+
+    // A mask no wall could produce, written where the cache keeps its answer.
+    run(".setitem 1 :r.blk 5");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(5.0f, num("iq 1 -93 105 15"),
+        "the robot moved three steps inside its cell and paid for a fresh probe");
+
+    // ...and a real crossing throws it away.  Cell 6 (row 1, column 0) carries
+    // LEFT alone, so the answer there is different from cell 1's.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(14.0f, num("iq 1 -96 40 15"),
+        "the robot crossed into another cell and kept the old answer");
+}
+
+//==========================================================================
+// The count cycle (design section 9.1)
+//==========================================================================
+
+// $2117 is a rejection sampler over eleven slots and $434A's threshold has
+// 0x60 added to it as BCD every room, so the count is a FIVE-ROOM CYCLE and
+// not a ramp: 60, 20, 80, 40, 00 and round again.  The expected counts are
+// 11 x (256 - threshold) / 256.
+void test_the_robot_count_is_a_five_room_cycle(void)
+{
+    // The USED order, which is the stored order stepped once: $434A starts at
+    // $60 from DEFAULT_PLAYER_STATE and $20D8 adds $60 before $2117 places
+    // anything, so the first room a player ever sees is the 87.5 % one.
+    static const struct { int seed, threshold; float expected; } cycle[5] = {
+        { 1,  32, 9.625f }, { 2, 128, 5.5f }, { 3, 64, 8.25f },
+        { 4,   0, 11.0f  }, { 5,  96, 6.875f },
+    };
+    for (int t = 0; t < 5; t++)
+    {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "make \"rob.ti %d  place.robots", cycle[t].seed);
+
+        float total = 0.0f;
+        const int rooms = 240;
+        int used = 0;
+        for (int r = 0; r < rooms; r++)
+        {
+            in_room(r % 16, r / 16);
+            run(cmd);
+            used = (int)num(":rob.ti");
+            total += num(":rob.live");
+        }
+
+        char e[64], msg[160];
+        snprintf(e, sizeof(e), "item %d :rob.thr", used);
+        snprintf(msg, sizeof(msg),
+                 "the room after cycle position %d used threshold %g, not the ROM's %d",
+                 cycle[t].seed, (double)num(e), cycle[t].threshold);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)cycle[t].threshold, num(e), msg);
+
+        float mean = total / (float)rooms;
+        snprintf(msg, sizeof(msg),
+                 "threshold %d seated %g robots a room, not about %g",
+                 cycle[t].threshold, (double)mean, (double)cycle[t].expected);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.6f, cycle[t].expected, mean, msg);
+    }
+}
+
+// The last position of the cycle is threshold zero, which the sampler can
+// never refuse: eleven robots, every room, which is the room the frame budget
+// is written against.
+void test_the_full_room_is_always_eleven(void)
+{
+    for (int r = 0; r < 20; r++)
+    {
+        in_room(r, 3);
+        run("make \"rob.ti 4  place.robots");
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(11.0f, num(":rob.live"),
+            "threshold zero refused a slot it cannot refuse");
+    }
+}
+
+// THE COUNTERS COUNT ROOM BUILDS AND THE FIRST ROOM IS ONE OF THEM, which is
+// the correction the arcade disassembly forced.  $209D is "initialise a new
+// game room", $20D8 (the threshold) and $20E1 (ROBOT_SPEED) are the first
+// things in it and $2117 (the placement) is the last, and DEFAULT_PLAYER_STATE
+// ($187F) starts the pair at $60 and 5.  So THE FIRST ROOM A PLAYER EVER SEES
+// runs at threshold $20 -- 87.5 %, 9.6 robots -- and ROBOT_SPEED 4.
+//
+// And the ramp is far steeper than "robots begin slower than you": the FOURTH
+// room is already at the floor of 1, three pixels a frame against the player's
+// 1.5, for the rest of the game.
+void test_the_first_room_is_the_second_of_the_cycle(void)
+{
+    run("setrefresh \"manual  init.game");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2.0f, num(":rob.ti"),
+        "the first room did not use $20, the second threshold of the stored cycle");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(32.0f, num("item :rob.ti :rob.thr"),
+        "the first room's threshold is not the ROM's $20");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4.0f, num(":rob.tp"),
+        "the first room's robots did not start at ROBOT_SPEED 4");
+
+    run("go.room 1 0");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3.0f, num(":rob.ti"), "a doorway did not advance the cycle");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3.0f, num(":rob.tp"), "a doorway did not speed the robots up");
+
+    run("go.room 1 0  go.room 1 0");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":rob.tp"),
+        "ROBOT_SPEED did not reach its floor by the fourth room");
+
+    run("go.room 1 0");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":rob.ti"),
+        "the cycle did not come round after five builds");
+    for (int i = 0; i < 6; i++)
+        run("go.room 0 1");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":rob.tp"),
+        "ROBOT_SPEED went below its floor");
+}
+
+// The maze is a pure function of where you are and THE CROWD IS NOT, which is
+// the cabinet's own doing: the threshold moved on the doorway.  What is still
+// a function of the room is the crowd GIVEN the threshold, because the sampler
+// draws from the room's own stream -- so this test pins both halves.
+void test_the_crowd_reproduces_for_a_room_and_a_threshold(void)
+{
+    float first_x[11], first_y[11];
+    int   first_state[11];
+
+    in_room(4, 9);
+    run("make \"rob.ti 2  place.robots");
+    for (int i = 0; i < 11; i++)
+    {
+        first_state[i] = robot_state(i + 1);
+        first_x[i] = robot_x(i + 1);
+        first_y[i] = robot_y(i + 1);
+    }
+
+    in_room(11, 2);
+    run("make \"rob.ti 4  place.robots");
+
+    in_room(4, 9);
+    run("make \"rob.ti 2  place.robots");
+    for (int i = 0; i < 11; i++)
+    {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "slot %d did not reproduce", i + 1);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(first_state[i], robot_state(i + 1), msg);
+        if (first_state[i] == 0)
+            continue;
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(first_x[i], robot_x(i + 1), msg);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(first_y[i], robot_y(i + 1), msg);
+    }
+
+    // And a different threshold in the same room is a different crowd.
+    in_room(4, 9);
+    run("make \"rob.ti 3  place.robots");
+    bool differs = false;
+    for (int i = 0; i < 11; i++)
+        if (first_state[i] != robot_state(i + 1) ||
+            fabsf(first_x[i] - robot_x(i + 1)) > 0.5f)
+            differs = true;
+    TEST_ASSERT_TRUE_MESSAGE(differs,
+        "the crowd did not change with the threshold, so a room could be cleared "
+        "by walking out of it and back");
+}
+
+// NO ROBOT SPAWNS TOUCHING A WALL, and that is arithmetic rather than luck --
+// the jitter is -16 to +15 about a cell centre, his box is 10 x 14, and a cell
+// is 48 x 68.  If it ever were luck, a full room would open with free points
+// in it.
+void test_no_robot_spawns_touching_a_wall(void)
+{
+    for (int r = 0; r < 60; r++)
+    {
+        in_room(r % 8, r / 8);
+        run("make \"rob.ti 4  place.robots");
+        for (int i = 1; i <= 11; i++)
+        {
+            char e[96], msg[160];
+            snprintf(e, sizeof(e), "on.wall? (item %d :r.x) (item %d :r.y) 12", i, i);
+            snprintf(msg, sizeof(msg),
+                     "robot %d spawned on a wall in room %d,%d", i, r % 8, r / 8);
+            TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(e), msg);
+        }
+    }
+}
+
+//==========================================================================
+// The move (design section 9.3's ROBOT_SPEED)
+//==========================================================================
+
+// ROBOT_SPEED ($20E1) is a TPRIME: the object steps one pixel each time its
+// counter reaches zero and the counter reloads.  One of our frames is three of
+// the cabinet's ticks, so a TPRIME of 5 is three pixels every five frames and
+// a TPRIME of 1 is three a frame -- twice the player's rate, which is what a
+// fifth room feels like.
+//
+// AND THE PIXELS ARE WHOLE ONES, which is not decoration: `.setitem` of a
+// number the workspace has not held before interns a word (B52), so eleven
+// robots writing fractional coordinates into two lists would mint two words a
+// robot a frame for as long as the game ran.
+void test_a_robot_moves_at_the_arcades_reload_rate(void)
+{
+    static const struct { int tprime, frames, pixels; } rate[] = {
+        { 5, 5, 3 }, { 4, 4, 3 }, { 3, 3, 3 }, { 2, 2, 3 }, { 1, 1, 3 },
+    };
+    run("make \"cell wall.template");
+    for (size_t k = 0; k < sizeof(rate) / sizeof(rate[0]); k++)
+    {
+        char cmd[64];
+        no_robots();
+        man_at(60, 38);                 // due east, so seek says RIGHT alone
+        hoist_player_cell();
+        robot_at(1, -20, 38, 0, 1);
+        snprintf(cmd, sizeof(cmd), "make \"rob.tp %d", rate[k].tprime);
+        run(cmd);
+
+        for (int f = 0; f < rate[k].frames; f++)
+            run("step.robot 1");
+
+        char msg[160];
+        snprintf(msg, sizeof(msg),
+                 "at TPRIME %d a robot moved %g pixels in %d frames, not %d",
+                 rate[k].tprime, (double)(robot_x(1) + 20.0f),
+                 rate[k].frames, rate[k].pixels);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-20.0f + (float)rate[k].pixels, robot_x(1), msg);
+    }
+}
+
+// A ROBOT NEVER LEAVES THE ROOM, and it costs no border test: every outer cell
+// is walled on its outer side even at the doorways (design section 6.3), which
+// is what the mask table carries them for.  The player needs his own position
+// test because he is the only thing that goes through a door.
+void test_a_robot_never_leaves_the_room(void)
+{
+    run("setrefresh \"manual");
+    in_room(5, 5);
+    run("make \"rob.ti 4  place.robots  make \"rob.tp 1");
+    man_at(-96, 108);
+
+    for (int f = 0; f < 400; f++)
+    {
+        // Walk the man round the four corners so every robot is drawn towards
+        // an outer wall in turn.
+        static const float corner[4][2] = {
+            { -110.0f, 130.0f }, { 106.0f, 130.0f }, { 106.0f, -30.0f }, { -110.0f, -30.0f },
+        };
+        const float *c = corner[(f / 40) % 4];
+        char cmd[96];
+        snprintf(cmd, sizeof(cmd), "make \"p.x %g  make \"p.y %g", (double)c[0], (double)c[1]);
+        run(cmd);
+        run("logic.robots");
+
+        for (int i = 1; i <= 11; i++)
+        {
+            if (robot_state(i) != 1)
+                continue;
+            char msg[160];
+            snprintf(msg, sizeof(msg), "robot %d reached %g,%g on frame %d",
+                     i, (double)robot_x(i), (double)robot_y(i), f);
+            TEST_ASSERT_TRUE_MESSAGE(robot_x(i) > -123.0f && robot_x(i) < 115.0f, msg);
+            TEST_ASSERT_TRUE_MESSAGE(robot_y(i) < 143.0f && robot_y(i) > -47.0f, msg);
+        }
+    }
+}
+
+//==========================================================================
+// The deaths
+//==========================================================================
+
+// ROBOTS KILLING ROBOTS is the fourth sentence of M3's gate.  The arcade got
+// it free -- it XORs sprites into video RAM and the intercept bit does not care
+// whose pixels met -- so here it is the one loop in the milestone with a
+// quadratic in it, and BOTH robots die, which is what the 2600 manual teaches
+// as strategy.
+void test_two_robots_that_meet_both_die(void)
+{
+    run("make \"cell wall.template");
+    no_robots();
+    man_at(2, 40);
+    hoist_player_cell();
+    robot_at(1, -20, 40, 0, 1);
+    robot_at(2, -16, 36, 0, 1);     // four steps away in each axis: overlapping
+    robot_at(3, 60, 40, 0, 1);      // far off, and it must survive
+    run("make \"rob.live 3");
+
+    run("hit.robots");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(1), "the first robot did not die");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(2), "the second robot did not die");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, robot_state(3), "a robot on the far side of the room died");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":rob.live"), "the live count is wrong");
+}
+
+// The gate in front of the pair loop is one `abs` on y, and a pair that clears
+// it on y and not on x must not die of it.
+void test_robots_level_with_each_other_do_not_touch(void)
+{
+    run("make \"cell wall.template");
+    no_robots();
+    man_at(2, 40);
+    hoist_player_cell();
+    robot_at(1, -20, 40, 0, 1);
+    robot_at(2, -12, 40, 0, 1);     // exactly eight apart: edge to edge, no overlap
+    run("make \"rob.live 2");
+
+    run("hit.robots");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, robot_state(1), "robots eight steps apart collided");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, robot_state(2), "robots eight steps apart collided");
+}
+
+// THE CORNER SUICIDE, and it has exactly one way to happen: `iq`'s $1C92
+// shortcut.  Everywhere else the probe box contains the swept collision box --
+// the arcade's -4/+12/+15 offsets are the sprite grown by one frame's travel --
+// so the direction is cleared before the step that would land on ink.  A robot
+// in the player's own cell is not probed, walks, and dies of it.
+//
+// The wall here is the one between cells 8 and 9, set from both sides the way
+// `room.seg` sets them.  The man stands east of the robot inside cell 8, so
+// seek says RIGHT and nothing probes it.
+void test_a_robot_in_the_players_cell_walks_into_a_wall_and_dies(void)
+{
+    int m[15] = { 0 };
+    m[7] = 2;                        // cell 8: a wall on its RIGHT
+    m[8] = 1;                        // cell 9: the same wall from the other side
+    set_cells(m);
+
+    no_robots();
+    man_at(25, 40);                  // cell 8, and far enough east not to be touched
+    hoist_player_cell();
+    robot_at(1, 0, 38, 0, 1);        // cell 8 as well
+    run("make \"rob.live 1  make \"rob.tp 1");
+
+    for (int f = 0; f < 6; f++)
+        run("step.robot 1");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(1),
+        "the robot walked through the wall between cells 8 and 9");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":rob.live"), "the live count is wrong");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":p.dying"),
+        "the wall death did not stop the robot's turn, so it killed the man too");
+}
+
+// AND HE KILLS THE MAN BY ARRIVING, which is the asymmetry the cabinet has:
+// the intercept is checked against the player's sprite and it is the player
+// who is destroyed.
+void test_a_robot_that_reaches_the_man_kills_him(void)
+{
+    run("make \"cell wall.template");
+    no_robots();
+    man_at(2, 40);
+    hoist_player_cell();
+    robot_at(1, -8, 38, 0, 1);
+    run("make \"rob.live 1  make \"rob.tp 1");
+
+    run("step.robot 1");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(15.0f, num(":p.dying"),
+        "a robot walked into the man and he lived");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, robot_state(1),
+        "the robot died of touching the man, which the cabinet does not do");
+}
+
+// The explosion is four frames, which is design section 7.6's count, and then
+// the slot is empty.  It costs no costume slot -- $103B's four frames would be
+// four of the fifteen and the fifteen are spoken for -- so it is the Vectrex's
+// random strokes.
+void test_the_explosion_is_four_frames_and_then_the_slot_is_empty(void)
+{
+    no_robots();
+    robot_at(1, 0, 40, 0, 1);
+    run("make \"rob.live 1  rob.dies 1");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(1), "a dying robot did not enter the explosion");
+
+    int drawn = 0;
+    for (int f = 0; f < 6; f++)
+    {
+        mock_device_clear_graphics();
+        run("draw.robots");
+        if (mock_device_line_count() > 0)
+            drawn++;
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_stamp_count(),
+            "a dying robot was stamped as a live one");
+        run("logic.robots");
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, drawn, "the explosion is not four frames");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, robot_state(1), "the slot did not come free");
+}
+
+// AND IT STAYS INSIDE HIS OWN 8 x 12, which is the other half of the same
+// decision.  A cloud that spreads needs an eraser that spreads with it, and
+// the only wide pen that does not spill is pen 3 -- a wider one is a filled
+// disc whose round caps would eat the wall he died against (B64).  Inside his
+// own box, his own eraser is the only one it ever needs.
+void test_the_explosion_stays_inside_the_robots_own_box(void)
+{
+    no_robots();
+    robot_at(1, -30, 44, 0, 1);
+    run("rob.dies 1");
+
+    for (int f = 0; f < 4; f++)
+    {
+        mock_device_clear_graphics();
+        run("draw.robots");
+        TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0, "the explosion drew nothing");
+        for (int i = 0; i < mock_device_line_count(); i++)
+        {
+            const MockLine *l = mock_device_get_line(i);
+            char msg[160];
+            snprintf(msg, sizeof(msg),
+                     "explosion stroke %d runs %g,%g to %g,%g, outside the 8 x 12 "
+                     "its own eraser covers", i,
+                     (double)l->x1, (double)l->y1, (double)l->x2, (double)l->y2);
+            TEST_ASSERT_TRUE_MESSAGE(l->x1 >= -30.01f && l->x1 <= -22.99f, msg);
+            TEST_ASSERT_TRUE_MESSAGE(l->x2 >= -30.01f && l->x2 <= -22.99f, msg);
+            TEST_ASSERT_TRUE_MESSAGE(l->y1 <= 44.01f && l->y1 >= 32.99f, msg);
+            TEST_ASSERT_TRUE_MESSAGE(l->y2 <= 44.01f && l->y2 >= 32.99f, msg);
+        }
+        run("step.boom 1");
+    }
+}
+
+//==========================================================================
+// The robots' two marks
+//==========================================================================
+
+// Four costumes and not five, at the cabinet's own 8 x 12.  Slots 10 to 13 are
+// what the table beside `cache.man` reserved for them, and the fifth facing is
+// the flip.
+void test_the_robot_is_four_costumes_at_the_cabinets_size(void)
+{
+    int before = mock_device_get_state()->costume.snap_count;
+    run("setrefresh \"manual  cache.robots");
+    const MockDeviceState *st = mock_device_get_state();
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, st->costume.snap_count - before,
+        "the robot is not four costumes");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(8, st->costume.last_snap_w,
+        "the robot is not eight pixels wide, so the playfield is not 1:1");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(12, st->costume.last_snap_h,
+        "the robot is not twelve rows tall");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(13, st->costume.last_snap_slot,
+        "the four robot costumes are not slots 10 to 13");
+}
+
+// $1155 (walking left) IS $112C (walking right) MIRRORED, which is the claim
+// the whole slot budget rests on, and it is checkable rather than believable:
+// every row of one is the bit-reversal of the same row of the other.
+void test_the_roms_left_facing_robot_is_its_right_one_mirrored(void)
+{
+    static const int right[12] = { 60, 120, 255, 189, 189, 189, 60, 36, 36, 36, 54, 0 };
+    static const int left[12]  = { 60,  30, 255, 189, 189, 189, 60, 36, 36, 36, 108, 0 };
+
+    for (int r = 0; r < 12; r++)
+    {
+        int mirrored = 0;
+        for (int b = 0; b < 8; b++)
+            if (right[r] & (1 << b))
+                mirrored |= 1 << (7 - b);
+        char msg[128];
+        snprintf(msg, sizeof(msg),
+                 "row %d of $112C mirrors to %d, and $1155 has %d -- the flip is "
+                 "not the ROM's left-facing robot", r, mirrored, left[r]);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(left[r], mirrored, msg);
+
+        char e[48];
+        snprintf(e, sizeof(e), "item %d :rb4", r + 1);
+        snprintf(msg, sizeof(msg), "row %d of the game's own $112C is wrong", r);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)right[r], num(e), msg);
+    }
+}
+
+// The whole point of the flip: a robot walking west wears the same slot as one
+// walking east and differs only in the heading.  A second costume here would
+// be a slot M4's shooting poses need.
+void test_both_sides_of_a_robot_are_one_costume(void)
+{
+    no_robots();
+    run("setrot \"flip");
+    robot_at(1, 0, 40, 2, 1);       // RIGHT
+    mock_device_clear_graphics();
+    run("draw.robots");
+    int east_slot = mock_device_get_stamp(0)->shape;
+    float east_h = num("heading");
+
+    robot_at(1, 0, 40, 1, 1);       // LEFT
+    mock_device_clear_graphics();
+    run("draw.robots");
+    int west_slot = mock_device_get_stamp(0)->shape;
+    float west_h = num("heading");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(13, east_slot, "walking east is not slot 13");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(east_slot, west_slot,
+        "the robot walking west wears a costume of his own");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(90.0f, east_h, "walking east is not heading 90");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(270.0f, west_h, "walking west is not heading 270");
+}
+
+// The five facing groups of the ROM's sprite table ($252D) reached off the
+// DURL mask: standing, up, down, and the two horizontals that share a slot.
+// Every diagonal wears its horizontal, which is what the $1013 and $1027
+// groups do.
+void test_every_direction_wears_the_roms_own_facing(void)
+{
+    static const struct { int dir, slot; float face; } way[] = {
+        {  0, 10,  90.0f },  // standing
+        {  4, 11,  90.0f },  // up
+        {  8, 12,  90.0f },  // down
+        {  2, 13,  90.0f },  // right
+        {  1, 13, 270.0f },  // left
+        {  6, 13,  90.0f },  // up and right
+        {  5, 13, 270.0f },  // up and left
+        { 10, 13,  90.0f },  // down and right
+        {  9, 13, 270.0f },  // down and left
+        {  3, 10,  90.0f },  // left and right at once: the arcade's standing default
+        { 12, 10,  90.0f },  // up and down at once
+    };
+    no_robots();
+    run("setrot \"flip");
+    for (size_t k = 0; k < sizeof(way) / sizeof(way[0]); k++)
+    {
+        robot_at(1, 0, 40, way[k].dir, 1);
+        mock_device_clear_graphics();
+        run("draw.robots");
+        char msg[128];
+        snprintf(msg, sizeof(msg), "direction %d wore slot %d at heading %g",
+                 way[k].dir, mock_device_get_stamp(0)->shape, (double)num("heading"));
+        TEST_ASSERT_EQUAL_INT_MESSAGE(way[k].slot, mock_device_get_stamp(0)->shape, msg);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(way[k].face, num("heading"), msg);
+    }
+}
+
+// A costume is centred on the turtle at both ends, and a robot's stored
+// position is his sprite's TOP-LEFT corner -- an 8 x 12 sprite drawn from
+// (x, y) downward has its centre at (x + 3.5, y - 5.5), where the 8 x 16 man's
+// is at (x + 3.5, y - 7.5).  Getting it wrong draws him half a body from where
+// the walls test him.
+void test_a_robot_stamps_half_a_sprite_from_his_stored_corner(void)
+{
+    no_robots();
+    robot_at(1, -40, 60, 2, 1);
+    mock_device_clear_graphics();
+    run("draw.robots");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, mock_device_stamp_count(), "the robot is not one stamp");
+    const MockStamp *st = mock_device_get_stamp(0);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, -36.5f, st->x, "the stamp is not half a sprite east");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 54.5f, st->y, "the stamp is not half a sprite south");
+}
+
+// The eraser, and it is `erase.man`'s arithmetic at twelve rows: pen 3 is the
+// one wide pen that is a square, so three strokes at x + 1, x + 4 and x + 6
+// running from y - 1 down nine cover the 8 x 12 exactly.  A pen 8 stroke down
+// the spine would leave the corners behind and the robot would drag a trail in
+// every direction, which is what a board said about the man (B64).
+void test_the_erase_covers_every_pixel_a_robot_stamped(void)
+{
+    static bool covered[240][320];
+
+    no_robots();
+    robot_at(1, -40, 60, 2, 1);
+    mock_device_clear_graphics();
+    run("draw.robots");
+    const MockStamp *st = mock_device_get_stamp(0);
+    int sx0 = SCR_X(st->x) - 4, sy0 = SCR_Y(st->y) - 6;
+
+    mock_device_clear_graphics();
+    run("erase.robots");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, mock_device_line_count(),
+        "one robot is not three erase strokes");
+    erase_coverage(covered);
+
+    for (int y = 0; y < 12; y++)
+        for (int x = 0; x < 8; x++)
+        {
+            char msg[128];
+            snprintf(msg, sizeof(msg),
+                     "the robot's pixel %d,%d survives the erase -- he leaves a trail", x, y);
+            TEST_ASSERT_TRUE_MESSAGE(covered[sy0 + y][sx0 + x], msg);
+        }
+
+    // AND NOT ONE PIXEL MORE.  The walls are drawn once a room, so an eraser
+    // that spills eats a hole nothing repaints until the next doorway.
+    for (int y = sy0 - 3; y < sy0 + 15; y++)
+        for (int x = sx0 - 3; x < sx0 + 11; x++)
+        {
+            if (x >= sx0 && x < sx0 + 8 && y >= sy0 && y < sy0 + 12)
+                continue;
+            char msg[128];
+            snprintf(msg, sizeof(msg),
+                     "the robot eraser painted %d,%d, which is outside him and may be a wall",
+                     x - sx0, y - sy0);
+            TEST_ASSERT_FALSE_MESSAGE(covered[y][x], msg);
+        }
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, (int)num("pensize"),
+        "the eraser left the pen three wide, so the next wall is a slab");
+}
+
+// A DYING ROBOT IS ERASED TOO, because his explosion is drawn inside his own
+// box and nothing else is going to reach it.
+void test_a_dying_robot_is_still_erased(void)
+{
+    no_robots();
+    robot_at(1, -40, 60, 2, 1);
+    run("rob.dies 1");
+    mock_device_clear_graphics();
+    run("erase.robots");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, mock_device_line_count(),
+        "a dying robot was left on the screen");
+}
+
+//==========================================================================
+// The frame, with a room full of them
+//==========================================================================
+
+// Design section 18's fourth ceiling, at eleven robots rather than at one man:
+// nothing in this interpreter collects on demand, so a frame that spends
+// storage has a fuse on it.  M0's harness died `out of space in rob.left` on
+// its first board run with exactly this loop in it.
+//
+// MEASURED AS A TREND AND NOT AS A QUIET WINDOW, which is what M3 learned by
+// trying the quiet window first.  `mem_free_nodes()` is `free_count +
+// (node_bottom - atom_next) / 4` (core/memory.c): **the cell pool and the word
+// table are one arena growing from opposite ends**, so a robot walking into a
+// coordinate the workspace has not held reads as a spent NODE, and `recycle`
+// hands both back at once on the readout's own cadence.  Over nineteen frames
+// neither counter means what its name says.  M2's `test_an_ordinary_frame_
+// spends_no_cells` can still assert exact equality because one man's positions
+// are a small set that closes in a few dozen frames; eleven robots roaming a
+// 244 x 204 playfield are ~450 numbers an axis plus 352 spawn jitters, and the
+// man moves the target every frame.
+//
+// What the ceiling actually needs is that the workspace comes back to where it
+// started, and that is a trend over thousands of frames.  Peaks are compared
+// because a peak is a reading taken after a `recycle` and before the next
+// spend -- the level the arena settles at.  A leak of one cell a frame is six
+// thousand over this run, against a bound of 256.
+void test_a_full_room_of_robots_leaves_the_workspace_where_it_found_it(void)
+{
+    static const int ways[8][2] = {
+        { K_RIGHT, 0 }, { K_RIGHT, K_UP }, { K_UP, 0 }, { K_LEFT, K_UP },
+        { K_LEFT, 0 }, { K_LEFT, K_DOWN }, { K_DOWN, 0 }, { K_RIGHT, K_DOWN },
+    };
+    run("setrefresh \"manual  init.game");
+    in_room(9, 9);
+    run("make \"rob.ti 4  place.robots  make \"rob.tp 1  reset.man");
+
+    float n_early = 0.0f, n_late = 0.0f, a_early = 0.0f, a_late = 0.0f;
+    for (int i = 0; i < 6000; i++)
+    {
+        if (i % 500 == 0)
+        {
+            float n = num("nodes"), a = num("atoms");
+            if (i >= 500 && i < 3000) { if (n > n_early) n_early = n; if (a > a_early) a_early = a; }
+            if (i >= 3000)            { if (n > n_late)  n_late  = n; if (a > a_late)  a_late  = a; }
+        }
+        const int *way = ways[(i / 11) % 8];
+        press(way[0]);
+        if (way[1]) press(way[1]);
+        frame();
+        release(way[0]);
+        if (way[1]) release(way[1]);
+    }
+
+    char msg[240];
+    snprintf(msg, sizeof(msg),
+             "the free cell pool peaked at %g in the second half against %g in "
+             "the first, so a frame with eleven robots in it spends cells",
+             (double)n_late, (double)n_early);
+    TEST_ASSERT_TRUE_MESSAGE(n_late > n_early - 256.0f, msg);
+
+    snprintf(msg, sizeof(msg),
+             "the free word table peaked at %g in the second half against %g in "
+             "the first, so a robot's coordinates are not a closed set (B52)",
+             (double)a_late, (double)a_early);
+    TEST_ASSERT_TRUE_MESSAGE(a_late > a_early - 256.0f, msg);
+}
+
+void test_a_doorway_brings_a_new_crowd(void)
+{
+    run("setrefresh \"manual  init.game");
+    run("make \"room.x 3  make \"room.y 4  make \"rob.ti 4  draw.room");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(11.0f, num(":rob.live"),
+        "the first room was built without robots in it");
+
+    man_at(-96, 42);
+    mock_device_clear_graphics();
+    frame();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(12, mock_device_stamp_count(),
+        "an ordinary frame did not stamp eleven robots and a man");
+}
+
+
+// A DEATH RESTARTS THE ROOM, which M2 did not need and M3 cannot do without:
+// he respawns in the left doorway cell and the thing that killed him is
+// standing there.  The crowd comes back on the eleven spawn cells -- the
+// fifteen less the four doorway cells -- so the cell he arrives in is the one
+// cell no robot starts in.  Same room, same maze, same threshold, because a
+// death is not a doorway.
+void test_a_death_restarts_the_room_around_him(void)
+{
+    run("setrefresh \"manual  init.game");
+    run("make \"room.x 6  make \"room.y 2  make \"rob.ti 4  "
+        "make \"rob.tp 4  draw.room");
+    man_at(2, 40);
+
+    // Kill him, and move the crowd well away from where they started, so a
+    // room that did NOT rebuild would leave them where the test put them.
+    run("repeat 11 [.setitem repcount :r.x 60  .setitem repcount :r.y 40]");
+    run("man.dies");
+    for (int f = 0; f < 16; f++)
+        frame();
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":p.dying"), "he never came back");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-96.0f, num(":p.x"), "he did not respawn at the doorway");
+    TEST_ASSERT_TRUE_MESSAGE(num(":rob.live") > 0.0f, "the crowd did not come back");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(6.0f, num(":room.x"), "the death moved him to another room");
+
+    // AND IT COSTS HIM DIFFICULTY, which is the cabinet charging for a death
+    // rather than resetting the room around him: $1806 is the per-life entry
+    // and it calls the same $209D a doorway does, so $20D8 and $20E1 run.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":rob.ti"),
+        "a death did not advance the threshold, but it re-enters the same room init");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2.0f, num(":rob.tp"),
+        "a death did not speed the robots up");
+
+    // Nobody is standing on him, which is the whole point.  The spawn cells are
+    // the fifteen less the four doorway cells and he comes back in a doorway
+    // cell, so this is arithmetic rather than luck.
+    for (int i = 1; i <= 11; i++)
+    {
+        if (robot_state(i) != 1)
+            continue;
+        char msg[160];
+        snprintf(msg, sizeof(msg), "robot %d respawned within reach of him at %g,%g",
+                 i, (double)robot_x(i), (double)robot_y(i));
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(robot_x(i) - num(":p.x")) >= 8.0f ||
+                                 robot_y(i) - 12.0f >= num(":p.y") ||
+                                 num(":p.y") - 16.0f >= robot_y(i), msg);
+    }
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":p.dying"),
+        "he was killed again the frame he came back");
+}
+
+
+// A FRAME THAT BUILDS A ROOM WRITES NO TEXT, which is M3's widening of M2's
+// "one text job a frame" and came off a board: `WORST` read 100 ms at `fast`
+// where an ordinary frame was 53 and ROOM was 23.  M2's rule serialised the
+// two text jobs against each other and stopped there, because a room build was
+// then 11 ms; `place.robots` put it at 23, which makes it a third job of the
+// same size -- and `show.text` used to run at the top of the frame, where
+// nothing yet knows a doorway is coming.
+//
+// So it runs at the END of the body now, and a build claims the frame.  The
+// masks were already deferred and stay deferred; what is new is that the
+// once-a-second readout gives way too.
+void test_a_frame_that_builds_a_room_writes_no_other_text(void)
+{
+    run("setrefresh \"manual  init.game");
+    man_at(119, 42);                 // one step from the right-hand doorway
+    press(K_RIGHT);
+
+    // Force the collision: the second's beat falls on the frame he leaves in.
+    run("make \"frames 19  make \"masks.due false");
+    mock_device_clear_output();
+    frame();
+    release(K_RIGHT);
+    const char *screen = mock_device_get_output();
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":room.x"), "he did not go through the door");
+    TEST_ASSERT_NULL_MESSAGE(strstr(screen, "FRAME"),
+        "the timing rows were written in the frame that built a room");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":room.built"),
+        "the build flag was not cleared, so the next frame is silent too");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":masks.due"),
+        "the doorway's masks were not deferred");
+
+    // And nothing is owed forever: the masks take the next frame and the
+    // timing rows the one after their next beat.
+    mock_device_clear_output();
+    frame();
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":masks.due"),
+        "the masks never came back");
+
+    run("make \"frames 19");
+    mock_device_clear_output();
+    frame();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mock_device_get_output(), "FRAME"),
+        "the timing rows never came back");
+}
+
+
+//==========================================================================
+// The clock is a precondition (design section 15.5)
+//==========================================================================
+
+// §15.5 called 300 MHz a precondition rather than a preference, and M3's board
+// reading made it a measurement: at `fast` an ordinary frame with eleven robots
+// is 53 ms, and at `normal` the body roughly doubles and there is nothing to
+// play.  So the game asks for the clock, READS IT BACK, and does not start
+// without it -- Battlezone's `clock`/`restore.clock` pair, which is the same
+// problem with a different frame budget on it.
+void test_the_game_asks_for_the_fast_clock_and_reads_it_back(void)
+{
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of("clock"),
+        "the game would not play on a board that took the clock");
+    TEST_ASSERT_EQUAL_STRING("fast", word_of(":cpu.at"));
+
+    // Asked for on the HARDWARE and not just recorded: `hw.cpu` reads the board
+    // back, so a `cpu.at` of "fast without the clock having moved would mean
+    // the read was answering from memory.
+    TEST_ASSERT_EQUAL_UINT32(LOGO_CPU_KHZ_FAST, mock_cpu_khz);
+}
+
+// B50: a game that leaves the board overclocked has changed the machine and not
+// just played on it, and on a board with PSRAM that is not merely impolite --
+// the QMI's timing is computed once at boot against the clock running then.
+// It restores what it FOUND, so a session that was already fast stays fast.
+void test_the_game_gives_the_clock_back_when_it_exits(void)
+{
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+    run("ignore clock");
+    TEST_ASSERT_EQUAL_UINT32(LOGO_CPU_KHZ_FAST, mock_cpu_khz);
+    run("restore.clock");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(LOGO_CPU_KHZ_NORMAL, mock_cpu_khz,
+        "the game left the board overclocked");
+
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_FAST);
+    run("ignore clock");
+    run("restore.clock");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(LOGO_CPU_KHZ_FAST, mock_cpu_khz,
+        "the game undid a clock it did not set");
+
+    // A board with no settable clock has no `hw.cpu` at all, which is what the
+    // `catch`es are for: nothing to put back, and it must not error.
+    set_mock_cpu_khz(false, LOGO_CPU_KHZ_NORMAL);
+    run("ignore clock");
+    run("restore.clock");
+    TEST_ASSERT_EQUAL_STRING("unknown", word_of(":cpu.was"));
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+}
+
+// AND A BOARD THAT WILL NOT OVERCLOCK IS TOLD WHY, which is the whole point of
+// bringing this forward from M6.  "Unplayable" with no explanation is the worst
+// of the three outcomes; the attract screen §21 risk 6 asks for is still M6's,
+// and what M3 owes is the sentence.
+void test_a_board_that_will_not_overclock_is_told_why_and_does_not_play(void)
+{
+    set_mock_cpu_khz(false, LOGO_CPU_KHZ_NORMAL);
+    int costumes = mock_device_get_state()->costume.snap_count;
+    mock_device_clear_output();
+
+    run("berzerk");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(costumes, mock_device_get_state()->costume.snap_count,
+        "the game started on a board that cannot run it");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mock_device_get_output(), "300 MHz"),
+        "the board was refused without being told why");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(MOCK_SCREEN_TEXT,
+        mock_device_get_state()->screen_mode, "the refusal left the split screen up");
+    set_mock_cpu_khz(true, LOGO_CPU_KHZ_NORMAL);
+}
+
+
+// THE SPAWN TABLE IS THE ARCADE'S $23A0 AND NOT THE VECTREX PORT'S GLOSS OF IT,
+// which is where M0 got it and where two errors came in and survived to M3.
+//
+//   * They are (x, y) pairs, not (y, x).  $23B8 does `push bc / pop de` then
+//     `ld (ix+7),d` for P.X and `ld (ix+9),e` for P.Y, so the FIRST byte is x.
+//     The check is that the second byte takes only three values -- 12, 80, 150
+//     -- which is the three rows of a 5 x 3 grid.
+//   * The jitter is UNSIGNED.  $2130-$213C is `RANDOM / and $1F / add a,b` in
+//     each axis: 0 to 31 ADDED.  The table holds the top-left of a spawn band,
+//     four pixels into its cell; it does not hold cell centres, and subtracting
+//     16 from it (which is what this game used to do) puts robots half a cell
+//     from where the cabinet starts them.
+//
+// Eleven bands on the fifteen cells less the four doorway cells, which is why
+// there are exactly eleven robots.
+void test_the_spawn_bands_are_the_cabinets_own(void)
+{
+    // Each band, as turtle coordinates: x + 0..31 and y - 0..31.
+    static const float band[11][2] = {
+        {  80.0f,  -8.0f }, {  34.0f, -8.0f }, { -62.0f,  -8.0f }, { -114.0f,  -8.0f },
+        {  32.0f,  62.0f }, { -14.0f, 62.0f }, { -62.0f,  62.0f },
+        {  80.0f, 130.0f }, {  34.0f, 130.0f }, { -62.0f, 130.0f }, { -114.0f, 130.0f },
+    };
+    for (int i = 0; i < 11; i++)
+    {
+        char e[64], msg[160];
+        snprintf(e, sizeof(e), "item %d :rob.sx", i + 1);
+        snprintf(msg, sizeof(msg), "spawn band %d is not at the ROM's x", i + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(band[i][0], num(e), msg);
+        snprintf(e, sizeof(e), "item %d :rob.sy", i + 1);
+        snprintf(msg, sizeof(msg), "spawn band %d is not at the ROM's y", i + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(band[i][1], num(e), msg);
+    }
+
+    // And the jitter lands inside the band, above and left of nothing: over
+    // enough rooms every robot is at or after its band's corner, and within 31.
+    bool saw_corner_x = false, saw_far_x = false;
+    for (int r = 0; r < 80; r++)
+    {
+        in_room(r % 8, r / 8);
+        run("make \"rob.ti 4  place.robots");
+        for (int i = 1; i <= 11; i++)
+        {
+            float dx = robot_x(i) - band[i - 1][0];
+            float dy = band[i - 1][1] - robot_y(i);
+            char msg[192];
+            snprintf(msg, sizeof(msg),
+                     "robot %d landed %g,%g from its band, which is not `random and 31` added",
+                     i, (double)dx, (double)dy);
+            TEST_ASSERT_TRUE_MESSAGE(dx >= 0.0f && dx <= 31.0f, msg);
+            TEST_ASSERT_TRUE_MESSAGE(dy >= 0.0f && dy <= 31.0f, msg);
+            if (dx < 2.0f)  saw_corner_x = true;
+            if (dx > 29.0f) saw_far_x = true;
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(saw_corner_x && saw_far_x,
+        "the jitter never reached both ends of its 32-step band");
 }
 
 //==========================================================================
@@ -1708,5 +2831,40 @@ int main(void)
     RUN_TEST(test_berzerk_puts_the_screen_back);
     RUN_TEST(test_the_game_sets_up_in_window_mode_and_flips);
     RUN_TEST(test_the_game_is_inside_the_procedure_ceiling);
+
+    RUN_TEST(test_a_robot_walks_straight_at_the_man);
+    RUN_TEST(test_seek_aims_two_below_the_mans_corner);
+    RUN_TEST(test_iq_clears_the_directions_a_wall_forbids);
+    RUN_TEST(test_iq_leaves_an_open_cell_alone);
+    RUN_TEST(test_a_robot_in_the_players_cell_is_not_probed);
+    RUN_TEST(test_iq_reuses_its_answer_until_a_corner_crosses);
+    RUN_TEST(test_the_robot_count_is_a_five_room_cycle);
+    RUN_TEST(test_the_full_room_is_always_eleven);
+    RUN_TEST(test_the_first_room_is_the_second_of_the_cycle);
+    RUN_TEST(test_the_crowd_reproduces_for_a_room_and_a_threshold);
+    RUN_TEST(test_the_spawn_bands_are_the_cabinets_own);
+    RUN_TEST(test_no_robot_spawns_touching_a_wall);
+    RUN_TEST(test_a_robot_moves_at_the_arcades_reload_rate);
+    RUN_TEST(test_a_robot_never_leaves_the_room);
+    RUN_TEST(test_two_robots_that_meet_both_die);
+    RUN_TEST(test_robots_level_with_each_other_do_not_touch);
+    RUN_TEST(test_a_robot_in_the_players_cell_walks_into_a_wall_and_dies);
+    RUN_TEST(test_a_robot_that_reaches_the_man_kills_him);
+    RUN_TEST(test_the_explosion_is_four_frames_and_then_the_slot_is_empty);
+    RUN_TEST(test_the_explosion_stays_inside_the_robots_own_box);
+    RUN_TEST(test_the_robot_is_four_costumes_at_the_cabinets_size);
+    RUN_TEST(test_the_roms_left_facing_robot_is_its_right_one_mirrored);
+    RUN_TEST(test_both_sides_of_a_robot_are_one_costume);
+    RUN_TEST(test_every_direction_wears_the_roms_own_facing);
+    RUN_TEST(test_a_robot_stamps_half_a_sprite_from_his_stored_corner);
+    RUN_TEST(test_the_erase_covers_every_pixel_a_robot_stamped);
+    RUN_TEST(test_a_dying_robot_is_still_erased);
+    RUN_TEST(test_a_full_room_of_robots_leaves_the_workspace_where_it_found_it);
+    RUN_TEST(test_a_doorway_brings_a_new_crowd);
+    RUN_TEST(test_a_death_restarts_the_room_around_him);
+    RUN_TEST(test_a_frame_that_builds_a_room_writes_no_other_text);
+    RUN_TEST(test_the_game_asks_for_the_fast_clock_and_reads_it_back);
+    RUN_TEST(test_the_game_gives_the_clock_back_when_it_exits);
+    RUN_TEST(test_a_board_that_will_not_overclock_is_told_why_and_does_not_play);
     return UNITY_END();
 }

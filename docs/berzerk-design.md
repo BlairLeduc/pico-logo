@@ -201,12 +201,15 @@ pixel outside him is touched**. That is a stronger guarantee than the margin
 above — the eraser cannot reach a wall even standing against one — so §8.3's
 extra step is now a belt rather than the braces.
 
-**The same eraser is in `tests/logo/p15m0`, which is where §3's numbers come
-from** ([B65](bugs.md), open). The in-place body of 69.90 ms at eleven robots
-was measured with one pen-8 stroke a figure where a correct eraser is three
-pen-3 strokes, so the erase pass is understated and in-place's 7.7 ms margin
-over clear-and-redraw is the thing at risk. **M3 owns the re-read**, because M3
-is where eleven robots arrive and where §3's verdict is actually spent.
+**The same eraser was in `tests/logo/p15m0`, which is where §3's numbers come
+from** ([B65](bugs.md), **fixed at M3 on 2026-08-30**). The in-place body of
+69.90 ms at eleven robots was measured with one pen-8 stroke a figure where a
+correct eraser is three pen-3 strokes, so the erase pass was understated and
+in-place's 7.7 ms margin over clear-and-redraw is the thing at risk. The
+harness now carries the game's own eraser — **39 strokes for thirteen figures
+where it was doing 13**, and five for Otto, who is a pen drawing and whose
+bounce moves him — so the numbers it reports are honest. **The re-read is a
+board reading and it is M3's**, together with M3's own.
 
 Both strategies present with `sync`, so neither shows a frame being drawn; the
 refresh *mode* is orthogonal to the erase *strategy*
@@ -375,6 +378,20 @@ it to re-probe, and a robot only compares the cell it is in against the cell it
 was in if it has a previous cell — which is why M0 could not measure the saving
 either. What M1 does own is `cell.at` itself, which is the room's whole public
 interface from M2 on.
+
+**TAKEN 2026-08-30 at M3, and the cache key is two corners rather than four.**
+The straight port pays six `cell.at` calls a robot a frame — the four corners,
+the robot's own cell for $1C92, and the player's. The game pays **three**: the
+player's is hoisted once a frame in `logic.robots`, the robot's own is the
+$1C92 test and cannot be avoided (§9.3 explains why it must not be), and the
+four corners collapse to two. That last one is exact and not a heuristic: the
+probe box is axis-aligned, so its four cells are the two columns crossed with
+the two rows, and **the top-left and bottom-right cells name all four**. If
+those two are unchanged the blocked mask cannot have moved, and the other two
+`cell.at` calls run only on the frame a corner actually crosses — about one in
+twenty. `test_iq_reuses_its_answer_until_a_corner_crosses` poisons the cached
+mask and watches `iq` hand the poison back, which is the only way to see from
+outside that it did not probe.
 
 ## 7. The figures
 
@@ -579,6 +596,19 @@ dots from the death point, which is six short strokes a frame for four frames
 and costs no slot at all. M3 decides against the slot budget rather than on
 looks.
 
+**DECIDED 2026-08-30 at M3: the strokes, and they stay inside the robot's own
+8 × 12.** The slot half was arithmetic — §7.4's table spends thirteen of
+fifteen and the two spare are M5's Otto and M7's polish, so four explosion
+frames were never available. The second half was not, and it is B64's lesson
+applied before a board could teach it again: **a cloud that spreads needs an
+eraser that spreads with it**, pen 3 is the only wide pen that does not spill,
+and five or seven pen-3 strokes to erase six is a bad trade against a wall the
+eraser would eat if it ever got one wrong. Strokes inside the sprite's own box
+are erased by the sprite's own eraser, exactly, and cost the frame nothing it
+was not already paying. At 1:1 on this panel an 8 × 12 figure coming apart in
+place reads as a robot disintegrating; a ±6 spread would be a figure and a half
+of noise.
+
 **The player** is *electrocuted*, which is a different thing and the arcade
 gives it its own sprite ($12B3) and a 45-tick pause ($1FB6). The Vectrex wobbles
 the man's scale through `PlayerFriedScales` — `08 07 06 05 05 05 06 07 08 09 08
@@ -753,6 +783,17 @@ with `daa` ($20D8), so it cycles `60, 20, 80, 40, 00` and repeats with period
 five. Robot count per room is therefore not a ramp at all — it is a five-room
 cycle:
 
+**AND THE FIRST ROOM USES `$20`, NOT `$60` — corrected at M3, 2026-08-30 against
+the disassembly.** The add happens **before** the placement: `$209D` is
+"initialise a new game room", `$20D8` is the first thing in it and `$2117` the
+last, and `DEFAULT_PLAYER_STATE` ($187F) starts `$434A` at `$60`. So the first
+room a player ever sees is the **87.5 % one — 9.6 robots** — and the sequence
+*used* is `20, 80, 40, 00, 60`. The probability table below is already in that
+order; the prose above is in the stored order, and the prose is the one that
+misleads. **This makes the opening room the second-most crowded of the five**,
+which is a materially harder game than "it ramps up", and it puts eleven robots
+in the *fourth* room of every game rather than somewhere later.
+
 | threshold | P(robot per slot) | expected robots |
 |---:|---:|---:|
 | `$20` | 87.5 % | 9.6 |
@@ -762,9 +803,34 @@ cycle:
 | `$60` | 62.5 % | 6.9 |
 
 Position comes from an eleven-entry table indexed by the same counter, plus
-`random and 31` of jitter in each axis ($2127–$213D). The Vectrex's copy of
+`random and 31` of jitter in each axis ($2127–$213D). ~~The Vectrex's copy of
 that table is legible (`RobotStartingPositionTable`, y,x pairs) and is the one
-to transcribe.
+to transcribe.~~
+
+**CORRECTED AT M3, 2026-08-30 — transcribe `$23A0` itself, because the gloss
+above is wrong twice and M0 inherited both.**
+
+- **They are `(x, y)` pairs, not `(y, x)`.** `$23B8` does `push bc / pop de`
+  and then `ld (ix+$07),d` for `P.X` and `ld (ix+$09),e` for `P.Y`, so the
+  *first* byte of a pair is x. The check is that the second byte takes only
+  three values — 12, 80, 150 — which is the three rows of a 5 × 3 grid.
+- **The jitter is unsigned.** `$2130`–`$213C` is `RANDOM / and $1F / add a,b`
+  in each axis: **0 to 31 added**. The table holds the **top-left of a spawn
+  band**, four pixels into its cell, and the 32 that follow spread the robot
+  through it. It does not hold cell centres, and subtracting 16 — which is what
+  "cell centres" invites, and what this port did until M3 — starts every robot
+  half a cell from where the cabinet starts it.
+- **The order is 22 down to 2.** `$2117` loads the counter with `$16` and steps
+  it back by two, indexing the table by the counter, so the *first* slot placed
+  is the *last* pair and offset 0 is never read at all. The order decides which
+  slot gets which draw from the room's stream, so a port that reads the table
+  forwards reproduces a different room from the same seed.
+
+The eleven bands, as turtle coordinates in the ROM's own visiting order, are
+`x` ∈ {80, 34, −62, −114} on `y` = −8, `x` ∈ {32, −14, −62} on `y` = 62, and
+`x` ∈ {80, 34, −62, −114} on `y` = 130 — the fifteen cells less the four
+doorway cells, four along the bottom, three across the middle and four along
+the top.
 
 ### 9.2 Seek is four comparisons
 
@@ -780,6 +846,24 @@ Direction is the four DURL bits — `LEFT 1, RIGHT 2, UP 4, DOWN 8` — and the
 `+2` is the arcade compensating for the player being taller than a robot. That
 is it: robots walk straight at you and their entire tactical repertoire is
 walking into things.
+
+**Audited line by line at M3 and it transfers exactly**, along with the three
+things around it that the budget depends on. `SETPAT` ($2436) calls `IQ` only
+when the direction is non-zero and returns early when it has not changed;
+`SET_VELOCITY` ($2B3D) reads `VELOCITY_TABLE` ($2519), whose entries are **±1
+in each axis with the diagonals ±1 in both** — so a diagonal really is √2
+faster, and the port's two independent deltas are the cabinet's; and
+`MOVE_ANIMATE_VECTOR` ($27A9) is `dec (hl)` on `VECTOR.TIME` with `ret nz`,
+reloading from `TPRIME` — **one pixel per expiry and nothing else**, which is
+what makes a whole-pixel accumulator the faithful port rather than a
+convenience. `ROBOT_ANIMATION_TABLES` ($252D) confirms the nine directions
+collapse to the five facing groups this port draws.
+
+**Thinking and moving are decoupled in the cabinet too**, which is worth
+stating because the frame budget rests on it: `SEEK` ends in `STOP_JOB` and
+loops, so a robot re-thinks once per scheduler pass while its *movement* is
+driven independently by `TIME`/`TPRIME`. Seeking once a frame and moving up to
+three pixels is that structure, not an approximation of it.
 
 ### 9.3 `IQ` is the wall avoider, and it is deliberately stupid
 
@@ -807,9 +891,44 @@ with each other or run into walls"). There is also a shortcut worth keeping:
 if the robot and the player are in the *same* cell, `IQ` returns the desired
 direction untouched ($1C92) — no probing at all.
 
+**M3 FOUND THAT THE SHORTCUT *IS* THE CORNER SUICIDE, and that tightening it
+would delete the mechanism this section is protecting** (2026-08-30). With the
+cell-mask model replacing the cabinet's pixel intercept, every other path
+through `IQ` is airtight, and the reason is in the offsets themselves: the
+probe box is (−4, +4) to (+12, −15) about the robot's corner, his collision box
+is (−1, +1) to (+8, −12), and he moves at most three steps a frame. **The probe
+box is exactly the collision box grown by one frame's travel in every
+direction** — so any cell the swept box can occupy is a cell a probe already
+read, and the direction is cleared before the step that would have landed on
+ink. That is not a coincidence and it is the strongest argument yet that these
+offsets were chosen rather than inherited.
+
+Which leaves $1C92. A robot in the player's own cell is not probed, so he
+walks, and if his box crosses a walled edge he dies of it — and that is the
+whole of the corner suicide in this port. The tighter version costs nothing and
+is very easy to write: ask instead whether the robot's whole *probe box* is in
+the player's cell, and the two corners are already in hand. **Do not.** It
+turns eleven robots that occasionally kill themselves into eleven robots that
+never do, and it does it silently, because nothing else about the game changes.
+
 Robot speed is `ROBOT_SPEED`, which starts at **5** and **decrements by one per
-room, floor 1** ($20E1). The player is 2. So robots begin slower than you and
-are faster than you from the fifth room on, permanently.
+room, floor 1** ($20E1). The player is 2. ~~So robots begin slower than you and
+are faster than you from the fifth room on, permanently.~~
+
+**CORRECTED AT M3: the first room already runs at 4, and the FOURTH is at the
+floor.** `$20E1` sits in the same block as the threshold and runs before the
+first placement, so the decrement that "starts at 5" is spent before a robot
+exists. Room by room it is 4, 3, 2, 1, 1, 1 … — robots are faster than the
+player from **room three** and at double his rate from room four, for the rest
+of the game.
+
+**AND A DEATH ADVANCES BOTH COUNTERS, because it is a room build.** `$1806` is
+the per-life entry — it reloads `MAN_X`/`MAN_Y`, calls the same `$209D`, and
+decrements `DEATHS` after — so dying speeds the robots up and moves the
+threshold on exactly as walking through a doorway does. **The cabinet charges
+you for a death rather than resetting the room around you**, and a port that
+puts the two counters on the doorway path alone (which this one did until M3)
+quietly makes dying free.
 
 ## 10. Bolts
 
@@ -939,8 +1058,54 @@ man's", expressed in the arcade's own currency. And **`RWAIT` is separately
 decremented by 10 per room, floor 10** ($20F7), on top of whatever the table
 set, so the table sets the level and the room walks it down.
 
-The fifth column is a colour, which this port has no use for; the game is white
-on black like the other two.
+~~The fifth column is a colour, which this port has no use for; the game is white
+on black like the other two.~~
+
+### 13.1 The colour column, decoded (2026-08-30)
+
+**Recoverable in full, and it is one byte that colours the robots *and* the
+walls** — `$36E5` reads it as `ld c,(hl) ; read byte 4: robot colour (used for
+wall colouring)`. The hardware is `8000`–`87ff`, "Color look-up `(RGBI,RGBI)`
+… maps 4×4 colour boxes into one of 16 colours": **two 4-bit colours per byte,
+one per 4 × 4 box**. Every colour in both tables is a doubled nibble, so the
+unit is a single 4-bit RGBI value.
+
+**The bit order is pinned by two comments in the ROM's own test screens**, not
+inferred: `$077C` fills the attribute RAM with `$11` and calls it *Red*, and
+`$3640` fills with `$CC` for *blue*. So **bit 0 = R, bit 1 = G, bit 2 = B,
+bit 3 = I** — and `$FF` is white, which `COLOUR_FILL_WHITE` agrees with.
+
+| score < | byte | RGBI | colour |
+|---:|---|---|---|
+| 300 | `$33` | `0011` | yellow |
+| 1,500 | `$99` | `1001` | bright red |
+| 3,000 | `$66` | `0110` | cyan |
+| 4,500 | `$AA` | `1010` | bright green |
+| 6,000 | `$55` | `0101` | magenta |
+| 7,500 | `$BB` | `1011` | bright yellow |
+| 9,000 | `$FF` | `1111` | white |
+| — | `$FF` | `1111` | white |
+
+From 10,000 ($37BC): `$FF` white, `$66` cyan, `$DD` bright magenta, `$77` grey,
+`$33` yellow, `$99` bright red, `$EE` bright cyan.
+
+**`C.WALLS`' compositing does not port and does not need to.** It is
+`attribute = (~screen & c) | (screen & $44)` — the difficulty colour laid into
+the boxes where no pixel is set, with bits 2 and 6 forced on where one is,
+which tints a box green-ward wherever a wall sprite's own columns land. That is
+a bitwise trick against 4-pixel-wide wall sprites and 4 × 4 attribute boxes,
+and this port has neither. **What ports is the sentence underneath it: each
+difficulty band has a colour, and it is worn by the robots and the walls.**
+
+**Two things gate it, and neither is a colour problem.** The table is indexed
+by the **score**, which is §12's and lands at M6 — the colour arrives with the
+other four columns or not at all. And the figures are **costumes**: `snapsh`
+bakes the pixels, so recolouring the robots and the man means re-rendering and
+re-capturing eight slots at §18's measured ~18 ms each, **~140 ms**. That is
+affordable only because the colour changes on a *score band* and not on a room
+— seven times below 10,000 — so it is a rare cost at a transition rather than a
+frame cost. The walls are free: one `setpc` before `draw.walls`, which already
+runs once a room.
 
 **This whole section is a table and two lookups**, and it is the cheapest
 faithfulness in the document.
@@ -1443,7 +1608,7 @@ Each leaves `ctest --preset=tests` green, and each ends with a board reading.
 | **M0** | The measurement harness | **DONE 2026-08-29 — all six questions answered on a Pico 2 W, gate FAILED at 77.35 ms against 50** (106.30 before §7's figures changed). Erase strategy decided: **erase-in-place**, once the figures are stamps. §15.3, and the decision it leaves is §22 Q2 |
 | M1 | The room | **DONE 2026-08-30.** The maze is a function of `(room.x, room.y)`; walk out and back and it is the same room. Read on a board at both clocks: a room change is **30 ms at `fast`** (worst 33) and 44 at `normal`, which is M0's parts to 3 %. §19's M1 note |
 | M2 | The man | **DONE 2026-08-30.** Walls kill, doors work, and the eight directions read right on the keyboard. 35 procedures, 40 host tests, `ctest` green at 84/84, and read on a board four times: the frame fits at both clocks, and [B64](bugs.md) (the eraser) and [B66](bugs.md) (the end of a wall) came back from it. The milestone's own decision was §7.4's: `setrot "flip`, which takes the cabinet's inventory from twenty-one costumes to thirteen of fifteen. §19's M2 note |
-| M3 | The robots | Seek, `IQ`, the count cycle, robots killing robots |
+| M3 | The robots | **DONE 2026-08-30, read on a board, and the gate fails by three milliseconds — deferred to M4 with §22 Q2.** `fast`: HUD 24, FRAME 53, WORST 100 (a defect, fixed, ~76 predicted), ROOM 23; `normal` unplayable. An ordinary frame at eleven robots is **53 ms against 50 — 18.9 fps**, better than §15.3's 55–59 projection and still over. §15.5's clock precondition came forward from M6 with the reading. 51 procedures, 74 host tests. §19's M3 note Seek, `IQ` with §6.3's cell-crossing cache, the five-room count cycle, ROBOT_SPEED as the arcade's reload counter, robots killing robots and killing the man, and the explosion. 48 procedures, 70 host tests, `ctest` green at 84/84. Three decisions and one finding, all in §19's M3 note; [B65](bugs.md) fixed with it |
 | M4 | The bolts | Both bolt kinds, the three firing windows, the alignment rule confirmed against MAME (§10.2) |
 | M5 | Evil Otto | The timer arithmetic, walls ignored, robots eaten |
 | M6 | The campaign, the sound and the voice | Both difficulty tables, lives, bonus, the attract screen, the effects off the ROM, and §14.2's four fixed sentences spoken with `say` and captioned |
@@ -1892,6 +2057,168 @@ twenty. `test_the_word_table_converges` walks the man two thousand frames and
 requires the second thousand to spend nothing at all: bounded, not
 zero-per-frame, which is the property §18 actually needs.
 
+### M3 — the robots, and the shortcut that must not be tightened (2026-08-30)
+
+**READ ON A BOARD 2026-08-30, and the gate fails by three milliseconds:
+`fast` gives HUD 24, FRAME 53, WORST 100, ROOM 23, and `normal` is
+unplayable.** 48 procedures against §18's budget of 100, 71 host tests, `ctest`
+green at 84/84.
+
+**FRAME is the number, and 53 is an ordinary frame.** `sync` pads a frame that
+fits to exactly the period, so 50 means *inside budget* and anything above it
+is the body; and `show.timing` prints the **previous** frame's period, which is
+an ordinary one rather than the one carrying the readout. So eleven robots cost
+**53 ms — 18.9 fps, three milliseconds over a 50 ms gate.** That is better than
+§15.3 projected (55–59 ms with all three savings, ~55 with Otto cached) and a
+long way under what M0 measured for the same eleven robots (77.35), and it is
+still over.
+
+| | M0, stamped | M2, no robots | M3 |
+|---|---:|---:|---:|
+| ordinary frame at `fast` | 77.35 | 50 (paced) | **53** |
+| room build | — | 11 | **23** |
+| mask readout | — | 22 | 24 |
+| worst frame | 80 | 51 | **100 → ~76** |
+
+**ROOM went from 11 to 23 because `place.robots` is inside the build**, which
+is where the sampler belongs — it draws from the room's own stream immediately
+after the maze, as $2117 does after $25EB.
+
+**WORST 100 was a defect and is fixed, and it is M2's own rule not drawn wide
+enough.** M2 established "one text job a frame" because text is not batched by
+`sync` and a character costs ~0.33 ms wherever it is written; it serialised the
+masks against the timing rows and stopped there, because a room build was then
+11 ms. At 23 a room build is a **third job of the same size**, and `show.text`
+ran at the *top* of the frame, where nothing yet knows a doorway is coming — so
+a doorway could carry the ordinary body, the build and the readout together:
+53 + 23 + ~20 is the 100. `draw.room` now raises `room.built`, `show.text` runs
+at the **end** of the body and a frame that built a room writes nothing else.
+Predicted worst is now ~76 — an ordinary body plus a build — and the next board
+run is the check.
+
+**`normal` is no longer a second column**, and that is §15.5 measured rather
+than argued: at half the clock the body roughly doubles and there is nothing to
+read. The clock is a precondition. The game does not yet *say* so, because §21
+risk 6 puts that on the attract screen, which is M6's.
+
+**So §22 Q2 is live, and it is a scope decision rather than a measurement.**
+Three milliseconds is one robot at the measured slope, or the 55 ms / 18 fps
+gate this section chose as 50/20 by argument rather than measurement — and M4's
+bolts spend the margin either way. **Deferred to M4 on 2026-08-30**: a cap
+chosen against 53 would have to be chosen again against whatever the bolts
+read, so M4 is built against eleven robots and the 50 ms gate and the next
+board session prices the whole thing at once.
+
+**And §15.5's clock precondition came forward from M6, which is the other
+thing the reading decided.** "Unplayable at `normal`, with no explanation" is
+the worst of the three outcomes, and the fix is Battlezone's shipped pattern
+rather than a new idea: `clock` asks for `fast` and reads `hw.cpu` **back off
+the hardware**, so a board that declined cannot report an overclock it did not
+get; the game does not start without it; and `restore.clock` gives back what
+it *found*, so a session that was already fast stays fast ([B50](bugs.md)). A
+board with no settable clock has no `hw.cpu` at all, which is what the `catch`
+is for, and it answers the same way. §21 risk 6's attract screen is still M6's
+— what M3 owed is the sentence, and `no.clock` is it. **51 procedures and 74
+host tests** with the three of them in.
+
+**What is in it.** `seek` ($23EF), `iq` ($1C6E) with §6.3's cache, the
+rejection sampler at $2117 with $434A's five-room threshold cycle,
+`ROBOT_SPEED` as the arcade's reload counter, the four robot costumes in slots
+10–13 with the fifth facing supplied by `setrot "flip`, robots killing robots,
+robots killing the man, and §7.6's explosion. There is no bolt and no Otto;
+those are M4 and M5.
+
+**The finding is §9.3's, and it is the one that would have been silently lost.**
+With the cell masks replacing the cabinet's pixel intercept, `IQ` turns out to
+be airtight in every direction — the arcade's probe offsets are the robot's
+collision box grown by exactly one frame's travel, so any cell the swept box
+can occupy is a cell a probe already read. **A robot therefore cannot walk onto
+a wall, except through $1C92**, the shortcut that skips probing when the robot
+is in the player's own cell. That shortcut *is* the corner suicide both manuals
+teach as strategy. Tightening it costs nothing and is very easy to write — ask
+whether the robot's whole probe box is in the player's cell, since both corners
+are already in hand — and it deletes the mechanism without changing anything
+else about the game. §9.3 now says so in as many words, and
+`test_a_robot_in_the_players_cell_walks_into_a_wall_and_dies` pins it.
+
+**AND THEN THE MOVEMENT WAS AUDITED LINE BY LINE AGAINST
+[`berzerk-source-arcade.asm`](berzerk-source-arcade.asm), which is in this
+tree and which M0 never opened** (2026-08-30). `SEEK`, `IQ`, the DURL bits, the
+`+2`, the ±1 velocities with √2 diagonals, the five facing groups, one pixel
+per `TIME` expiry, the `random >= threshold` sampler and the BCD threshold
+cycle all transfer exactly. **Three things did not, and all three came from
+building M0 on the Vectrex port's gloss of `$23A0` rather than on `$23A0`:**
+
+1. **The spawn table is `(x, y)` and the jitter is unsigned.** `$23B8` assigns
+   the first byte to `P.X`; `$2130`–`$213C` *adds* `random and 31`. The entries
+   are the top-left of a 32-step spawn band four pixels into each cell, not
+   cell centres — so this port started every robot half a cell from where the
+   cabinet starts it, and read the table forwards where `$2117` reads it
+   backwards (offset 22 down to 2, which decides which slot gets which draw).
+2. **The first room is `$20` and `ROBOT_SPEED` 4, not `$60` and 5.** Both
+   counters advance at the *top* of `$209D` and the placement is at the
+   bottom, so the increment that "starts at" a value is spent before a robot
+   exists. The opening room is the 87.5 % one — **9.6 robots** — and the floor
+   of 1 arrives in the **fourth** room, where robots move at twice the
+   player's rate for the rest of the game. This is a materially harder and
+   more front-loaded game than §9.1's prose describes.
+3. **A death advances both counters, because it is a room build.** `$1806` is
+   the per-life entry and it calls the same `$209D` a doorway does. The cabinet
+   charges you for dying; this port had made it free.
+
+**Three decisions.**
+
+1. **The wall probe is cached on two corners, not four**, which takes the
+   straight port's six `cell.at` calls a robot a frame down to three and is
+   exact rather than approximate (§6.3). It is the saving §15.3 projected the
+   frame against, and it is the one that could not be done in a harness.
+2. **A robot moves in whole pixels off the arcade's reload counter**, not at a
+   fractional step a frame like the man. That is the more faithful port —
+   `TIME` counts down and the object steps one pixel when it reaches zero — and
+   it is also what keeps §18's fourth ceiling: `.setitem` of a number the
+   workspace has not held before interns a word ([B52](bugs.md)), so eleven
+   robots writing 0.6-step coordinates into two lists is M0's fuse lit eleven
+   times. Whole pixels inside a 244 × 204 playfield are a closed set of about
+   450 numbers; 0.6 of a pixel a frame is not a set at all.
+3. **The explosion costs no costume slot and stays inside the robot's own
+   8 × 12** (§7.6), so his own eraser is the only one it needs and no wide pen
+   spills onto a wall ([B64](bugs.md)).
+
+**And one thing M2 did not need: a death restarts the room.** M2 could respawn
+the man in place because there was nothing in the room to respawn into; with
+robots that is a death loop, since the thing that killed him is standing where
+he comes back. The arcade restarts the room, the crowd returns to the eleven
+spawn cells — the fifteen less the four doorway cells — and the doorway cell he
+respawns in is the one cell no robot starts in. Lives are still M6's. **It cost
+two of M2's tests their exact-equality assertions**, and chasing that down
+turned up something worth knowing about this interpreter: **`nodes` and the
+word table are one arena.** `mem_free_nodes()` is `free_count + (node_bottom −
+atom_next) / 4` ([`core/memory.c`](../core/memory.c)) — the cell pool and the
+atom table grow from opposite ends of the same block — so **a robot walking
+into a coordinate the workspace has not held reads as a spent cell**, and
+`recycle` hands both back at once on the readout's own cadence. Over nineteen
+frames neither counter means what its name says. M2's one-man test can still
+assert exact equality because his positions are a small set that closes in a
+few dozen frames; eleven robots roaming a 244 × 204 playfield are ~450 numbers
+an axis plus 352 spawn jitters, and the man moves the target every frame. So
+the full-room claim is measured as a **trend across peaks** over six thousand
+frames — a peak being a reading after a `recycle` and before the next spend,
+which is the level the arena settles at — against a 256 bound that one cell a
+frame would blow through by a factor of twenty-three. Twenty thousand frames of
+it hold ~25,180 bytes and ~27,800 cells either way, flat.
+
+**What the board has to say.** §22 Q2 is still open and this is the milestone
+that answers it: the frame is `c + m·n` and M3 is the first build with a real
+`n` in it. The three logic savings §15.3 counted on are now two — the
+cell-crossing cache is in, the lean model was in from M0's stamped path, and
+gating `fires?` is M4's, since nothing fires yet — and M3 has added a quadratic
+of its own in `hit.robots`, 55 pairs at eleven robots against the 77 §15.4 was
+already worried about for the bolts. The prediction is that a full room lands
+between §15.3's projected 55–59 ms and the 77.35 it measured, which is 13–18
+fps and still short of the 50 ms gate. **The choice §22 Q2 names — cut robots,
+cut the frame rate, take an interpreter lever, or stop — is not M3's to take,
+and M3 is where the number to take it on finally exists.**
+
 ## 20. Tests
 
 `tests/test_berzerk.c`, mirroring `tests/test_battlezone.c`: the game is pure
@@ -1904,18 +2231,27 @@ repeating them.
 - **The generator.** `(room.x, room.y)` in, the same fifteen wall masks and the
   same eight segments out, every time. A short list of coordinates with
   hand-computed masks, taken from the LCG by hand.
-- **The room is reproducible.** Walk right and back and assert the masks and
-  the robot list are identical. This is the one test that proves §6.1.
+- **The room is reproducible.** Walk right and back and assert the masks are
+  identical. This is the one test that proves §6.1. **Corrected at M3: the
+  masks, and not the robot list.** The threshold at $434A moves on a doorway
+  (§9.1), so walking out and back gives the same walls and a different crowd —
+  which is the cabinet, and which is what stops a room being cleared by
+  stepping out of it and back. What *is* reproducible, and is tested, is the
+  crowd given the room **and** the threshold, because the sampler draws from
+  the room's own stream.
 - **`IQ` in both directions** — a robot against a wall may not walk into it, a
   robot in open ground keeps every bit it asked for, a robot in the player's
-  own cell is not probed at all.
+  own cell is not probed at all. **Done at M3**, with a fourth the list did not
+  ask for and §6.3's cache needs: `iq` reuses its answer until a corner crosses
+  a cell, checked by poisoning the cache and watching the poison come back.
 - **The three firing windows** (§10.3), at their boundaries, including the
   case that refuses to fire.
 - **The exits**, all four, each asserting the room coordinate moved and the
   other axis was preserved.
 - **The difficulty tables**, both, at every threshold and either side of it.
 - **Scoring**: 50 a robot however it died, the `RSAVED × 10` bonus, one bonus
-  life and only one.
+  life and only one. **M6's**; M3 keeps `rob.live` instead, which is the count
+  cycle on the screen and the number M3's gate is read off.
 - **The two ceilings** (§18): the procedure count named, and the global peak
   measured by *playing* a game.
 - **The frame is drivable headless** — `init.game`, `setup.room`, `play.frame`
@@ -1957,6 +2293,34 @@ repeating them.
   a leaner floor. **This is now the item's open question rather than a detail of
   it**, and it is a scope decision, not a measurement: cut robots, cut the frame
   rate, take an interpreter lever, or stop. §17.
+
+  **MEASURED AT M3, 2026-08-30, and it is much closer than the projection: an
+  ordinary frame with eleven robots is 53 ms at `fast` — 18.9 fps, three
+  milliseconds over.** The savings landed better than §15.3 costed them (55–59
+  projected), and `hit.robots` added a quadratic the projection did not carry.
+  So the four options are now priced rather than estimated, and none of them is
+  large:
+
+  - **Ten robots instead of eleven.** At the measured slope one robot is about
+    three milliseconds, which is exactly the overrun. The Vectrex manual's
+    "eleven" survives as the *table*; the sampler already seats fewer than
+    eleven in four rooms of five, so a cap of ten changes only the last
+    position of the count cycle (§9.1) and nothing else in the game.
+  - **18 fps, restating the gate at 55 ms.** §15.3 chose 50/20 "by argument
+    rather than measurement", and 53 clears 55 as it stands. It costs the
+    argument that a dodging game degrades faster than a driving one.
+  - **An interpreter lever.** §16 says Berzerk wants none of the ones the other
+    two games wanted, and that is still true — the frame is 3 ms over, not 2×
+    over, so nothing here justifies a language change.
+  - **Stop.** Not seriously, three milliseconds from a gate.
+
+  **DEFERRED TO M4, 2026-08-30, and that is the decision rather than a
+  postponement of one.** Bolts add both a per-bolt cost and §15.4's 77-pair
+  loop, so any margin bought at M3 is spent at M4 — a cap chosen against 53 ms
+  would have to be chosen again against whatever the bolts read. The question
+  stays open with its four options priced, and M4 is built against **eleven
+  robots and the 50 ms gate**, so the next board reading measures the whole
+  cost at once.
 - **Q3 — how many rooms should a maze remember?** None, by §6.1 — but the
   cabinet's rooms repeat every 256 in each axis, and whether to reproduce that
   wrap or let the coordinates run is a one-line decision nobody has taken.

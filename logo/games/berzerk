@@ -4,22 +4,84 @@
 ;   load "berzerk
 ;   berzerk
 ;
-; M2 IS THE MAN. Arrows walk him in
-; eight directions, two at once is a
-; diagonal, SPACE plus a direction
-; stands him still and aims, Z pauses
-; and ESC quits. Walls kill him and
-; doorways do not. There is no robot, no
-; bolt and no Otto: those are M3, M4 and
-; M5, and each one is a section of the
-; design document.
+; M3 IS THE ROBOTS. Up to eleven of them
+; walk straight at you and everything
+; else they do follows from that: they
+; slide into walls on corners, they walk
+; into each other, and they walk into
+; you. Nothing in this milestone shoots
+; -- the bolts are M4 and Otto is M5 --
+; so a robot's whole repertoire is
+; arriving.
 ;
-; THE MILESTONE'S GATE is three
-; sentences and you close all three with
-; your fingers: walls kill, doors work,
+; THE MILESTONE'S GATE is four sentences
+; (design section 19): seek, `IQ`, the
+; count cycle, and robots killing
+; robots. Three of them you close with
+; your eyes -- robots come at you, they
+; do not walk through drawn walls, and
+; the room is a different size of crowd
+; every time you cross a doorway. What
+; the host cannot see is in
+; tests/test_berzerk.c.
+;
+; FOUR THINGS M3 DECIDED, each written
+; out where it is coded:
+;
+; THE WALL PROBE RE-RUNS ON A CELL
+; CROSSING and not on a frame, which is
+; design section 6.3's correction and
+; the saving this milestone owes the
+; budget. M0 measured `iq`'s four
+; `cell.at` calls a robot a frame as the
+; largest single item in the logic pass,
+; and a robot moves at most three steps
+; inside a 48 x 68 cell. The cache key
+; is TWO corners rather than four and
+; that is exact rather than a heuristic,
+; so six `cell.at` calls a robot become
+; three -- see `iq`, which also carries
+; the one shortcut that must NOT be
+; tightened.
+;
+; A ROBOT MOVES IN WHOLE PIXELS, off the
+; arcade's own reload counter ($27A9,
+; ROBOT_SPEED at $20E1) rather than at
+; the fractional step-per-frame the man
+; uses. That is the more faithful port
+; AND it is what keeps the word table
+; closed: `.setitem` of a number the
+; workspace has not held before interns
+; a word (B52), and eleven robots
+; writing fractional coordinates into
+; two lists every frame is the fuse M0
+; died of, lit eleven times.
+;
+; THE EXPLOSION COSTS NO COSTUME SLOT,
+; which is design section 7.6's question
+; answered by section 18's arithmetic:
+; $103B's four frames would be four
+; slots and the fifteen are spoken for.
+; So it is the Vectrex's random strokes
+; -- and they stay INSIDE the robot's
+; own 8 x 12, so his own eraser reaches
+; them and no wide pen spills onto a
+; wall (B64).
+;
+; THE COUNT IS A FIVE-ROOM CYCLE and the
+; robots are the one thing in a room
+; that is NOT a function of where you
+; are. The maze still is; the threshold
+; at $434A moves on a room, so walking
+; out and back gives you the same walls
+; and a different crowd. A room you
+; could clear by leaving it would not be
+; a room.
+;
+; M2 IS THE MAN, and his three sentences
+; still hold: walls kill, doors work,
 ; and the eight directions read right on
-; the keyboard. What the host cannot see
-; is in tests/test_berzerk.c.
+; the keyboard.
 ;
 ; THE ROOM IS STILL A PURE FUNCTION of
 ; ROOM.X and ROOM.Y (design section
@@ -122,6 +184,44 @@
 ; where they now run, so ROOM plus a
 ; present is the doorway and HUD plus a
 ; frame is the one after it.
+;
+; M3'S BOARD READING, 2026-08-30, at
+; `fast`: HUD 24, FRAME 53, WORST 100,
+; ROOM 23. At `normal`: unplayable.
+;
+; FRAME IS THE NUMBER AND IT IS 53
+; AGAINST A 50 MS GATE. `sync` pads a
+; frame that fits to exactly the period,
+; so 50 means "inside budget" and
+; anything above it is the body -- and
+; `show.timing` prints the PREVIOUS
+; frame's period, which is an ordinary
+; one. So an ordinary frame with eleven
+; robots in it is 53 ms: 18.9 fps, three
+; milliseconds over. That is better than
+; design section 15.3 projected (55-59)
+; and a long way under what M0 measured
+; (77.35), and it is still over.
+;
+; ROOM WENT FROM 11 TO 23 because
+; `place.robots` is inside the build now
+; -- eleven passes of the sampler, and
+; the ones that place cost eight
+; `.setitem`s and two more draws.
+;
+; WORST WAS 100 AND IS THE REASON
+; `show.text` MOVED, which is written up
+; beside `room.built`: a doorway was
+; carrying the ordinary body, the room
+; build and the once-a-second readout in
+; one frame. It should now be about 76.
+;
+; AND `normal` IS NO LONGER A SECOND
+; COLUMN. Design section 15.5 called
+; 300 MHz a precondition rather than a
+; preference and this is that measured:
+; at half the clock the body roughly
+; doubles and there is nothing to read.
 ;
 ; A number on this display cannot be
 ; copied anywhere else, so any new
@@ -492,13 +592,14 @@ end
 ; already the fallback it names -- and
 ; Otto is drawn, not stamped (7.5).
 ;
-; M2 BUILDS FOUR OF THE FIFTEEN and not
-; nine. The five shooting poses arrive
-; with the trigger in M4, because
-; building them now would cost 5 x 18 ms
-; of startup (section 18's measured
-; figure) for a pose nothing can reach:
-; there is no bolt in this milestone.
+; M2 BUILT FOUR OF THE FIFTEEN and M3
+; builds four more (10-13, beside
+; `cache.robots`). The five shooting
+; poses arrive with the trigger in M4,
+; because building them now would cost
+; 5 x 18 ms of startup (section 18's
+; measured figure) for a pose nothing
+; can reach: there is still no bolt.
 ; What M2 owed section 7.4 was the
 ; arithmetic, and the table above is it.
 
@@ -582,6 +683,79 @@ to cache.man
 end
 
 ;=====================================
+; The robot is the ROM's eleven bytes
+; (design section 7.3)
+;
+; One byte wide and eleven rows tall,
+; and the eleven bytes are legible as a
+; drawing: 3C head, 66 eyes, FF
+; shoulders, BD BD BD body, 3C hips, 24
+; 24 24 legs, 66 feet. The five pattern
+; tables at $1000-$1030 are the five
+; facing groups -- standing, right,
+; down, left, up -- and FOUR OF THEM ARE
+; FOUR COSTUMES, because the fifth is
+; the flip.
+;
+; $1155 (left) IS $112C (right)
+; MIRRORED, and it is worth checking
+; rather than believing: 120 is
+; 01111000 and 30 is 00011110; the feet
+; are 54 (00110110) against 108
+; (01101100); and every other row is a
+; palindrome (60, 255, 189, 36). So
+; slots 10-13 are still, up, down and
+; right, and `setrot "flip` walks the
+; robot west in the one it already has.
+; That is the second half of the saving
+; that made the cabinet's twenty-one
+; costumes fit in fifteen.
+;
+; TWELVE ROWS AND NOT ELEVEN, so every
+; robot costume is one size: $1139
+; (down) genuinely has twelve, its feet
+; carried a row lower, and the other
+; four take a blank twelfth. A uniform
+; height means one erase rectangle and
+; one stamp offset for all four.
+;
+; THE EIGHT STANDING FRAMES ($1000)
+; DIFFER IN THE EYE ROW ALONE -- 66 4E
+; 1E 7E 78 71, two eyes tracking left to
+; right and back -- and this milestone
+; does NOT build them. They would be six
+; more slots against two spare, and the
+; slots M5 and M7 are holding are Otto's
+; and the polish. The facing already
+; moves the eyes, which is the half of
+; the animation that carries meaning.
+make "rb1 (list 60 102 255 189 189 189 60 36 36 36 102 0)
+make "rb2 (list 60 126 255 189 189 189 60 36 36 36 102 0)
+make "rb3 (list 60 102 255 189 189 189 60 36 36 38 32 96)
+make "rb4 (list 60 120 255 189 189 189 60 36 36 36 54 0)
+
+make "rob.bits (list :rb1 :rb2 :rb3 :rb4)
+
+; The same capture offset arithmetic as
+; the man's and a different number: an
+; 8 x 12 sprite drawn from (x, y)
+; downward has its centre at (x + 3.5,
+; y - 5.5), where his 8 x 16 has it at
+; (x + 3.5, y - 7.5).
+to cache.robots
+  local "c.i
+  setpc :wall.pc
+  repeat 4 [
+    make "c.i repcount
+    clean
+    render.sprite (item :c.i :rob.bits) 0 0
+    pu  setx 3.5  sety -5.5  seth 0
+    snapsh (:c.i + 9) 8 12
+  ]
+  clean
+end
+
+;=====================================
 ; The direction tables
 ;
 ; The arcade's four DURL bits -- LEFT 1,
@@ -632,6 +806,68 @@ make "d.dy (list 0 0 0 0 1 1 1 1 -1 -1 -1 -1 0 0 0 0)
 ; are independent.
 make "fps      20
 make "p.speed  1.5
+
+;=====================================
+; The clock is a precondition (design
+; section 15.5)
+;
+; ASK FOR IT, READ IT BACK, AND SAY
+; WHETHER THIS BOARD CAN PLAY. Section
+; 15.5 called 300 MHz a precondition
+; rather than a preference and M3's
+; board reading made it a measurement:
+; at `fast` an ordinary frame with
+; eleven robots is 53 ms, and at
+; `normal` the body roughly doubles and
+; the game is unplayable. So the answer
+; is the output and the game does not
+; start without it.
+;
+; `hw.cpu` READS THE HARDWARE rather
+; than remembering what was asked, so a
+; board that declined cannot report an
+; overclock that bought nothing -- and a
+; board with no settable clock at all
+; has no `hw.cpu` either, which is what
+; the `catch` is for. Both answer false
+; here and the difference does not
+; matter to a game that cannot run
+; either way. This is Battlezone's
+; `clock`/`restore.clock` pair, which
+; is the same problem with a different
+; frame budget on it.
+;
+; THE ATTRACT SCREEN IS STILL M6'S
+; (section 21, risk 6). What M3 owes is
+; that a board which will not overclock
+; is told why rather than left to play
+; something unplayable and guess.
+make "cpu.was "unknown
+make "cpu.at  "unknown
+
+to clock
+  make "cpu.was "unknown
+  catch "error [make "cpu.was hw.cpu]
+  make "cpu.at :cpu.was
+  catch "error [hw.setcpu "fast]
+  catch "error [make "cpu.at hw.cpu]
+  output "fast = :cpu.at
+end
+
+to restore.clock
+  if "unknown = :cpu.was [stop]
+  if :cpu.was = :cpu.at [stop]
+  catch "error [hw.setcpu :cpu.was]
+end
+
+to no.clock
+  print "|Berzerk needs 300 MHz.|
+  print []
+  print "|This board would not take|
+  print "|the fast clock. At 150 the|
+  print "|frame is about 106 ms|
+  print "|against a budget of 50.|
+end
 
 make "p.x     -96
 make "p.y      42
@@ -850,10 +1086,21 @@ make "w.y0 0   make "w.y1 0
 make "w.tl 0   make "w.tr 0
 make "w.bl 0   make "w.br 0
 
-to on.wall? :nx :ny
+; THE HEIGHT IS AN ARGUMENT from M3 on,
+; and it is the only thing that differs
+; between a man and a robot here: he is
+; 8 x 16 and a robot is 8 x 12, and both
+; boxes are the sprite grown one step on
+; every side. Everything else -- the
+; four corners, the occupancy question,
+; the two masks it reads -- is the same
+; test, so a robot dying on the corner
+; of a wall dies of the code that kills
+; the man.
+to on.wall? :nx :ny :h
   make "w.x0 :nx - 1
   make "w.x1 :nx + 8
-  make "w.y0 :ny - 16
+  make "w.y0 :ny - :h
   make "w.y1 :ny + 1
   make "w.tl cell.at :w.x0 :w.y1
   make "w.tr cell.at :w.x1 :w.y1
@@ -988,10 +1235,35 @@ to man.dies
   make "p.dir 0
 end
 
+; AND THE ROOM RESTARTS WITH HIM, which
+; is M3's addition and the cabinet's own
+; behaviour: a death puts the maze back
+; up with a fresh crowd in it. M2 could
+; respawn him in place because there was
+; nothing in the room to respawn into;
+; with robots that is a death loop, since
+; the thing that killed him is standing
+; where he comes back.
+;
+; It is the SAME room -- same
+; coordinates, same maze, same threshold,
+; because a death is not a doorway -- so
+; the crowd comes back on the eleven
+; spawn cells, which are the fifteen less
+; the four doorway cells, and the doorway
+; cell he respawns in is not one of them.
+; That is the breathing room the arcade
+; gives you and it costs no rule of its
+; own.
+;
+; LIVES ARE STILL M6'S. This is the room
+; restarting, not the game.
 to step.death
   make "p.dying :p.dying - 1
   if :p.dying > 0 [stop]
   reset.man
+  draw.room
+  show.room
 end
 
 ; DEFAULT_PLAYER_STATE ($187F): arcade
@@ -1097,11 +1369,618 @@ to step.man
   make "p.step 1 + modulo :p.step 4
   make "m.nx :p.x + (:p.speed * item (:p.dir + 1) :d.dx)
   make "m.ny :p.y + (:p.speed * item (:p.dir + 1) :d.dy)
-  if on.wall? :m.nx :m.ny [man.dies stop]
+  if on.wall? :m.nx :m.ny 16 [man.dies stop]
   if border? :m.nx :m.ny [man.dies stop]
   make "p.x :m.nx
   make "p.y :m.ny
   leave.room
+end
+
+;=====================================
+; The robots (design section 9)
+;
+; ELEVEN SLOTS AS PARALLEL FLAT LISTS,
+; the way Asteroids holds its rocks:
+; eight lists of eleven is eight globals
+; where 88 named cells would be 88, and
+; design section 18's ceiling is 254
+; with a 220 budget.
+;
+; A robot's stored position is the
+; SPRITE'S TOP-LEFT CORNER in turtle
+; steps -- the man's convention and the
+; arcade's, and what the probe offsets
+; below are cut against.
+;
+; `r.state` is 0 for an empty slot, 1
+; for a live robot, and 5 4 3 2 for the
+; four frames of his explosion. One list
+; and not two, because a dying robot is
+; still something the eraser has to
+; reach.
+;
+; `r.tl`, `r.br` and `r.blk` are the
+; wall cache and they are `iq`'s, which
+; is where they are explained.
+make "r.x     (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.y     (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.dir   (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.state (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.time  (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.tl    (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.br    (list 0 0 0 0 0 0 0 0 0 0 0)
+make "r.blk   (list 0 0 0 0 0 0 0 0 0 0 0)
+
+; THE COUNT IS A FIVE-ROOM CYCLE AND NOT
+; A RAMP, which is the thing about this
+; game's difficulty that nobody
+; remembers right. $2117 is a rejection
+; sampler over eleven slots and the
+; threshold at $434A has 0x60 added to
+; it as BCD every room ($20D8, with
+; `daa`), so the STORED value runs 60,
+; 20, 80, 40, 00 and repeats.
+;
+; THE FIRST ROOM USES $20 AND NOT $60,
+; because the add happens BEFORE the
+; placement: $209D is "initialise a new
+; game room", $20D8 is the first thing
+; in it and $2117 the last, and
+; DEFAULT_PLAYER_STATE ($187F) starts
+; $434A at $60. So the first room a
+; player ever sees is the 87.5 % one --
+; 9.6 robots -- and the sequence USED is
+; 20, 80, 40, 00, 60. Design section
+; 9.1's own probability table is in that
+; order and its prose is in the stored
+; order; the prose is the one that
+; misleads.
+;
+; The `daa` is not worth porting,
+; because the five values ARE the cycle.
+; The table is the stored sequence and
+; `place.robots` steps `rob.ti` before it
+; reads it, which is $20D8 before $2117.
+make "rob.thr (list 96 32 128 64 0)
+make "rob.ti 1
+
+; ROBOT_SPEED ($20E1) is a TPRIME the way
+; the player's is (design section 8.1):
+; an object moves one pixel when its
+; counter reaches zero and the counter
+; reloads, and SETPAT loads it into
+; VECTOR.TPRIME ($2450). It starts at 5
+; and loses one a room, floor 1, against
+; the player's fixed 2.
+;
+; AND IT IS DECREMENTED BEFORE THE FIRST
+; ROOM TOO, in the same block as the
+; threshold, so the first room runs at 4
+; and the FOURTH is already at the floor
+; of 1 -- three pixels a frame, twice the
+; player's rate, from the fourth room on
+; and for the rest of the game. That is
+; the cabinet, and it is a great deal
+; steeper than "robots begin slower than
+; you".
+make "rob.tp 5
+make "rob.live 0
+
+; RobotStartingPositionTable at $23A0,
+; transcribed from the ARCADE
+; disassembly rather than the Vectrex
+; port's copy of it, which is where M0
+; got it and where two errors came in.
+;
+; THEY ARE (x, y) PAIRS AND NOT (y, x).
+; $23B8 does `push bc / pop de` and then
+; `ld (ix+7),d` for P.X and `ld (ix+9),e`
+; for P.Y, so the FIRST byte is x. The
+; check is that the second byte takes
+; only three values -- 12, 80, 150 --
+; which is the three rows.
+;
+; THE JITTER IS UNSIGNED. $2130-$213C is
+; `RANDOM / and $1F / add a,b` in each
+; axis: 0 to 31 ADDED. The table holds
+; the TOP-LEFT of a spawn band, four
+; pixels into its cell, and the jitter
+; spreads the robot through the 32 that
+; follow. This file used to subtract 16,
+; which treats the entries as cell
+; centres and is what the Vectrex copy's
+; gloss says.
+;
+; THE ORDER IS 22 DOWN TO 2. $2117 loads
+; the counter with $16 and steps it back
+; by two ($2145), indexing the table by
+; the counter -- so the first slot placed
+; is the LAST pair and offset 0 is never
+; read. The order decides which slot gets
+; which draw from the room's stream, so
+; the lists below are in the ROM's
+; VISITING order and not the table's.
+;
+; Eleven pairs on the fifteen cells less
+; the four doorway cells: four along the
+; bottom row, three along the middle --
+; the left and right doorways are its
+; missing two -- and four along the top.
+make "rob.sx (list 80 34 -62 -114 32 -14 -62 80 34 -62 -114)
+make "rob.sy (list -8 -8 -8 -8 62 62 62 130 130 130 130)
+
+; The sampler at $2117-$2145, drawing
+; from the ROOM'S OWN stream: `rnd` is
+; left where `setup.room` put it, so a
+; room's robots are as much a function
+; of (room.x, room.y) as its walls are
+; -- GIVEN the threshold, which is not.
+;
+; AND THAT IS THE ONE PLACE THIS GAME IS
+; NOT REPRODUCIBLE, and it is the
+; cabinet's own doing rather than a
+; corner cut. Walk out of a room and
+; back and the maze is the same and the
+; crowd is not, because the threshold
+; moved on the doorway. A room you could
+; clear by stepping out of it and back
+; would not be a room.
+;
+; THE JITTER DRAWS HAPPEN INSIDE THE
+; BRANCH, as $2127-$213D does, so a slot
+; the sampler refuses costs the stream
+; one number and not three. Getting that
+; wrong would still give eleven plausible
+; robots and a different room from the
+; cabinet's.
+;
+; No robot can spawn touching a wall,
+; and that is arithmetic rather than
+; luck: the jitter is -16 to +15 about a
+; cell centre, his box is 10 x 14, and a
+; cell is 48 x 68. The widest he reaches
+; is 25 steps from the centre against a
+; half-cell of 24 in x and 34 in y.
+to place.robots
+  local "i
+  make "rob.ti 1 + modulo :rob.ti 5
+  if :rob.tp > 1 [make "rob.tp :rob.tp - 1]
+  make "rob.live 0
+  make "p.cell cell.at :p.x :p.y
+  repeat 11 [
+    make "i repcount
+    .setitem :i :r.state 0
+    if not (rnd) < (item :rob.ti :rob.thr) [
+      .setitem :i :r.x (item :i :rob.sx) + (bitand rnd 31)
+      .setitem :i :r.y (item :i :rob.sy) - (bitand rnd 31)
+      .setitem :i :r.dir 0
+      .setitem :i :r.time 0
+      .setitem :i :r.tl 0
+      .setitem :i :r.br 0
+      .setitem :i :r.blk 15
+      .setitem :i :r.state 1
+      make "rob.live :rob.live + 1]
+  ]
+end
+
+; SEEK ($23EF) is the whole AI: two
+; subtractions and four comparisons.
+; The arcade's `player.y + 2` compensates
+; for the player being taller than a
+; robot, and turtle y runs the other way,
+; so it is -2 here.
+;
+; Robots walk straight at you. Their
+; entire tactical repertoire is walking
+; into things and design section 9.3
+; says do not fix it -- the manuals of
+; two different machines teach walking
+; them into walls as strategy.
+to seek :rx :ry
+  local "d
+  make "d 0
+  if :p.x > :rx [make "d 2]
+  if :rx > :p.x [make "d 1]
+  if (:p.y - 2) > :ry [make "d :d + 4]
+  if :ry > (:p.y - 2) [make "d :d + 8]
+  output :d
+end
+
+;=====================================
+; IQ, and the saving M3 owes the budget
+;
+; `IQ` ($1C6E) probes the cell masks at
+; the robot's four corners -- the
+; arcade's (-4,-4), (+12,-4), (+12,+15),
+; (-4,+15), with y negated -- ORs them in
+; pairs and clears any desired direction
+; whose edge is walled:
+;
+;   DOWN  blocked if (tl | tr) has BOTTOM
+;   UP    blocked if (bl | br) has TOP
+;   RIGHT blocked if (tl | bl) has RIGHT
+;   LEFT  blocked if (tr | br) has LEFT
+;
+; Never diagonally, which is the original
+; code and which is why robots slide into
+; walls on corners. Section 9.3: that is
+; a scoring mechanism, not a defect.
+;
+; AND IT RE-PROBES ONLY ON A CELL
+; CROSSING, which is design section 6.3's
+; own correction and the saving this
+; milestone owes the frame. `cell.at` is
+; ten arithmetic statements -- two
+; divides, two `int`s, four clamps and an
+; index -- and M0 measured four of them a
+; robot a frame as the largest single
+; item in a 55 ms logic pass. A robot
+; moves at most three steps inside a
+; 48 x 68 cell, so nineteen frames in
+; twenty the four masks are the four
+; masks it already had.
+;
+; THE CACHE KEY IS TWO CORNERS AND NOT
+; FOUR, and that is exact rather than a
+; heuristic. The probe box is axis
+; aligned, so its four cells are
+; (column of the left edge, row of the
+; top) and the three other combinations
+; of the same two columns and two rows --
+; which the top-left and bottom-right
+; cells between them name completely. If
+; those two are unchanged all four are,
+; and the blocked mask cannot have moved.
+; So a frame pays three `cell.at` calls a
+; robot where the straight port pays six,
+; and the other two only when a corner
+; actually crosses.
+;
+; THE $1C92 SHORTCUT IS THE ROM'S AND NOT
+; A TIGHTER ONE, and that is worth a
+; paragraph because the tighter version
+; is free and wrong. A robot whose own
+; cell is the player's is not probed at
+; all -- his ORIGIN cell, which is a
+; third `cell.at` this procedure would
+; otherwise not need. Asking instead
+; whether his whole probe box is in the
+; player's cell costs nothing, since the
+; two corners are already in hand, and it
+; DELETES THE CORNER SUICIDE: the probe
+; box is the robot's collision box grown
+; by exactly one frame's travel in every
+; direction (-4/+12 against -1/+8,
+; +4/-15 against +1/-12, and he moves at
+; most three), so a robot whose probe box
+; lies in one cell cannot end the frame
+; touching a wall. Every other path
+; through `iq` is airtight for the same
+; reason, and this one is the hole the
+; arcade leaves on purpose. Section 9.3
+; says the sliding is a scoring mechanism
+; and not a defect; this is where it
+; lives.
+;
+; `p.cell` IS HOISTED ONCE A FRAME, in
+; `logic.robots`, which is eleven
+; `cell.at` calls saved on its own. Call
+; `iq` outside that loop and it reads
+; whatever the last frame left there;
+; `place.robots` sets it too, so a room
+; that has been built but not yet played
+; is consistent.
+make "iq.tl 0
+make "iq.br 0
+make "p.cell 1
+
+to probe.walls :i :rx :ry
+  local "tl local "tr local "bl local "br
+  local "d
+  .setitem :i :r.tl :iq.tl
+  .setitem :i :r.br :iq.br
+  make "tl item :iq.tl :cell
+  make "br item :iq.br :cell
+  make "tr item (cell.at (:rx + 12) (:ry + 4)) :cell
+  make "bl item (cell.at (:rx - 4) (:ry - 15)) :cell
+  make "d 15
+  if 0 < bitand 8 (bitor :tl :tr) [make "d bitand :d 7]
+  if 0 < bitand 4 (bitor :bl :br) [make "d bitand :d 11]
+  if 0 < bitand 2 (bitor :tl :bl) [make "d bitand :d 13]
+  if 0 < bitand 1 (bitor :tr :br) [make "d bitand :d 14]
+  .setitem :i :r.blk :d
+end
+
+to iq :i :rx :ry :want
+  if (cell.at :rx :ry) = :p.cell [output :want]
+  make "iq.tl cell.at (:rx - 4) (:ry + 4)
+  make "iq.br cell.at (:rx + 12) (:ry - 15)
+  if not :iq.tl = (item :i :r.tl) [probe.walls :i :rx :ry]
+  if not :iq.br = (item :i :r.br) [probe.walls :i :rx :ry]
+  output bitand :want (item :i :r.blk)
+end
+
+;=====================================
+; One robot's turn
+;
+; PREFIXED GLOBALS AND NOT `local`s, for
+; the reason `on.wall?` gives: this runs
+; eleven times a frame and a `local` read
+; costs about 1.5x a global. The `s.`
+; pair is the robot pass's scratch and
+; the erase and draw passes borrow it,
+; which is safe because the three passes
+; never overlap.
+;
+; HE MOVES IN WHOLE PIXELS, off the
+; arcade's reload counter and not at a
+; fractional speed. TIME counts down and
+; the object steps one pixel each time it
+; reaches zero ($27A9); one of our frames
+; is three of the cabinet's ticks, so the
+; step count is `(time + 3) / TPRIME` and
+; the carry is the remainder. At TPRIME 5
+; that is 0, 1, 0, 1, 1 -- three pixels
+; every five frames -- and at TPRIME 1 it
+; is three pixels a frame, twice the
+; player's rate, which is what a fifth
+; room feels like.
+;
+; AND THAT IS ALSO WHY THE WORD TABLE
+; STAYS CLOSED. `.setitem` of a number
+; the workspace has not held before
+; interns a word (B52), so eleven robots
+; writing 0.6-step coordinates into two
+; lists would mint two words a robot a
+; frame for as long as the game ran. Whole
+; pixels inside a 244 x 204 playfield are
+; a set of about 450 numbers and the
+; carry is 0 to 4, so every list in this
+; section holds values from a set that is
+; closed.
+make "s.x 0
+make "s.y 0
+make "s.d 0
+make "s.n 0
+make "s.t 0
+
+to step.robot :i
+  make "s.x item :i :r.x
+  make "s.y item :i :r.y
+  make "s.d iq :i :s.x :s.y (seek :s.x :s.y)
+  .setitem :i :r.dir :s.d
+  make "s.t 3 + item :i :r.time
+  .setitem :i :r.time modulo :s.t :rob.tp
+  make "s.n int (:s.t / :rob.tp)
+  if not 0 = :s.d [ if not 0 = :s.n [
+    make "s.x :s.x + (:s.n * item (:s.d + 1) :d.dx)
+    make "s.y :s.y + (:s.n * item (:s.d + 1) :d.dy)
+    .setitem :i :r.x :s.x
+    .setitem :i :r.y :s.y
+    if on.wall? :s.x :s.y 12 [rob.dies :i stop]]]
+  if 8 > abs (:p.x - :s.x) [
+    if :p.y > (:s.y - 12) [
+      if :s.y > (:p.y - 16) [man.dies]]]
+end
+
+; A ROBOT NEVER LEAVES THE ROOM and it
+; costs no border test, which is what the
+; border bits in `wall.template` are for
+; (design section 6.3): every outer cell
+; is walled on its outer side even at the
+; doorways, so `iq` clears the direction
+; before he can take it. The player needs
+; his own position test because he is the
+; only thing that goes through a door.
+;
+; AND THE WALL TEST ABOVE HAS EXACTLY ONE
+; WAY TO FIRE, which is `iq`'s $1C92
+; shortcut. Everywhere else the probe box
+; contains the swept collision box, so
+; the direction is cleared before the
+; step that would have landed on ink --
+; the arcade's -4/+12/+15 offsets are the
+; sprite grown by one frame's travel, and
+; that is not a coincidence. A robot in
+; the player's own cell is not probed,
+; walks, and dies of it. That is the
+; corner suicide both manuals teach as
+; strategy, and it is the whole of it.
+
+; He dies once. `rob.dies` is called from
+; three places -- a wall, another robot,
+; and (from M4) a bolt -- and two of them
+; can name the same robot in one frame.
+to rob.dies :i
+  if not 1 = item :i :r.state [stop]
+  .setitem :i :r.state 5
+  make "rob.live :rob.live - 1
+end
+
+; 5 4 3 2 and then gone, which is design
+; section 7.6's four explosion frames.
+to step.boom :i
+  .setitem :i :r.state (item :i :r.state) - 1
+  if 1 = item :i :r.state [.setitem :i :r.state 0]
+end
+
+;=====================================
+; Robots killing robots
+;
+; The fourth sentence of M3's gate, and
+; the arcade got it for free: it XORs
+; sprites into video RAM and the
+; intercept bit does not care whose
+; pixels met. We have no such bit, so
+; this is the one loop in the milestone
+; with a quadratic in it -- 55 unordered
+; pairs at eleven robots, against the 77
+; design section 15.4 was already
+; worrying about for the bolts.
+;
+; The gate is one `abs` on y in front of
+; the two tests behind it, and a dead
+; slot skips its whole inner loop. A room
+; thins out as you play it, so 55 is a
+; worst case that lasts a few seconds.
+;
+; BOTH ROBOTS DIE, which is what the
+; 2600 manual teaches as strategy: "you
+; can influence them by your movement,
+; causing them to shoot at and collide
+; with each other or run into walls".
+; Section 9.3 refuses to fix the corner
+; sliding; this is where the sliding gets
+; paid for.
+;
+; A robot who touches the MAN kills him
+; and lives, which is the asymmetry the
+; cabinet has: the intercept is checked
+; against the player's sprite and it is
+; the player who is destroyed. That test
+; is in `step.robot`, where the robot's
+; new position already is.
+make "h.i 0
+make "h.j 0
+make "h.x 0
+make "h.y 0
+
+to hit.robots
+  repeat 10 [
+    make "h.i repcount
+    if 1 = item :h.i :r.state [
+      make "h.x item :h.i :r.x
+      make "h.y item :h.i :r.y
+      repeat 11 - :h.i [
+        make "h.j :h.i + repcount
+        if 12 > abs ((item :h.j :r.y) - :h.y) [
+          if 8 > abs ((item :h.j :r.x) - :h.x) [
+            if 1 = item :h.j :r.state [
+              rob.dies :h.i
+              rob.dies :h.j]]]
+      ]
+    ]
+  ]
+end
+
+; THE STATE IS READ ONCE, before either
+; branch, so a robot who dies inside
+; `step.robot` does not also spend an
+; explosion frame in the same pass.
+make "l.i 0
+make "l.s 0
+
+to logic.robots
+  make "p.cell cell.at :p.x :p.y
+  repeat 11 [
+    make "l.i repcount
+    make "l.s item :l.i :r.state
+    if 1 < :l.s [step.boom :l.i]
+    if 1 = :l.s [step.robot :l.i]
+  ]
+  hit.robots
+end
+
+;=====================================
+; The robots' two marks
+;
+; ONE PEN SETUP FOR ALL ELEVEN. `setpc`
+; and `setpensize` either side of every
+; figure would be 44 statements a frame
+; for a colour that does not change
+; between them.
+;
+; THREE STROKES OF PEN 3 COVER THE 8 x 12
+; EXACTLY, by the arithmetic `erase.man`
+; carries: pen 3 is the one wide pen that
+; is a square, so a stroke is a rectangle
+; three wide and its length plus two.
+; x + 1, x + 4 and x + 6 run from y - 1
+; down nine steps and cover x..x+7 and
+; y..y-11 with nothing outside it (B64).
+;
+; A DYING ROBOT IS ERASED TOO, which is
+; what `0 <` rather than `1 =` says here:
+; his explosion is drawn inside his own
+; box, so his own eraser is the only one
+; it ever needs.
+make "e.i 0
+
+to erase.robots
+  setpc :bg.pc
+  setpensize 3
+  seth 180
+  repeat 11 [
+    make "e.i repcount
+    if 0 < item :e.i :r.state [
+      make "s.x item :e.i :r.x
+      make "s.y (item :e.i :r.y) - 1
+      pu  setx :s.x + 1  sety :s.y  pd  fd 9
+      pu  setx :s.x + 4  sety :s.y  pd  fd 9
+      pu  setx :s.x + 6  sety :s.y  pd  fd 9]
+  ]
+  pu  setpensize 1
+  setpc :wall.pc
+end
+
+; THE FIVE FACING GROUPS ARE FOUR SLOTS
+; AND A FLIP. `d.grp` is the ROM's own
+; sprite-table dispatch ($252D) as an
+; index off the DURL mask -- one `item`
+; where a chain of `if`s cost Asteroids
+; 360-398 us a figure a pass (design
+; section 15.4) -- and the group then
+; names a slot and a heading. Group 4 is
+; the only one facing west, and it wears
+; group 5's costume mirrored.
+make "d.grp (list 1 4 5 1 2 4 5 2 3 4 5 3 1 4 5 1)
+make "g.slot (list 10 11 12 13 13)
+make "g.face (list 90 90 90 270 90)
+
+make "g.i 0
+make "g.g 0
+
+to draw.robots
+  pu
+  repeat 11 [
+    make "g.i repcount
+    if 1 = item :g.i :r.state [
+      make "g.g item (1 + item :g.i :r.dir) :d.grp
+      setsh item :g.g :g.slot
+      seth item :g.g :g.face
+      setx (item :g.i :r.x) + 3.5
+      sety (item :g.i :r.y) - 5.5
+      stamp]
+    if 1 < item :g.i :r.state [boom :g.i]
+  ]
+end
+
+; Six strokes a frame for four frames,
+; which is design section 7.6's fallback
+; taken as the answer: $103B's four
+; explosion frames would be four costume
+; slots and the fifteen are spoken for.
+;
+; THEY STAY INSIDE HIS OWN 8 x 12. A
+; cloud that spreads needs an eraser that
+; spreads with it, and the only wide pen
+; that does not spill is pen 3 at three
+; pixels -- a wider one is a filled disc
+; whose round caps would eat the wall he
+; died against (B64). Starting at
+; x + 0..5 and y - 1..-10 and stepping
+; one, a stroke cannot leave x..x+7 and
+; y..y-11, which is the box `erase.robots`
+; already covers.
+to boom :i
+  make "s.x item :i :r.x
+  make "s.y (item :i :r.y) - 1
+  repeat 6 [
+    pu  setx :s.x + random 6
+    sety :s.y - random 10
+    seth 90 * random 4
+    pd  fd 1]
+  pu
 end
 
 ;=====================================
@@ -1135,10 +2014,12 @@ to draw.room
   local "t0
   make "t0 ticks
   setup.room
+  place.robots
   clean
   setpc :wall.pc
   draw.walls
   make "room.ms ticks - :t0
+  make "room.built true
   if :room.ms > :worst.ms [
     make "worst.ms :room.ms]
 end
@@ -1148,6 +2029,23 @@ end
 ; cabinet holds each in a byte and a
 ; seed of ROOM_X + 256.ROOM_Y has no
 ; room outside 0..255 to name.
+; THE TWO ROBOT COUNTERS ARE NOT HERE,
+; and where they are is the ROM's answer
+; to a question this file got wrong
+; first. They count ROOM BUILDS rather
+; than doorways: $209D is "initialise a
+; new game room" and $20D8 is the first
+; thing in it, and a player DEATH
+; re-enters $209D through $1806, the
+; per-life entry that also reloads
+; MAN_X/MAN_Y and decrements DEATHS. So
+; dying advances the threshold and speeds
+; the robots up exactly as walking
+; through a door does -- the cabinet
+; charges you for a death rather than
+; resetting the room around you -- and
+; the only place that is true of both
+; paths is `place.robots`.
 to go.room :dx :dy
   make "room.x modulo (:room.x + :dx) 256
   make "room.y modulo (:room.y + :dy) 256
@@ -1196,6 +2094,32 @@ end
 ; later, which is not a thing anyone can
 ; see.
 make "masks.due false
+
+; AND A FRAME THAT BUILT A ROOM WRITES
+; NO TEXT AT ALL, which is M3's widening
+; of M2's rule and came off a board on
+; 2026-08-30: `WORST` read 100 ms at
+; `fast` where ROOM was 23 and an
+; ordinary frame 53. M2's rule serialised
+; the masks against the timing rows and
+; stopped there, because in M2 a room
+; build was 11 ms and the two text jobs
+; were the big items. A room build is now
+; 23 -- `place.robots` is inside it -- so
+; it is a THIRD job of the same size, and
+; `show.text` used to run at the TOP of
+; the frame, where nothing yet knows a
+; doorway is coming. Ordinary body plus
+; room build plus the once-a-second
+; readout is 53 + 23 + ~20, which is the
+; 100.
+;
+; So the flag is set by the build and
+; read after it, and that is also why
+; `show.text` moved to the END of the
+; frame body: at the top it can only ask
+; what happened LAST frame.
+make "room.built false
 
 to show.masks
   local "r local "c
@@ -1270,7 +2194,26 @@ make "worst.hud 0
 ; HUD is one transition behind, because
 ; this procedure runs inside the region
 ; it measures.
+; ROB IS M3'S GATE ON THE SCREEN, and it
+; is the number a person reads the count
+; cycle off: cross five doorways and the
+; crowd should go 7, 10, 5, 8, 11 and
+; round again, give or take the sampler.
+;
+; IT SITS AT THE END OF THE HELP LINE
+; because that is the only gap left.
+; Rows 26 to 28 are the masks to column
+; 14 and the timing block from column
+; 20; row 25 is "ROOM x y", whose four
+; trailing spaces are the erase a room
+; number needs when it shrinks from 255
+; to 0 and which therefore reach column
+; 15. The help line is 33 characters and
+; is drawn once, so columns 33 to 39 of
+; row 29 belong to nobody.
 to show.timing
+  setcursor [33 29]
+  (type "|ROB | :rob.live "|  |)
   setcursor [20 25]
   (type "|HUD   | :worst.hud "|   |)
   setcursor [20 26]
@@ -1351,6 +2294,7 @@ end
 ; loses its beat to a doorway simply
 ; misses it.
 to show.text
+  if :room.built [make "room.built false stop]
   if :masks.due [draw.masks stop]
   if 0 = modulo :frames :fps [show.timing]
 end
@@ -1361,11 +2305,14 @@ to play.frame
   if not :leaving [
     if not :paused [
       make "frames :frames + 1
-      show.text
+      erase.robots
       erase.man
+      logic.robots
       ifelse :p.dying > 0 [step.death] [step.man]
+      draw.robots
       if 0 = :p.dying [draw.man]
       if 1 = modulo :p.dying 2 [draw.man]
+      show.text
     ]
   ]
   make "body.ms ticks - :fr.t0
@@ -1386,12 +2333,15 @@ end
 ;
 ; The costumes are built here, once,
 ; behind a screen nobody is looking at:
-; four sprites at ~18 ms is 72 ms of
+; eight sprites at ~18 ms is ~140 ms of
 ; startup (design section 18's measured
 ; figure, 7x what that section was
 ; written with) and it is invisible
 ; where a re-`snapsh` inside a frame
-; would not be.
+; would not be. Four are the man's and
+; four are the robot's, which is eight
+; of the fifteen slots spent and five
+; left for M4's shooting poses.
 ;
 ; WINDOW, not the default `wrap`. M1 set
 ; it and nothing needed it; M2 cannot do
@@ -1407,6 +2357,7 @@ to init.game
   setrefresh "manual
   ht
   cache.man
+  cache.robots
   setrot "flip
   make "leaving false
   make "paused false
@@ -1414,11 +2365,14 @@ to init.game
   make "worst.fr 0
   make "worst.ms 0
   make "worst.hud 0
+  make "rob.ti 1
+  make "rob.tp 5
   reset.man
   setcursor [0 29]
   type "|ARROWS WALK, SPACE AIMS, ESC QUITS|
   draw.room
   show.room
+  make "room.built false
   ; And the first room's masks are drawn
   ; HERE rather than deferred, because
   ; the frame they would be deferred to
@@ -1477,7 +2431,8 @@ end
 ; wearing a costume and still flipping
 ; with its heading.
 to berzerk
-  play.game
+  if clock [play.game]
+  restore.clock
   setrefresh "auto
   setsh 0
   setrot "fixed
@@ -1486,4 +2441,5 @@ to berzerk
   st
   textscreen
   ct
+  if not "fast = :cpu.at [no.clock]
 end
