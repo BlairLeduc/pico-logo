@@ -226,6 +226,26 @@ target_include_directories(test_screen_refresh PRIVATE
 target_link_libraries(test_screen_refresh PRIVATE m)
 add_test(NAME test_screen_refresh COMMAND test_screen_refresh)
 
+# What shape a wide pen puts on the canvas (B53). Same shape as
+# test_screen_refresh: the real screen.c against fake_lcd.c, so the test reads
+# the pixels the rasteriser actually wrote rather than a model of them.
+add_executable(test_screen_pen
+    test_screen_pen.c
+    fake_lcd.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/screen.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/dirty_tiles.c
+    ${CMAKE_SOURCE_DIR}/devices/stream.c
+    unity.c
+)
+target_include_directories(test_screen_pen PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+target_link_libraries(test_screen_pen PRIVATE m)
+add_test(NAME test_screen_pen COMMAND test_screen_pen)
+
 # Where the text screen's lines are in split mode (B49). Same shape as
 # test_screen_refresh: the real screen.c against fake_lcd.c, which records the
 # text plane so a test can see which LCD row a write landed on.

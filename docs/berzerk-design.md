@@ -172,6 +172,42 @@ it is a property of what a drawing pass costs.
 harness still builds both, because Q1 is what says so and a harness that
 measured only the winner could not.
 
+**M2 built it, and it came with one condition the harness could not have
+found** (2026-08-30). In the harness every frame began with `clean`, so the
+eraser could spill and the next `clean` took it back. In the game the walls are
+drawn **once a room**, so a spilling eraser eats a hole nothing repaints, and
+§8.3's contact box became the man's own outline so he cannot stand inside a
+wall for the eraser to reach. Erase-in-place on a static maze is cheap
+**because** the maze is never redrawn, which is the same sentence as "nothing
+repairs it".
+
+**And the first board run said the eraser did not erase** ([B64](bugs.md)).
+The fix above was inset by what this section called the cap radius, on the
+reading that a round cap *extends* a stroke into a rectangle four pixels past
+each end. It does the opposite: `screen_gfx_line` stamps a **filled disc** at
+every point of the line, so a stroke is a stadium whose ends **pinch to a
+single pixel**, and the reference says so in as many words under
+[`setpensize`](../reference/Pico_Logo_Reference.md). Four rows past the end an
+8-wide pen is one pixel across, not nine, so **seventeen of the man's 128
+pixels were never erased** — his top four rows and bottom three, at the corners
+— and he dragged a trail in every direction.
+
+**The eraser is now three strokes of pen 3, which is the one wide pen that is
+an exact square** (radius 1.5, extent truncates to 1, and the corner (1, 1) is
+2 against 2.25, so all nine pixels of the 3 × 3 are in). At +1, +4 and +6 of the
+sprite's left edge, run from one row inside the top to one row inside the
+bottom, they cover the 8 × 16 exactly: **no pixel of the man survives and no
+pixel outside him is touched**. That is a stronger guarantee than the margin
+above — the eraser cannot reach a wall even standing against one — so §8.3's
+extra step is now a belt rather than the braces.
+
+**The same eraser is in `tests/logo/p15m0`, which is where §3's numbers come
+from** ([B65](bugs.md), open). The in-place body of 69.90 ms at eleven robots
+was measured with one pen-8 stroke a figure where a correct eraser is three
+pen-3 strokes, so the erase pass is understated and in-place's 7.7 ms margin
+over clear-and-redraw is the thing at risk. **M3 owns the re-read**, because M3
+is where eleven robots arrive and where §3's verdict is actually spent.
+
 Both strategies present with `sync`, so neither shows a frame being drawn; the
 refresh *mode* is orthogonal to the erase *strategy*
 ([Asteroids §3.1.2](asteroids-design.md#L146)).
@@ -400,6 +436,16 @@ that spill outside the stroke, which is the artefact that once made a
 present-cost harness measure every frame as a full screen
 ([hardware-notes §9.1](hardware-notes.md)).
 
+**Read "round" literally, because it cost a board session** ([B64](bugs.md)).
+A wide pen is a **filled disc** stamped at every point of the line — the
+reference's [`setpensize`](../reference/Pico_Logo_Reference.md) says so — so a
+stroke is a stadium and its cap **pinches to a single pixel** rather than
+squaring the end off. It spills *sideways of the end point*, not *past it as a
+rectangle*: an 8-wide pen is nine pixels across its own stroke and one pixel
+across four rows beyond it. Nothing in this game may assume a stroke covers a
+rectangle unless it is pen 3, which is the only width whose disc is a full
+square (§3).
+
 ### 7.2 The bolt needed no translation at all
 
 The BOLT structure comment in the disassembly says it outright:
@@ -450,7 +496,7 @@ nothing; as sprites it is what the cabinet does.
 
 `$103B` is the four-frame explosion and `$1198`–`$1208` its pixel data. M3's.
 
-### 7.4 The man is $10BF, and his nine shooting sprites are nine slots
+### 7.4 The man is $10BF, and his nine shooting sprites were nine slots until `setrot "flip`
 
 ```
 18 18 00 3C 5A 5A 5A 18 18 18 18 18 18 18 1C 10      $10BF, 8 x 16
@@ -470,6 +516,43 @@ animation. §18 carries it as a third ceiling.
 M0 caches the standing frame only. M2 owns the other nine and owns the
 question of whether they all have to be resident at once — a re-`snapsh` costs
 ~2.7 ms, which is affordable at a room transition and not in a frame.
+
+**ANSWERED 2026-08-30 at M2, and the answer is `setrot "flip`.** The
+re-`snapsh` escape was already dead — §18 re-priced it at ~18 ms and a
+four-costume swap at a room transition is two dropped frames — so the working
+set had to fit in fifteen, and counted honestly it did not: the man alone is
+**sixteen** sprites before a robot is built. Standing ($10BF), a walk cycle of
+three that runs up/up-right/right/down-right/down ($104B → $10AD, $109B,
+$1089), a *second* walk cycle of three for down-left/left/up-left ($1056 →
+$13B5, $13A3, $1391), the eight shooting poses and the death sprite ($12B3).
+
+**The ROM's second walk cycle is the first one mirrored, and so are half the
+shooting poses.** $1391, $13A3 and $13B5 are hand-drawn copies of $1089, $109B
+and $10AD with the bits reversed — compare them byte for byte and a row or two
+differs where the artist's hand did — and the eight shoot sprites are four
+right-facing ones and their four mirrors. `setrot "flip` produces exactly that:
+the costume mirrors for a turtle facing west, so one slot serves both sides and
+the heading is the facing. **It applies to the robot too**, whose walking-left
+frame ($1155, eye row `$1E`, feet `$6C`) is precisely its walking-right frame
+($112C, eye row `$78`, feet `$36`) reversed — so §7.3's five facing groups are
+four slots, not five.
+
+The fifteen then allocate, with two spare:
+
+| slots | what | when |
+|---|---|---|
+| 1 | the man, standing ($10BF) | M2 |
+| 2–4 | the man, walking ($10AD, $109B, $1089) | M2 |
+| 5–9 | the man, shooting (four facings and up/down) | M4 |
+| 10–13 | the robot, four facings | M3 |
+| 14–15 | spare | M5/M7 |
+
+The explosion takes no slot — §7.6's own fallback, the Vectrex's random dots,
+is what it gets — and Otto is drawn rather than stamped (§7.5). **M2 builds
+four of the fifteen and not nine**: the five shooting poses arrive with the
+trigger in M4, because building them at M2 costs 5 × 18 ms of startup for a
+pose nothing in the milestone can reach. What M2 owed this section was the
+arithmetic, and the table is it.
 
 ### 7.5 Otto is still an `arc`, and that is a gap rather than a choice
 
@@ -588,6 +671,52 @@ against `PlayerContactBounds`'s ±5/−9 — and Malban's comment says why:
 
 Which is a bug report from 2019 that this port gets for free. Take the ±4 box
 for walls and check the bolt's spawn point against the same table.
+
+**REVISED 2026-08-30 at M2: the wall box is the man's own outline, grown one
+step on every side — ±5 in x and ±9 in y about his centre, which is his 8 × 16
+sprite plus a margin.** Two reasons, and the first is the one above taken
+further. A square box is an approximation of a figure twice as tall as it is
+wide, and Malban's comment says the smaller radius *was a bug*; the cabinet's
+answer is not a box at all but a pixel intercept, and a pixel intercept on an
+8 × 16 sprite is exactly ±4 by ±8. The second reason is erase-in-place. §3's
+strategy rubs the man out with a background stroke that covers his outline and
+nothing else, and the walls are drawn **once a room** — so a man who can stand
+four steps inside a horizontal wall is a man who eats a hole in it that nothing
+puts back until the next doorway. The extra step on each side is the eraser's
+margin: he stops with his outline one step clear of the ink.
+
+**AND THE TEST IS OCCUPANCY, NOT CROSSING** — corrected 2026-08-30 after a
+board found the hole ([B66](bugs.md)). §6.3's own phrasing, "which cell am I
+in, is the edge I am crossing walled", describes a **crossing** test, and a
+crossing test only fires when the man crosses the boundary the wall lies on.
+Walk *parallel* to a wall and step into the cell at its end and you cross
+nothing: a vertical wall covering row 0 but not row 1 can be walked onto from
+below, and a horizontal wall covering one column from the side. The cabinet has
+no such hole because it has no cells — a wall pixel under a man pixel raises
+the intercept bit, and the only question it asks is **may he be here**.
+
+So that is the question. A cell is 48 × 68 and his box is 10 × 18, so the box
+lies across **at most one column boundary and at most one row boundary**: take
+the box's four corners, and two corners in different cells means the box lies
+across that boundary, with the first corner's mask saying whether a wall is
+drawn along it. **Four `cell.at` calls**, against the eight a two-axis crossing
+test made — and the per-axis move collapses into one test, because walls kill
+and there was never anything to slide along.
+
+**§6.3's sentence should be read as the arcade's `WALLINDEX` lookup and not as
+a movement rule**, which is the correction: the table is right, the four
+statements are right, and *what they are asked about* was wrong.
+
+**And the player never consults the border bits, which is a second M2
+decision.** `cell.at` clamps to the 5 × 3 grid, so a crossing test can never
+see the outer wall — every point left of the playfield is in column 0 and no
+crossing happens. That is right rather than a gap: the mask table carries the
+border walls **at all four doorways** (§6.3), because it is what robots consult
+and robots never leave the room, so reading it for the player would wall him
+into a room with four visible doors. So the player meets the border the way the
+cabinet's pixels meet it — a position test against the playfield rectangle,
+with the doorway as the gap in it — and his whole outline has to be inside the
+gap before he passes, which is what stops him clipping the stub.
 
 The exits are a position test, not a wall test ($2157):
 
@@ -1272,8 +1401,18 @@ own 7.4~~ **a room change measured at 30 ms** (M1, 2026-08-30, `fast`), so
 worse answer than this paragraph was written with. So either **the working set fits in
 fifteen**, or the renderer gets cheaper: drawing each row as *runs* of set bits
 rather than eight pixel steps is roughly 3×, and is the obvious lever if it is
-ever needed. **M2 and M3 own the budget**; nothing is built for it now. It is
-the one ceiling this design acquired rather than inherited.
+ever needed. It is the one ceiling this design acquired rather than inherited.
+
+**CLOSED 2026-08-30 at M2: it fits in fifteen, with two spare, and the whole
+saving is `setrot "flip`.** Counted straight the inventory is twenty-one and
+the swap was the only way out. But the ROM's left-facing frames are its
+right-facing frames mirrored — for the man's second walk cycle, for four of his
+eight shooting poses, and for the robot walking left — and `setrot "flip` is
+exactly that mirror, done by the engine at stamp time for no slot and no
+statement. §7.4 carries the allocation: 1 standing, 3 walking, 5 shooting, 4
+robot facings, 2 spare. The explosion takes §7.6's random dots rather than four
+slots and Otto is drawn (§7.5). **M2 builds four of them**; M3 and M4 build
+theirs when they need them.
 
 **And a fourth, which M0 found on a board rather than in a budget: a frame must
 not allocate.** Nothing in this interpreter collects on demand — `alloc_cell`
@@ -1303,7 +1442,7 @@ Each leaves `ctest --preset=tests` green, and each ends with a board reading.
 |---|---|---|
 | **M0** | The measurement harness | **DONE 2026-08-29 — all six questions answered on a Pico 2 W, gate FAILED at 77.35 ms against 50** (106.30 before §7's figures changed). Erase strategy decided: **erase-in-place**, once the figures are stamps. §15.3, and the decision it leaves is §22 Q2 |
 | M1 | The room | **DONE 2026-08-30.** The maze is a function of `(room.x, room.y)`; walk out and back and it is the same room. Read on a board at both clocks: a room change is **30 ms at `fast`** (worst 33) and 44 at `normal`, which is M0's parts to 3 %. §19's M1 note |
-| M2 | The man | Walls kill, doors work, the eight directions read right on the keyboard |
+| M2 | The man | **DONE 2026-08-30.** Walls kill, doors work, and the eight directions read right on the keyboard. 35 procedures, 40 host tests, `ctest` green at 84/84, and read on a board four times: the frame fits at both clocks, and [B64](bugs.md) (the eraser) and [B66](bugs.md) (the end of a wall) came back from it. The milestone's own decision was §7.4's: `setrot "flip`, which takes the cabinet's inventory from twenty-one costumes to thirteen of fifteen. §19's M2 note |
 | M3 | The robots | Seek, `IQ`, the count cycle, robots killing robots |
 | M4 | The bolts | Both bolt kinds, the three firing windows, the alignment rule confirmed against MAME (§10.2) |
 | M5 | Evil Otto | The timer arithmetic, walls ignored, robots eaten |
@@ -1463,6 +1602,14 @@ below, a vertical run the RIGHT of the cell left and the LEFT of the cell
 right. Verified to fail on a mutation in **each** path — the bits swapped, and
 the segment's `y` negated.
 
+**It checks each segment's MIDDLE, and that is not the whole property**
+([B67](bugs.md), found on a board 2026-08-30). A run of the right shape in the
+right place that simply *stops short* agrees with the table at its midpoint and
+still leaves a gap at its end — which is what the leftmost column's horizontal
+runs did, because that column is 52 steps wide and the ROM's run is 48.
+`test_every_wall_runs_from_one_grid_line_to_the_next` states the missing half:
+a wall runs from one grid line to the next, **both ends**, over sixteen rooms.
+
 **`readchar`, not `pollkeys` — for this milestone only.** §8.2 puts the game on
 key *state* and is right about the game: a man who walks while an arrow is held
 needs it, and M2 brings it. M1 is turn based, one press is one room, and key
@@ -1511,6 +1658,239 @@ that fits in the fifteen slots rather than a per-room one that is swapped.
 M1 does not ask for the overclock — §15.5's precondition is about a frame loop
 and the frame loop arrives with M2 — so both readings above are of a game that
 never touched `hw.cpu`.
+
+### M2 — the man, and the ceiling it had to take (2026-08-30)
+
+`logo/games/berzerk` — **35 procedures** against §18's budget of 100 — is the
+room with a man in it: a `sync`-paced 20 fps frame loop, `pollkeys`/`keydown?`
+on the eight directions, the arcade's stand-and-aim control, walls that kill,
+four doorways that do not, and a death that holds for the ROM's 45 ticks.
+`tests/test_berzerk.c` is **40 host tests** and `ctest` is green at 84/84.
+There is no robot, no bolt and no Otto; those are M3, M4 and M5.
+
+**The milestone's real work was §7.4's question, and the answer changed the
+whole slot budget.** M2 was asked whether the man's nine shooting sprites have
+to be resident at once. Counted honestly the question is worse than it was
+posed: the man is *sixteen* sprites, because the ROM has two walk cycles of
+three, one for each side. Twenty-one with the robot's five facings, against
+fifteen slots, and §18's re-priced escape (~18 ms a re-`snapsh`, four at a
+transition is two dropped frames) was already gone.
+
+**`setrot "flip` is the answer and it costs nothing.** The ROM's own
+left-facing frames are its right-facing frames with the bits reversed — $1391,
+$13A3 and $13B5 against $1089, $109B and $10AD; four of the eight shoot poses
+against the other four; the robot's $1155 against $112C, eye row and feet both
+— so the engine can make the mirror at stamp time and the heading becomes the
+facing. Twenty-one becomes thirteen, two slots spare, and §18's third ceiling
+is closed rather than deferred to M6. **M2 builds four of the thirteen**;
+speculative costumes for a trigger that does not exist yet would be 90 ms of
+startup for nothing.
+
+**Two smaller decisions, and both were forced by erase-in-place rather than
+chosen.** §3 settled the strategy at M0 with a harness that began every frame
+with `clean`; a game does not. The walls are drawn **once a room**, so the
+eraser's round caps — §7.1's own warning, four pixels past each end of an
+8-wide stroke — eat holes that nothing repaints. The stroke is now inset by the
+cap radius so it covers the sprite's box exactly, and §8.3's contact box became
+**the man's own outline grown one step**, ±5 by ±9 rather than the Vectrex's
+±4, so he cannot stand inside a wall for the eraser to reach. The second is
+better fidelity as well as a fix: a pixel intercept on an 8 × 16 sprite is
+±4 by ±8, and Malban's comment beside `PlayerContactBounds2` says the square
+box was a bug. `test_the_mans_outline_never_touches_a_wall` is the invariant,
+driven 480 frames through rooms against the segments the game actually **drew**
+rather than against the table — and that distinction is the doorways, where his
+box passes the border's coordinates and must.
+
+**The player does not read the border bits at all**, which §6.3 half-predicted
+and M2 had to make true. `cell.at` clamps, so a crossing test cannot see the
+outer wall; and it should not, because the mask table carries border walls at
+all four doorways (it is what robots consult, and robots never leave). So the
+border is a position test against the playfield rectangle with the doorway as
+its gap, and the exits are $2157's own four lines transferred through §5.
+
+#### The first board reading, and the trail (2026-08-30)
+
+**The frame is inside its budget at both clocks, and that is the headline.**
+`FRAME` reads **50 ms at `fast` and 50 at `normal`** — 50 is the *paced period*,
+because `sync` waits for the next boundary and only stops waiting when a frame
+overruns, so a steady 50 at 150 MHz means the body fits in 50 ms **with the
+clock at half speed**. §15.5's overclock is a precondition for the eleven-robot
+frame, not for this one. The worst frame is **75 ms at `fast` and 177 at
+`normal`**.
+
+**The worst frame is the room change, and it is three times M1's figure for
+it.** M1 measured a transition at 30 ms at `fast` — but M1 measured
+`draw.room`, and `show.room` has never been measured at all. It is twenty
+cursor moves and twenty `type`s into the text plane plus a `recycle`, and it is
+the only thing in a transition large enough to be the 45 ms difference. So M1's
+promise in this section — "a transition's worst case is 33 ms against §15.3's
+50 ms frame, so the build does not need spreading over two frames" — **is not
+true as built**, and what is untrue about it is the readout rather than the
+room.
+
+**That is a measurement, so the next run makes it one.** `go.room` now times
+`show.room` on its own and the screen carries `HUD` beside `ROOM`, `FRAME` and
+`WORST`, so the four numbers read against each other: if `WORST` is `ROOM` plus
+`HUD` plus a present, nothing else is hiding in the transition. If `HUD` is the
+45 ms, the fifteen masks cost more than the room they describe and the decision
+is whether M1's gate instrument survives into M3 — which is a real question,
+because §19's M1 note is right that a room whose picture and table disagree is
+a robot walking through a wall you can see.
+
+**And the man left a trail in every direction**, which is [B64](bugs.md) and is
+fixed above: the eraser was one pen-8 stroke and a wide pen is a disc, so
+seventeen of his 128 pixels survived every frame.
+
+#### The second reading, and where the hitch actually was (2026-08-30)
+
+**Trails gone, and the worst frame is 76 ms at `fast` and 123 at `normal`** —
+`normal` down from 177, `FRAME` still a paced 50 at both clocks. That pair
+settles the attribution without a third reading, because the leftover after
+M1's build-and-present (46 ms at `fast`, 79 at `normal`) scales at **1.72×**,
+which is *below* P13's measured 2.059 interpretation ratio: part of it is SPI
+wire, so it is not interpretation and not the room.
+
+**It is the readout, and the mechanism is that text is not batched.**
+`screen_putc` sends every character straight to the panel — `lcd_putc_attr`
+plus `lcd_set_cursor_char` plus `lcd_move_cursor`, over SPI — where graphics
+accumulate off-screen until `sync`. So a character costs about **a third of a
+millisecond wherever it is written**, and the transition frame was writing
+**141 of them**: the room line (14), the fifteen masks (45), the help line (34)
+and the four timing rows (48). 141 × 0.33 is 46 ms, which is the number.
+
+**Eighty-two of those 141 were waste and are gone.** The help line never
+changes and is drawn once in `init.game`. The timing rows keep their own
+once-a-second schedule and were being written a second time on every doorway.
+That leaves the masks, which are not waste — they are M1's gate and M3's guard
+— so they are **deferred one frame**: `show.room` marks them due and the next
+frame draws them. They cost the same and land in a frame with 40 ms spare, and
+the player sees them 50 ms later, which is not a thing anyone can see.
+
+**One text job a frame is now a rule rather than a coincidence**, because the
+masks and the timing rows colliding would put 93 characters in one frame and
+make *that* the worst frame instead. `show.text` gives the masks the frame
+after a doorway and the timing rows the next free one.
+
+**Predicted from the measured 0.33 ms a character**, and the next board run is
+the check: a doorway becomes **~35 ms at `fast` and ~52 at `normal`**, the
+frame after it **~25 and ~35**. If that holds, M1's promise in this section —
+"a transition's worst case is inside §15.3's 50 ms frame, so the build does not
+need spreading over two frames" — is true at `fast` as it was written, and
+`normal` misses it by a couple of milliseconds on the doorway alone.
+
+#### The third reading, which closes the budget (2026-08-30)
+
+All four numbers, from the same screen. **`fast`: HUD 22, ROOM 11, FRAME 50,
+WORST 98. `normal`: HUD 40, ROOM 23, FRAME 50, WORST 118.**
+
+**The deferral worked exactly as predicted, and the worst frame simply stopped
+being the doorway.** Reconstructed:
+
+| | `fast` | `normal` | ratio | what it is |
+|---|---:|---:|---:|---|
+| `ROOM` — the build alone | 11 | 23 | **2.09** | pure interpretation, and M0 predicted 10.71 at 300 MHz |
+| `HUD` — 45 mask characters + a `recycle` | 22 | 40 | **1.82** | CPU and wire mixed, ~0.4 ms a character |
+| doorway = ROOM + room line + present | ~36 | ~52 | | predicted ~35 and ~52 |
+| **`WORST` — the FIRST frame** | 98 | 118 | 1.20 | 48 and 68 ms of work **plus a 50 ms cadence seed** |
+
+`ROOM`'s 2.09 against P13's measured 2.059 is as clean a confirmation as this
+project has taken: the room build is interpretation and nothing else. `HUD`'s
+1.82 puts a character at about **0.4 ms**, which is the number §19's second
+reading inferred and this one measures.
+
+**And `WORST` was an artefact of my own instrument.** `frame_sync_wait_ms` has
+no baseline on its first call, so it seeds the cadence at `now` and puts the
+first boundary **one period out** — core's `test_first_wait_seeds_full_period`
+says so in as many words. A frame timed across its own `sync` therefore reads
+its work plus fifty. The arithmetic closes to the millisecond: `fast` is 22
+(masks) + 18.6 (full present) + ~7 + **50** = 97.6 against 98 measured, and
+`normal` is 40 + 18.6 + ~9 + **50** = 117.6 against 118. Two clocks, two
+independent sums, both within a millisecond of the reading.
+
+**Battlezone had already solved this and I did not carry it over**: its
+`hud.tally` opens `if 2 > :frame.count [stop]`, and that guard is there for
+exactly this. Berzerk takes the cause rather than the symptom — **one `sync`
+before the loop**, which absorbs the seed where nothing is timing it and puts
+the room on the screen at once instead of a frame later — and the first room's
+masks are now drawn in `init.game` rather than deferred into the frame that is
+also presenting a whole canvas for the first time. Deferring is for doorways,
+which happen while the loop is running and has somewhere to put the work.
+
+**So the frame budget is closed and every part of it is measured.** The
+prediction for the next run, and there is nothing left in it that is inferred:
+**`WORST` is the doorway, ~36 ms at `fast` and ~54 at `normal`**, with the mask
+frame at ~29 and ~49 and an ordinary frame well under both. M1's promise — that
+a transition fits inside §15.3's 50 ms frame, so the build need not be spread
+over two — is then **true at `fast` as written and short by about four
+milliseconds at `normal`**, which is a game that drops one frame at a doorway
+when it is not overclocked. §15.5 already says the clock is a precondition.
+
+#### The fourth reading: nothing overruns at `fast`, and a hole in the wall test (2026-08-30)
+
+**`fast`: HUD 22, ROOM 11, FRAME 50, WORST 51.** The doorway prediction is
+confirmed as far as this instrument can confirm it — **51 is one millisecond of
+clock granularity over the 50 ms period, so nothing overran at all**, including
+the doorway. M1's promise now holds at `fast`: the room is built inside the
+frame the man walks in, with room to spare.
+
+**But `WORST` had stopped being able to say anything else**, and that is the
+instrument's fault rather than the game's. `sync` pads every frame that fits
+its budget to exactly the period, so a worst taken *across* it can only ever
+read 50 — it cannot tell a 20 ms frame from a 49 ms one, and the ~36 ms
+prediction for the doorway is unverifiable through it. `WORST` is now the worst
+**body**, taken before `sync`, which is Battlezone's own `body.ms`/`frame.ms`
+split: the margin becomes visible and an overrun still reads above 50.
+
+**And the board found the collision hole that matters** ([B66](bugs.md)):
+*"man does not collide with end of wall."* §8.3 above carries the correction —
+the test was **crossing** and had to be **occupancy** — and it is the more
+interesting of the two findings, because the sentence it came from is §6.3's
+and has been in this document since it was drafted.
+
+#### CLOSED on a board, 2026-08-30
+
+All three defects the play sessions found are **confirmed fixed on hardware**:
+the man's trail ([B64](bugs.md)), the end of a wall ([B66](bugs.md)) and the
+leftmost column's short runs ([B67](bugs.md)). M2 is done.
+
+**What the milestone cost, and it is worth stating plainly: three defects, and
+a host test could have caught every one of them.** The eraser assumed a wide
+pen squares off its stroke where the reference says it stamps a disc; the wall
+test asked whether the man had *crossed* an edge where the cabinet asks whether
+he may *be* somewhere; and the wall drawer used the ROM's 48 where this port's
+one-pixel border makes the leftmost column 52. None of the three needed a
+board to find — each needed a test that asked the question the *player* asks,
+and each now has one:
+`test_the_erase_covers_every_pixel_the_stamp_wrote`,
+`test_the_end_of_a_vertical_wall_kills_him` and
+`test_every_wall_runs_from_one_grid_line_to_the_next`. The pattern in all
+three is the same and M3 should carry it: **the tests checked that the game did
+what I had written down, and the defects were in what I had written down.**
+
+**The general lesson is worth carrying to M6**, which owns the score, the lives
+and the `BONUS` flash: **on this panel a character costs about a third of a
+millisecond and a frame has 150 of them**. A HUD that rewrites itself every
+frame is not affordable, and the fix is not to write less but to write only
+what changed.
+
+**§22 Q1 is now a person's to answer.** The game ships 1:1 as this section said
+it would, and whether the figures are too small to read is the one thing on
+this list that a host cannot see.
+
+**What M2 did not build.** The electrocution is M7's with the rest of the
+deaths — §7.6 wants the Vectrex's `PlayerFriedScales`, which is five scales
+where `setmag` has two, so it is a question rather than a transcription and the
+man flickers instead. Lives are M6's, so he comes back where a new game starts
+him, in the room he died in.
+
+**One number is worth carrying forward, and it is about storage rather than
+time.** An ordinary frame spends **zero cells**, measured. The once-a-second
+readout does not: `setcursor [20 26]` copies its literal and a three-argument
+`(type ...)` conses its arguments, about fifteen cells a call — so the readout
+ends with `recycle`, which is B25's floor used as a floor, on one frame in
+twenty. `test_the_word_table_converges` walks the man two thousand frames and
+requires the second thousand to spend nothing at all: bounded, not
+zero-per-frame, which is the property §18 actually needs.
 
 ## 20. Tests
 
@@ -1564,7 +1944,9 @@ repeating them.
 ## 22. Open questions
 
 - **Q1 — 1:1 or 1.25×?** §5. Answerable only by a person looking at a board.
-  Ship 1:1 at M2 and ask.
+  Ship 1:1 at M2 and ask. **M2 shipped 1:1 on 2026-08-30 and the question is now
+  open in the only place it can be answered**: everything else on M2's list a
+  host test closed, and this one it cannot see at all.
 - **Q2 — 20 fps or 15?** §15.3 argues 20 on the grounds that a dodging game
   degrades faster than a driving one. M0's `c + m·n` decides whether 20 survives
   eleven robots. **Answered 2026-08-29: neither, as things stand.** The measured

@@ -4,101 +4,124 @@
 ;   load "berzerk
 ;   berzerk
 ;
-; M1 IS THE ROOM, and the room is all
-; that is here yet. Arrows walk from one
-; room to the next, ESC quits. There is
-; no man, no robot and no bolt: those
-; are M2, M3 and M4, and each one is a
-; section of the design document.
+; M2 IS THE MAN. Arrows walk him in
+; eight directions, two at once is a
+; diagonal, SPACE plus a direction
+; stands him still and aims, Z pauses
+; and ESC quits. Walls kill him and
+; doorways do not. There is no robot, no
+; bolt and no Otto: those are M3, M4 and
+; M5, and each one is a section of the
+; design document.
 ;
-; THE MILESTONE'S GATE is one sentence,
-; and you close it with your fingers:
-; the maze is a function of ROOM.X and
-; ROOM.Y, so walk out of a room and back
-; into it and it is the same room.
-; Nothing is kept between the two. The
-; maze is thrown away at the doorway and
-; generated again from the room's own
-; coordinates, which is why an infinite
-; maze costs two globals and no storage
-; at all (design section 6.1). It is the
-; best thing in the Berzerk ROM and it
-; ports for nothing.
+; THE MILESTONE'S GATE is three
+; sentences and you close all three with
+; your fingers: walls kill, doors work,
+; and the eight directions read right on
+; the keyboard. What the host cannot see
+; is in tests/test_berzerk.c.
 ;
-; SO THE FIFTEEN WALL MASKS ARE ON THE
-; SCREEN, under the picture, laid out
-; five across and three down the way
-; design section 6.3 prints them. Two
-; rooms can look alike at a glance and
-; their masks cannot, so walking out and
-; back is a PROOF when the fifteen
-; numbers come back identical and an
-; impression when only the drawing does.
+; THE ROOM IS STILL A PURE FUNCTION of
+; ROOM.X and ROOM.Y (design section
+; 6.1), which is M1's gate and still
+; the best thing in the Berzerk ROM: an
+; infinite maze costs two globals and no
+; storage, because the maze is thrown
+; away at the doorway and generated
+; again from the room's own coordinates.
+; The fifteen wall masks stay on the
+; screen under the picture for the same
+; reason they went there -- two rooms
+; can look alike at a glance and their
+; masks cannot -- and from M3 they are
+; what the robots consult, so a room
+; whose picture and whose table disagree
+; is a robot walking through a wall you
+; can see.
 ;
-; The masks earn their place twice over.
-; They are what the robots will consult
-; in M3 -- a wall test is "which cell am
-; I in, is the edge I am crossing
-; walled", four statements and no pixels
-; -- so if the table and the picture
-; ever disagree, a robot walks through a
-; wall you can see. Putting both on the
-; screen together is the cheapest guard
-; this milestone can carry, and it costs
-; three text rows the game does not need
-; until M6.
+; THREE THINGS M2 DECIDED, each written
+; out where it is coded:
 ;
-; DESIGN QUESTION 3, ANSWERED HERE
-; because M1 is where the room
-; coordinates live: the maze WRAPS at
-; 256 in each axis. ROOM_X and ROOM_Y
-; are one byte each in the cabinet
-; ($4345 holds ROOM_X in L and ROOM_Y in
-; H), and the seed is ROOM_X plus 256
-; times ROOM_Y -- so a coordinate
-; outside 0..255 is not a room the
-; cabinet can be in.
-; Letting them run instead would alias
-; badly rather than usefully: room
-; (256, 0) and room (0, 1) share a seed
-; and are therefore the same room, which
-; is a wrap nobody chose. `modulo` takes
-; the sign of its divisor, so one call
-; folds -1 to 255 and 256 to 0, and the
-; whole decision is two lines.
+; THE COSTUME BUDGET, which is design
+; section 18's third ceiling and the one
+; the bitmap decision introduced.
+; `COSTUME_SLOTS` is 15 and the cabinet
+; has far more sprites than that: the
+; man alone is sixteen. `setrot "flip`
+; is the answer -- the ROM's own
+; left-facing frames are hand-mirrored
+; copies of its right-facing ones, for
+; the robot as much as for the man --
+; and the whole inventory then fits in
+; fifteen with two to spare. The table
+; is beside `cache.man`.
 ;
-; THE KEYBOARD IS READ AS A CHARACTER
-; STREAM, not as key state. Design
-; section 8.2 puts the game on
-; `pollkeys` and `keydown?` and it is
-; right about the GAME: a man who walks
-; while you hold an arrow wants key
-; state, and M2 brings it. This
-; milestone is turn based -- one press
-; is one room -- and key state read in a
-; loop with nothing else to do reports
-; the same press three or four times, so
-; one tap would walk you three rooms
-; away. The Snake Temple lost a
-; milestone to exactly that.
+; THE CONTACT BOX IS THE SPRITE, grown
+; one step on every side, where design
+; section 8.3 asked for the Vectrex's
+; plus-or-minus four. A pixel intercept
+; on a man who is 8 wide and 16 TALL is
+; not a square, and the extra step is
+; also what keeps the eraser off the
+; walls.
 ;
-; AND THE TRANSITION IS TIMED, on the
-; two text rows below the masks, because
-; a room change is the one hitch this
-; game has that is not a frame. Read on
-; a Pico 2 W on 2026-08-30: 30 ms at
-; `fast`, worst 33, and 44 at `normal`,
-; worst 53 -- M0's parts (7.37 ms to
-; generate, 3.34 to draw, plus a
-; full-canvas present) to within 3 %.
+; AND THE BORDER IS A POSITION TEST
+; rather than a table lookup, because
+; `cell.at` clamps and because the mask
+; table has no doorways in it -- it is
+; what robots consult, and robots never
+; leave the room.
 ;
-; The two clocks are what makes the
-; reading worth keeping: 1.47x rather
-; than 2x, so 13.2 ms of a room change
-; is CPU and 16.8 is the SPI wire. More
-; than half of it is the panel, and
-; nothing this file could be written
-; differently would touch that half.
+; THE KEYBOARD IS READ AS STATE from
+; this milestone on. M1 read a character
+; stream and was right to: one press was
+; one room, and key state read in a loop
+; with nothing else to do reports the
+; same tap three or four times, which
+; would have walked you three rooms from
+; one press. A man who walks while an
+; arrow is HELD cannot be driven that
+; way, so `pollkeys` and `keydown?`
+; arrive here with the frame loop that
+; needs them.
+;
+; THE FRAME IS PACED BY `sync` at 20 fps
+; (design section 15.3's gate), and it
+; erases in place: rub the man out where
+; he is, move him, put him back. Design
+; section 3 settled that once the
+; figures became stamps, and with one
+; moving figure and a static maze the
+; alternative would redraw sixteen wall
+; runs to erase eight steps of man.
+;
+; FOUR NUMBERS ARE ON THE SCREEN, once a
+; second, because a number that changes
+; twenty times a second cannot be read.
+; Read on a Pico 2 W on 2026-08-30:
+; FRAME is 50 at `fast` AND 50 at
+; `normal`, and 50 is the paced period
+; -- `sync` only stops waiting when a
+; frame overruns -- so the body fits in
+; the budget with the clock at half
+; speed.
+;
+; WORST was 76 at `fast` and 123 at
+; `normal`, and that is the doorway: M1
+; read the room BUILD at 30 and 44, and
+; the 46 and 79 ms left over were the
+; READOUT, which nobody had ever timed.
+; Text is not batched by `sync` -- every
+; character is an `lcd_putc_attr` and
+; two cursor calls over SPI -- and the
+; frame was writing 141 of them. It now
+; writes fourteen: the help line is
+; drawn once, the timing rows keep their
+; own second, and the masks go to the
+; next frame. HUD is what the masks cost
+; where they now run, so ROOM plus a
+; present is the doorway and HUD plus a
+; frame is the one after it.
 ;
 ; A number on this display cannot be
 ; copied anywhere else, so any new
@@ -240,6 +263,41 @@ end
 ; nothing prevents a sealed pocket, and
 ; the rooms it makes are the rooms
 ; everybody remembers.
+;
+; FIFTY-TWO, NOT FORTY-EIGHT, FOR A RUN
+; WEST OUT OF THE FIRST INTERSECTION,
+; and it is the one number in this
+; procedure that is not the ROM's
+; (B67). The leftmost column is 52 steps
+; wide and the other four are 48 -- the
+; playfield is 244 across as
+; 52 + 4 x 48, which `draw.border`
+; already knows, since its top run is
+; 100 + 48 + 96 rather than a symmetric
+; 98 + 48 + 98. So a run of 48 westward
+; from x = -70 stops four steps short of
+; the left wall.
+;
+; THE CABINET DOES NOT HAVE THE GAP
+; BECAUSE ITS WALL IS FOUR PIXELS THICK.
+; $2620 steps x back 48 and lays twelve
+; 4-pixel sprites, covering arcade x 8
+; to 55, and the left border wall
+; occupies 4 to 7: contiguous. Our
+; border is a one-pixel pen line, so the
+; span a run has to reach is 52. Nothing
+; on the right-hand side needs it -- a
+; run east out of the last intersection
+; lands exactly on the right wall -- and
+; nothing vertical does either, because
+; all three rows are 68.
+;
+; The MASK is unaffected and was always
+; right: `wall.set` names the cells
+; either side of the run, not its
+; length. That is why the picture and
+; the table agreed while the picture had
+; a hole in it.
 to room.seg :k :c :r
   local "w local "ix local "iy
   local "a local "b
@@ -258,7 +316,7 @@ to room.seg :k :c :r
     stop]
   if 3 = :w [
     .setitem :k :seg.h 270
-    .setitem :k :seg.l 48
+    ifelse 1 = :c [.setitem :k :seg.l 52] [.setitem :k :seg.l 48]
     wall.set :a 8
     wall.set :b 4
     stop]
@@ -376,19 +434,701 @@ to draw.walls
   pu
 end
 
-;=====================================
-; Walking out, and walking back
-;
-; The whole milestone is the four
-; procedures below, and the timing is on
-; the one that does the work: generate
-; the room, clear the canvas, draw the
-; walls, present. `clean` and not `cs`,
-; because `cs` restores automatic
-; refresh and would quietly end the
-; measurement.
 
-make "room.ms  0    ; the last one
+;=====================================
+; The man is the cabinet's own sprite
+; (design section 7.4)
+;
+; The bytes below are the disassembly's,
+; verbatim, with their addresses. Each
+; is one byte wide (8 pixels) and $10
+; rows tall, and the ROM reaches them
+; through PLAYER_ANIMATION_TABLE
+; ($2053), which has only THREE entries
+; for a man who walks eight ways:
+; standing ($1046), the group that runs
+; up/up-right/right/down-right/down
+; ($104B), and the group that runs
+; down-left/left/up-left ($1056).
+;
+; SO THE MAN NEEDS TWO SIDES AND WE PAY
+; FOR ONE, and that is this milestone's
+; answer to design section 7.4. The
+; ROM's own left-hand frames at $1391,
+; $13A3 and $13B5 are hand-mirrored
+; copies of $1089, $109B and $10AD --
+; compare them byte for byte and only a
+; row or two differs -- so `setrot
+; "flip` produces them from the right-
+; hand three. That is not a saving of
+; taste: `COSTUME_SLOTS` is 15 (design
+; section 18's third ceiling, the one
+; the bitmap decision introduced) and
+; the cabinet's inventory does not fit
+; in fifteen without it.
+;
+; THE FIFTEEN, ALLOCATED, so no later
+; milestone discovers the ceiling the
+; way Battlezone discovered the
+; procedure one:
+;
+;   1     the man, standing     $10BF
+;   2-4   the man, walking      $10AD
+;                               $109B
+;                               $1089
+;   5-9   the man, shooting     M4
+;   10-13 the robot, four ways  M3
+;   14-15 spare                 M5/M7
+;
+; Eight shooting directions become five
+; slots and five robot facings become
+; four, both by the same flip: the ROM's
+; robot walking left ($1155, eye row
+; $1E) is exactly its robot walking
+; right ($112C, eye row $78) mirrored,
+; and so are their feet ($6C against
+; $36). Section 7.6's explosion takes no
+; slot -- the Vectrex's random dots are
+; already the fallback it names -- and
+; Otto is drawn, not stamped (7.5).
+;
+; M2 BUILDS FOUR OF THE FIFTEEN and not
+; nine. The five shooting poses arrive
+; with the trigger in M4, because
+; building them now would cost 5 x 18 ms
+; of startup (section 18's measured
+; figure) for a pose nothing can reach:
+; there is no bolt in this milestone.
+; What M2 owed section 7.4 was the
+; arithmetic, and the table above is it.
+
+; SIXTEEN DECIMAL BYTES DO NOT FIT IN
+; FORTY COLUMNS, and the four lines
+; below are the only ones in this file
+; that do not: they are a transcription
+; and splitting them would put the ROM's
+; rows out of line with each other.
+;
+; $10BF, standing.
+make "mb1 (list 24 24 0 60 90 90 90 24 24 24 24 24 24 24 28 16)
+; $10AD, $109B, $1089: the walk, whose
+; cycle is A B C B ($104B).
+make "mb2 (list 24 24 0 60 92 92 90 24 24 24 24 24 24 24 28 16)
+make "mb3 (list 0 24 24 0 60 92 92 62 24 24 20 18 242 130 2 3)
+make "mb4 (list 24 24 0 60 90 153 88 24 24 36 34 65 65 129 129 0)
+
+make "man.bits (list :mb1 :mb2 :mb3 :mb4)
+make "man.cyc  (list 2 3 4 3)
+
+make "bit.mask (list 128 64 32 16 8 4 2 1)
+
+; Render an 8-wide bitmap with its top
+; left corner at (:x, :y), one row at a
+; time, the turtle walking east with the
+; pen following the bits. One `fd` a
+; pixel and no `dot`, because `dot`
+; takes a list and a list is a cons
+; (design section 18) -- and this runs
+; at startup, where ~400 statements a
+; sprite is 10 ms nobody sees, not in a
+; frame.
+to render.sprite :bits :x :y
+  local "s.r local "s.b local "s.k
+  repeat count :bits [
+    make "s.r repcount
+    make "s.b item :s.r :bits
+    pu  setx :x  sety :y - :s.r + 1  seth 90
+    repeat 8 [
+      make "s.k item repcount :bit.mask
+      ifelse 0 = bitand :s.b :s.k [pu] [pd]
+      fd 1
+    ]
+  ]
+  pu
+end
+
+; `snapsh` AND NOT `putsh`. `putsh`
+; takes a 16-byte spec and DOUBLES every
+; pixel
+; horizontally on the way in, so the
+; cabinet's 8-wide man would render 16
+; wide -- twice his width in a 48-wide
+; cell, which changes what fits through
+; a doorway and takes the playfield off
+; section 5's 1:1. `snapsh` captures at
+; the size it is given.
+;
+; THE CAPTURE AND THE STAMP MUST USE THE
+; SAME OFFSET, and it is not the origin.
+; A costume is centred on the turtle at
+; both ends, while the man's stored
+; position is his sprite's TOP-LEFT
+; corner -- the arcade's, and what every
+; box in this file is cut against. An
+; 8 x 16 sprite drawn from (x, y)
+; downward has its centre at (x + 3.5,
+; y - 7.5).
+to cache.man
+  local "c.i
+  setpc :wall.pc
+  repeat 4 [
+    make "c.i repcount
+    clean
+    render.sprite (item :c.i :man.bits) 0 0
+    pu  setx 3.5  sety -7.5  seth 0
+    snapsh :c.i 8 16
+  ]
+  clean
+end
+
+;=====================================
+; The direction tables
+;
+; The arcade's four DURL bits -- LEFT 1,
+; RIGHT 2, UP 4, DOWN 8 -- are a mask,
+; so there are sixteen of them and eight
+; mean anything. Every use is a table
+; lookup indexed by `mask + 1` rather
+; than four `if`s: an `item` on a short
+; list is ~8 us at 300 MHz and an
+; arithmetic statement is ~24, so a
+; sixteen-entry table is cheaper than
+; the two tests it replaces even before
+; the third. The four that name no axis
+; ($2042's "up default", "down default",
+; "left default", "right default") are
+; the arcade's own answers and not
+; padding.
+;
+; TURTLE Y RUNS THE OTHER WAY from the
+; cabinet's, so UP is +1 here.
+make "d.dx (list 0 -1 1 0 0 -1 1 0 0 -1 1 0 0 -1 1 0)
+make "d.dy (list 0 0 0 0 1 1 1 1 -1 -1 -1 -1 0 0 0 0)
+
+;=====================================
+; The man (design sections 8.1 to 8.3)
+;
+; His stored position is his sprite's
+; TOP-LEFT corner in turtle steps, which
+; is the arcade's own convention and
+; what the exit table at $2157 is cut
+; against.
+;
+; SPEED. The arcade runs its objects off
+; a TIME/TPRIME counter at 60 Hz
+; ($27A9): the object moves when TIME
+; hits zero and TIME reloads from
+; TPRIME. The player's TPRIME is 2
+; ($2004), so he moves one pixel every
+; other tick -- 30 pixels a second,
+; crossing the 244-wide room in 8.1
+; seconds. One of our frames is three of
+; the cabinet's, so the port keeps
+; arcade UNITS and scales the RATE:
+; 3 / TPRIME = 1.5 steps a frame. A
+; diagonal is 1.5 in each axis and
+; therefore faster, which is what the
+; cabinet does too -- its two velocities
+; are independent.
+make "fps      20
+make "p.speed  1.5
+
+make "p.x     -96
+make "p.y      42
+make "p.dir    0     ; DURL bits, as a robot's
+make "p.fire   2     ; the direction the arms point
+make "p.face   90    ; 90 or 270; flip does the rest
+make "p.step   1     ; where he is in the walk cycle
+make "p.dying  0     ; frames of electrocution left
+
+make "paused false
+
+;=====================================
+; The frame's two marks
+;
+; ERASE-IN-PLACE, which design section 3
+; settled once the figures became stamps
+; (77.43 ms a frame against 85.15 for
+; clear-and-redraw, at eleven robots).
+; The maze is static and there is one
+; moving figure in this milestone, so
+; the alternative would redraw sixteen
+; wall runs a frame to erase eight steps
+; of man.
+;
+; ERASING A STAMP IS NOT A PEN COLOUR. A
+; costume carries its own pixels and
+; `snapsh` cannot capture an eraser --
+; background pixels become transparent
+; by design -- so the erase is a
+; background stroke over the sprite's
+; 8 x 16.
+;
+; THREE STROKES OF PEN 3, AND THE NUMBER
+; 3 IS NOT A TASTE. A wide pen in this
+; interpreter is a filled DISC, not a
+; square, and the reference says so in
+; as many words: "a pen wider than one
+; pixel draws by stamping a filled disc
+; at each point along the line ... and
+; round ends". So a stroke is a stadium
+; whose caps PINCH to a single pixel
+; rather than squaring the end off
+; (B64). One pen-8 stroke down the
+; spine therefore leaves the sprite's
+; four CORNERS behind -- 17 of its 128
+; pixels, its top four rows and its
+; bottom three -- and the man drags a
+; trail in every direction. That is what
+; a board said on 2026-08-30 and it is
+; what this file used to do.
+;
+; Pen 3 is the one wide pen that is a
+; SQUARE: the radius is 1.5, the extent
+; truncates to 1, and the corner (1, 1)
+; is 2 against 2.25, so all nine pixels
+; of the 3 x 3 are in. A stroke of it is
+; an exact rectangle three wide and its
+; length plus two. Three of them at
+; x + 1, x + 4 and x + 6, run from
+; y - 1 down thirteen steps, cover the
+; 8 x 16 EXACTLY: no pixel of the man
+; survives and no pixel outside him is
+; touched. The eraser can no longer
+; reach a wall at all, which is a
+; stronger guarantee than the margin in
+; section 8.3 was carrying for it.
+;
+; AND IT ERASES WHERE HE WAS DRAWN,
+; which is not quite where he is.
+; `stamp` puts the costume's top-left at
+; `round(centre) - w/2`, and his stored
+; position moves 1.5 steps a frame, so
+; half his positions are half-pixels and
+; round to a pixel the stored number
+; does not name. `draw.man` records the
+; rounded position it used and the erase
+; reads that back.
+make "bg.pc 255
+
+make "p.dx -96    ; where he was last drawn,
+make "p.dy 42     ; on whole pixels
+
+to erase.man
+  setpc :bg.pc
+  setpensize 3
+  seth 180
+  pu  setx :p.dx + 1  sety :p.dy - 1  pd  fd 13
+  pu  setx :p.dx + 4  sety :p.dy - 1  pd  fd 13
+  pu  setx :p.dx + 6  sety :p.dy - 1  pd  fd 13
+  pu  setpensize 1
+  setpc :wall.pc
+end
+
+; Standing is its own frame in the ROM
+; ($1046), so it is slot 1 and not a
+; pause in the walk cycle.
+;
+; The heading is the whole of the man's
+; facing: `setrot "flip` mirrors the
+; costume for a turtle pointing west, so
+; 90 wears $104B's group and 270 wears
+; the $1056 frames we did not spend
+; slots on. He keeps the way he last
+; faced while standing, which is what
+; the cabinet does.
+to draw.man
+  pu
+  ifelse 0 = :p.dir [setsh 1] [setsh item :p.step :man.cyc]
+  seth :p.face
+  make "p.dx round :p.x
+  make "p.dy round :p.y
+  setx :p.dx + 3.5
+  sety :p.dy - 7.5
+  stamp
+end
+
+;=====================================
+; Walls kill (design section 8.3)
+;
+; The cabinet did this with a hardware
+; pixel-intercept bit: sprites were
+; XOR-ed into video RAM and a wall pixel
+; under a man pixel raised a flag. We
+; have no such bit and must not fake one
+; with `colourunder`, so a wall test is
+; the arcade's other mechanism --
+; WALLINDEX ($1CE7) and the fifteen
+; masks -- asked the way section 6.3
+; puts it: which cell am I in, is the
+; edge I am crossing walled.
+;
+; THE BOX IS THE SPRITE, GROWN ONE STEP
+; ON EVERY SIDE, and that is a departure
+; from the design document worth writing
+; down. Section 8.3 takes the Vectrex's
+; `PlayerContactBounds2`, which is four
+; steps each way -- but a square is an
+; approximation of a man who is 8 wide
+; and 16 TALL, and Malban's own comment
+; beside it says the smaller radius was
+; a bug ("shot thru wall possible!"). A
+; pixel intercept on an 8 x 16 sprite is
+; four steps in x and EIGHT in y, so
+; that is the box: the cabinet's answer
+; rather than the Vectrex's
+; approximation of it.
+;
+; It also earns its keep twice. A square
+; box lets a man stand four steps INSIDE
+; a horizontal wall, and the eraser
+; above would then eat it; a box that is
+; his own outline cannot. The extra step
+; on each side is the eraser's own
+; margin -- he stops with his outline
+; one step clear of the ink, so the
+; stroke that rubs him out never reaches
+; a wall.
+;
+; Two probes an axis and no more: the
+; leading edge is 17 steps long and a
+; cell is 48 by 68, so its two ends are
+; the only cells it can be in.
+; THE QUESTION IS OCCUPANCY, NOT
+; CROSSING, and getting that wrong is
+; B66. This file used to ask design
+; section 6.3's own phrasing -- "which
+; cell am I in, is the edge I am
+; crossing walled" -- and a crossing
+; test only fires when the man crosses
+; the boundary the wall LIES ON. Walk
+; PARALLEL to a wall and step into the
+; cell at its end and you cross nothing:
+; a board found him standing on the
+; drawn wall, alive, in both axes.
+;
+; The cabinet has no such hole because
+; it has no cells. It XORs the sprite
+; into video RAM and a wall pixel under
+; a man pixel raises the intercept bit,
+; so the only question it ever asks is
+; MAY HE BE HERE. That is what this asks
+; now, and it is cheaper as well as
+; right: four `cell.at` calls for the
+; box's four corners, against the eight
+; the two-axis crossing test made.
+;
+; A cell is 48 x 68 and his box is
+; 10 x 18, so the box lies across at
+; most one column boundary and at most
+; one row boundary -- which is why four
+; corners are the whole of it. Two
+; corners in different cells means the
+; box lies across that boundary, and the
+; first corner's mask says whether a
+; wall is drawn along it.
+to walled? :i :bit
+  output not 0 = bitand :bit item :i :cell
+end
+
+; PREFIXED GLOBALS AND NOT `local`s, in
+; the one procedure the frame calls most.
+; A `local` read costs about 1.5x a
+; global here -- P11 M4 gave the global
+; table a hash index and the local path
+; kept its frame walk -- and eight of
+; them also churn the cell pool, which
+; the frame's own storage claim has to
+; keep at zero. The `w.` prefix is the
+; guard the other half of that trade
+; needs: Logo is dynamically scoped, so
+; a plain name here would be found and
+; overwritten by any caller that happens
+; to `local` it.
+make "w.x0 0   make "w.x1 0
+make "w.y0 0   make "w.y1 0
+make "w.tl 0   make "w.tr 0
+make "w.bl 0   make "w.br 0
+
+to on.wall? :nx :ny
+  make "w.x0 :nx - 1
+  make "w.x1 :nx + 8
+  make "w.y0 :ny - 16
+  make "w.y1 :ny + 1
+  make "w.tl cell.at :w.x0 :w.y1
+  make "w.tr cell.at :w.x1 :w.y1
+  make "w.bl cell.at :w.x0 :w.y0
+  make "w.br cell.at :w.x1 :w.y0
+  if not :w.tl = :w.tr [if walled? :w.tl 2 [output "true]]
+  if not :w.bl = :w.br [if walled? :w.bl 2 [output "true]]
+  if not :w.tl = :w.bl [if walled? :w.tl 8 [output "true]]
+  if not :w.tr = :w.br [if walled? :w.tr 8 [output "true]]
+  output "false
+end
+
+;=====================================
+; The border is a position test, not a
+; table lookup
+;
+; `cell.at` CLAMPS to the 5 x 3 grid, so
+; a crossing test can never see the
+; outer wall: every point left of the
+; playfield is in column 0 and no
+; crossing happens. That is right rather
+; than a gap. The mask table carries the
+; border walls at all four doorways
+; anyway -- cell (row 1, column 0) is
+; LEFT-walled although the left doorway
+; is exactly there -- because the table
+; is what ROBOTS consult and robots
+; never leave the room. Reading it for
+; the player would wall him into a room
+; with four visible doors.
+;
+; So the player meets the border the way
+; the cabinet's pixels meet it, and the
+; doorway is the gap in the drawn wall:
+; turtle y from 6 to 74 on the left and
+; right sides, x from -22 to 26 on the
+; top and bottom, which is exactly the
+; middle cell of each side. He is
+; through it when ALL of him is, box and
+; all, so he cannot clip the stub.
+to thru.side? :y
+  if not 74 > :y + 1 [output "false]
+  output (:y - 16) > 6
+end
+
+to thru.ends? :x
+  if not (:x - 1) > -22 [output "false]
+  output 26 > (:x + 8)
+end
+
+to border? :nx :ny
+  if not thru.side? :ny [
+    if not :nx > -121 [output "true]
+    if not 114 > :nx [output "true]]
+  if not thru.ends? :nx [
+    if :ny > 140 [output "true]
+    if not :ny > -46 [output "true]]
+  output "false
+end
+
+;=====================================
+; The move
+;
+; ONE TEST, NOT ONE PER AXIS. The
+; cabinet's two velocities are separate
+; ($27A9 moves X and Y in turn) and this
+; file used to move them separately to
+; match -- but there is no sliding along
+; a wall in Berzerk, because a wall
+; kills, so the only thing the split
+; bought was two chances to ask the
+; wrong question. `on.wall?` asks
+; whether the man may STAND at the
+; proposed point, so the diagonal is one
+; point like any other.
+
+
+;=====================================
+; Doors do not kill (design section 8.3)
+;
+; The exits are a position test at
+; $2157, and the constants transfer
+; verbatim through section 5's two
+; lines: arcade x >= 246 is turtle
+; x >= 120, arcade x <= -4 is turtle
+; x <= -130, arcade y < 2 is turtle
+; y > 140, arcade y >= 190 is turtle
+; y <= -48. He re-enters at arcade 8,
+; 230, 185 and 6, which are turtle -118,
+; 104, -43 and 136, and THE OTHER AXIS
+; IS PRESERVED -- you come in where you
+; went out.
+;
+; The room is built inside the frame he
+; walks in. M1 measured a room change at
+; 30 ms at `fast` against section 15.3's
+; 50 ms frame, so there is no need to
+; spread the build over two frames; the
+; frame's own `sync` presents it.
+to leave.room
+  if thru.side? :p.y [
+    if not :p.x > -130 [make "p.x 104   go.room -1 0  stop]
+    if not 120 > :p.x  [make "p.x -118  go.room 1 0  stop]]
+  if thru.ends? :p.x [
+    if :p.y > 140      [make "p.y -43   go.room 0 -1  stop]
+    if not :p.y > -48  [make "p.y 136   go.room 0 1]]
+end
+
+;=====================================
+; The death
+;
+; The arcade electrocutes him and holds
+; for 45 ticks ($1FB6), which is fifteen
+; frames at 20 fps. THE ELECTROCUTION
+; ITSELF IS M7'S, with the rest of the
+; deaths: design section 7.6 wants the
+; Vectrex's `PlayerFriedScales` wobble
+; and `setmag` has two steps where that
+; table has five, so it is a question
+; rather than a transcription. Here he
+; flickers -- stamped on alternate
+; frames -- which costs no costume slot,
+; no procedure and no decision M7 has to
+; undo.
+;
+; Lives are M6's. He comes back where a
+; new game starts him, in the room he
+; died in.
+to man.dies
+  if :p.dying > 0 [stop]
+  make "p.dying 15
+  make "p.dir 0
+end
+
+to step.death
+  make "p.dying :p.dying - 1
+  if :p.dying > 0 [stop]
+  reset.man
+end
+
+; DEFAULT_PLAYER_STATE ($187F): arcade
+; (30, 100), just inside the left
+; doorway, which is turtle (-96, 42).
+to reset.man
+  make "p.x -96
+  make "p.y 42
+  make "p.dir 0
+  make "p.fire 2
+  make "p.face 90
+  make "p.step 1
+  make "p.dying 0
+end
+
+;=====================================
+; Input (design section 8.2)
+;
+; `pollkeys` once a frame, then
+; `keydown?` -- LEVEL for the controls
+; that hold and EDGE for the ones that
+; fire, which is the rule Asteroids
+; wrote down. Two arrows at once is a
+; diagonal, which is what makes an
+; eight-direction game playable on this
+; keyboard at all, and the DURL mask
+; adds them for nothing.
+;
+; M1 read a character stream here and
+; was right to: one press was one room,
+; and key state read in a loop with
+; nothing else to do would have walked
+; three rooms from one tap. A man who
+; walks while an arrow is HELD cannot be
+; driven that way, so this is where the
+; milestone changes it over.
+;
+; THE CONTROL WORTH PORTING EXACTLY is
+; from the 2600 manual and visible at
+; $1EEF: "if you depress the fire button
+; while moving the Joystick, your man
+; will stand and fire lasers in any
+; direction you move the Joystick." The
+; fire test comes BEFORE the movement
+; test and FIRE ($1F33) zeroes both
+; velocities, so SPACE plus a direction
+; stands still and shoots that way and
+; a direction alone walks. That is the
+; whole aiming system and it is two
+; lines. The bolt it aims is M4's; what
+; M2 owes it is `p.fire`.
+;
+; ESC is `keydown?` and not `keyhit?`:
+; the loop's first act is to poll, so a
+; key already down when the game starts
+; has had its hit consumed, and quit is
+; the one control where answering twice
+; costs nothing.
+make "key.left  180
+make "key.right 183
+make "key.up    181
+make "key.down  182
+make "key.esc   177
+make "key.space 32
+make "key.pause 122
+
+make "leaving false
+
+to toggle.pause
+  ifelse :paused [make "paused false] [make "paused true]
+end
+
+to poll.input
+  local "d
+  pollkeys
+  if keydown? :key.esc [make "leaving true stop]
+  if keyhit? :key.pause [toggle.pause stop]
+  if :paused [stop]
+  make "d 0
+  if keydown? :key.left  [make "d :d + 1]
+  if keydown? :key.right [make "d :d + 2]
+  if keydown? :key.up    [make "d :d + 4]
+  if keydown? :key.down  [make "d :d + 8]
+  if 1 = bitand :d 3 [make "p.face 270]
+  if 2 = bitand :d 3 [make "p.face 90]
+  make "p.dir :d
+  if not keydown? :key.space [stop]
+  make "p.dir 0
+  if not 0 = :d [make "p.fire :d]
+end
+
+; The walk cycle advances with the move,
+; as the cabinet's does ($27A9 animates
+; and moves off the same counter). One
+; step a frame is 5 cycles a second
+; against the cabinet's 7.5, which is
+; the closest 20 fps can come to 30.
+make "m.nx 0
+make "m.ny 0
+
+to step.man
+  if 0 = :p.dir [stop]
+  make "p.step 1 + modulo :p.step 4
+  make "m.nx :p.x + (:p.speed * item (:p.dir + 1) :d.dx)
+  make "m.ny :p.y + (:p.speed * item (:p.dir + 1) :d.dy)
+  if on.wall? :m.nx :m.ny [man.dies stop]
+  if border? :m.nx :m.ny [man.dies stop]
+  make "p.x :m.nx
+  make "p.y :m.ny
+  leave.room
+end
+
+;=====================================
+; The room, built and shown
+;
+; The timing is on the procedure that
+; does the work: generate the room,
+; clear the canvas, draw the walls.
+; `clean` and not `cs`, because `cs`
+; restores automatic refresh and would
+; quietly end the measurement -- and, in
+; a frame loop, the pacing with it.
+;
+; M1 PRESENTED HERE AND M2 DOES NOT.
+; The room change now happens inside the
+; frame the man walks in, so the frame's
+; own `sync` presents it; a `refresh`
+; here would present the same canvas
+; twice and charge the transition for a
+; second full-canvas pass. `room.ms` is
+; therefore the BUILD alone from this
+; milestone on, where M1's 30 ms on a
+; board was the build and its present
+; together (13.2 ms of CPU and 16.8 of
+; SPI wire, split by the two clocks).
+
+make "room.ms  0    ; the last build
 make "worst.ms 0    ; and the worst
 
 to draw.room
@@ -398,13 +1138,12 @@ to draw.room
   clean
   setpc :wall.pc
   draw.walls
-  refresh
   make "room.ms ticks - :t0
   if :room.ms > :worst.ms [
     make "worst.ms :room.ms]
 end
 
-; Design question 3, taken here: the
+; Design question 3, taken at M1: the
 ; coordinates wrap at 256, because the
 ; cabinet holds each in a byte and a
 ; seed of ROOM_X + 256.ROOM_Y has no
@@ -416,6 +1155,9 @@ to go.room :dx :dy
   show.room
 end
 
+;=====================================
+; The readout under the picture
+;
 ; The fifteen masks in their 5 x 3
 ; layout, each in a three-column field.
 ; A mask is 0 to 15, so a number is one
@@ -424,6 +1166,37 @@ end
 ; and "9 " covers the first two of them,
 ; leaving the third blank from last
 ; time.
+;
+; They are M1's gate and they stay,
+; because they are what M3's robots will
+; consult: a room whose picture and
+; whose table disagree is a robot
+; walking through a wall you can see.
+; M6 owns the score, the lives and the
+; BONUS flash, which is what these eight
+; rows are for in the cabinet.
+;
+; BUT THEY ARE DRAWN ON THE FRAME AFTER
+; THE DOORWAY, NOT IN IT. Text is not
+; part of the graphics `sync`: every
+; character goes straight to the panel
+; as it is typed -- `screen_putc` calls
+; `lcd_putc_attr`, `lcd_set_cursor_char`
+; and `lcd_move_cursor` per character,
+; over SPI -- so the readout costs about
+; a third of a millisecond a character
+; wherever it runs. Forty-five of them
+; on the frame that also generates a
+; room, clears the canvas, draws sixteen
+; walls and presents the whole screen is
+; what made a doorway a dropped frame.
+; Deferred by one frame it costs the
+; same and lands in a frame that has 40
+; ms spare, and the player sees it 50 ms
+; later, which is not a thing anyone can
+; see.
+make "masks.due false
+
 to show.masks
   local "r local "c
   repeat 3 [
@@ -434,79 +1207,283 @@ to show.masks
       (type item (5 * (:r - 1)) + :c :cell "| |)
     ]
   ]
+  recycle
 end
 
+; Once a second and not once a frame,
+; and the reason is storage rather than
+; time. `setcursor [20 26]` copies its
+; literal (two cells) and a `(type ...)`
+; of three things conses its arguments
+; (four more), so the readout spends
+; about fifteen cells every time it
+; runs -- and design section 18's fourth
+; ceiling says a FRAME must spend
+; nothing, because nothing in this
+; interpreter collects on demand.
+;
+; So it ends with `recycle`, which is
+; B25's floor used as a floor: the
+; readout hands back what it spent, in
+; the same breath, once a second. A
+; recycle measured ~4.3 ms in
+; Battlezone, which is a tenth of the 50
+; ms frame and is paid on one frame in
+; twenty. Unconditional rather than
+; gated on `atoms` the way Asteroids
+; gates its own, because the amount is
+; known and small and the frame it lands
+; in has room for it. An ordinary frame still spends
+; zero, and `show.room` puts this call
+; LAST so the room change's own fifteen
+; `setcursor list` conses are inside it.
+; WORST IS THE WORST *BODY*, TAKEN
+; BEFORE `sync`, and that is Battlezone's
+; split rather than a new idea. A frame
+; that fits its budget is padded by
+; `sync` to exactly the period, so a
+; worst-of-`frame.ms` can only ever say
+; 50 and cannot tell a 20 ms frame from
+; a 49 ms one -- which is what a board
+; read on 2026-08-30 (`WORST` 51 at
+; `fast`, one millisecond of clock
+; granularity over the period, meaning
+; nothing overran and nothing more).
+; The body says how much of the 50 was
+; actually used, so the margin is
+; visible and an overrun still shows as
+; a number above 50.
+make "body.ms 0
+make "frame.ms 0
+make "worst.fr 0
+make "frames   0
+make "fr.t0    0
+make "hud.ms   0
+make "worst.hud 0
+
+; ROOM and HUD are the two halves of a
+; transition and WORST is the frame that
+; carries them both, so the four numbers
+; read against each other: if WORST is
+; ROOM plus HUD plus a present, nothing
+; else is hiding in the room change.
+; HUD is one transition behind, because
+; this procedure runs inside the region
+; it measures.
+to show.timing
+  setcursor [20 25]
+  (type "|HUD   | :worst.hud "|   |)
+  setcursor [20 26]
+  (type "|FRAME | :frame.ms "|   |)
+  setcursor [20 27]
+  (type "|WORST | :worst.fr "|   |)
+  setcursor [20 28]
+  (type "|ROOM  | :room.ms "|   |)
+  recycle
+end
+
+; WHAT A DOORWAY WRITES, and it is now
+; fourteen characters rather than 141.
+; The help line never changes, so it is
+; drawn once in `init.game`; the timing
+; rows are on their own once-a-second
+; schedule and were being written twice
+; over on a transition; and the masks go
+; to the next frame. The room number
+; stays, because it names the room the
+; picture is of.
 to show.room
   setcursor [0 25]
   (type "|ROOM | :room.x "| | :room.y "|    |)
+  make "masks.due true
+end
+
+;=====================================
+; The frame
+;
+; `fr.t0` is taken before `poll.input`
+; and outside the paused guard, so
+; `frame.ms` is the real period and a
+; paused frame still measures itself.
+; `sync` presents the frame and then
+; waits for the next boundary, so the
+; reading is the period while the game
+; is inside its budget and the BODY as
+; soon as it is not -- which is the
+; number a gate wants, because an
+; overrun is exactly when `sync` stops
+; waiting.
+;
+; The order is the erase-in-place one:
+; rub the man out where he is, move him,
+; put him back. A room change happens in
+; the middle of that, and it is safe
+; there -- `draw.room` cleans the canvas
+; and redraws the walls, so the erase
+; that has already run is simply
+; redundant.
+; HUD is what the mask readout costs,
+; measured where it now runs. It is the
+; one number that says whether text on
+; this panel is affordable at all: 45
+; characters, unbuffered, against a 50
+; ms frame. ROOM plus a present is the
+; doorway, HUD is the frame after it,
+; and WORST should now be the larger of
+; the two rather than their sum.
+to draw.masks
+  local "t0
+  make "t0 ticks
   show.masks
-  setcursor [20 26]
-  (type "|ROOM MS | :room.ms "|  |)
-  setcursor [20 27]
-  (type "|WORST   | :worst.ms "|  |)
+  make "masks.due false
+  make "hud.ms ticks - :t0
+  if :hud.ms > :worst.hud [make "worst.hud :hud.ms]
+end
+
+; ONE TEXT JOB A FRAME, and it is a rule
+; rather than a coincidence: text is not
+; batched by `sync`, so every character
+; is an SPI write and two jobs in one
+; frame is two frames' worth of panel
+; time in one. The masks take the frame
+; after a doorway and the timing rows
+; take the next free one; a second that
+; loses its beat to a doorway simply
+; misses it.
+to show.text
+  if :masks.due [draw.masks stop]
+  if 0 = modulo :frames :fps [show.timing]
+end
+
+to play.frame
+  make "fr.t0 ticks
+  poll.input
+  if not :leaving [
+    if not :paused [
+      make "frames :frames + 1
+      show.text
+      erase.man
+      ifelse :p.dying > 0 [step.death] [step.man]
+      if 0 = :p.dying [draw.man]
+      if 1 = modulo :p.dying 2 [draw.man]
+    ]
+  ]
+  make "body.ms ticks - :fr.t0
+  if :body.ms > :worst.fr [make "worst.fr :body.ms]
+  sync
+  make "frame.ms ticks - :fr.t0
+end
+
+; `init.game`, `setup.room` and
+; `play.frame` are the three names
+; design section 20 asks for, so the
+; frame is drivable headless -- which is
+; what `test_bench_throughput` needs to
+; take Berzerk as its third game
+; subject, and what lets a host test
+; check the setup this game depends on
+; without playing it.
+;
+; The costumes are built here, once,
+; behind a screen nobody is looking at:
+; four sprites at ~18 ms is 72 ms of
+; startup (design section 18's measured
+; figure, 7x what that section was
+; written with) and it is invisible
+; where a re-`snapsh` inside a frame
+; would not be.
+;
+; WINDOW, not the default `wrap`. M1 set
+; it and nothing needed it; M2 cannot do
+; without it, because the man walks four
+; steps past the playfield to leave
+; through a doorway and his probes hang
+; a step further -- a wrapped probe
+; lands on the far side of the screen.
+to init.game
+  splitscreen
+  window
+  ct
+  setrefresh "manual
+  ht
+  cache.man
+  setrot "flip
+  make "leaving false
+  make "paused false
+  make "frames 0
+  make "worst.fr 0
+  make "worst.ms 0
+  make "worst.hud 0
+  reset.man
   setcursor [0 29]
-  type "|ARROWS WALK OUT, ESC QUITS|
+  type "|ARROWS WALK, SPACE AIMS, ESC QUITS|
+  draw.room
+  show.room
+  ; And the first room's masks are drawn
+  ; HERE rather than deferred, because
+  ; the frame they would be deferred to
+  ; is also the one presenting a whole
+  ; canvas for the first time. Deferring
+  ; is for doorways, which happen while
+  ; the frame loop is already running and
+  ; has somewhere to put the work.
+  draw.masks
+end
+
+; THE FIRST `sync` AFTER `setrefresh
+; "sync` ALWAYS WAITS A FULL PERIOD, and
+; it must not do that inside a measured
+; frame. `frame_sync_wait_ms` has no
+; baseline to pace from on its first
+; call, so it seeds the cadence at `now`
+; and puts the first boundary one period
+; out (`test_first_wait_seeds_full_
+; period` says so in as many words). A
+; frame timed across its own `sync` then
+; reads its work PLUS fifty, and that is
+; a measurement artefact and not a
+; hitch: a board read `WORST` at 98 ms
+; at `fast` and 118 at `normal` on
+; 2026-08-30, and both are the FIRST
+; frame -- 48 and 68 ms of real work
+; with the seed on top of them.
+;
+; So the cadence is seeded here, outside
+; the loop, where the wait costs nothing
+; and nobody is looking. It also puts
+; the room on the screen at once rather
+; than a frame later.
+;
+; A baseline poll goes with it, so the
+; Enter that started the game is not
+; delivered to the first frame as a hit.
+to play.game
+  init.game
+  (setrefresh "sync :fps)
+  sync
+  pollkeys
+  until [:leaving] [play.frame]
 end
 
 ;=====================================
 ; The session
-
-; The codes `readchar` hands back. The
-; arrows have no printable character, so
-; they arrive as codes of their own; the
-; `keydown?` entry in the reference
-; lists them all.
-make "key.left  180
-make "key.right 183
-make "key.up    181
-make "key.down  182
-make "key.esc   177
-
-make "leaving false
-
-; One press is one room. Up is ROOM_Y
-; MINUS one because arcade y runs down
-; the screen -- the exit table at $2157
-; sends `y < 2` to ROOM_Y - 1 -- and
-; that is the same negated y as
-; everything else here.
-to walk
-  local "k
-  until [:leaving] [
-    make "k ascii readchar
-    if :k = :key.left  [go.room -1 0]
-    if :k = :key.right [go.room 1 0]
-    if :k = :key.up    [go.room 0 -1]
-    if :k = :key.down  [go.room 0 1]
-    if :k = :key.esc   [make "leaving true]
-  ]
-end
-
+;
 ; ONE EXIT, and it puts the screen back
 ; the way it found it -- `setrefresh
 ; "auto` above all, because a session
-; left in manual mode looks like a
-; broken interpreter to whoever types
-; the next command.
-;
-; There is no key drain here and there
-; is nothing to drain: the game is
-; entered by typing its name and Enter,
-; which the REPL has already taken, and
-; M6's attract screen is where a
-; keypress can outlive the screen that
-; asked for it.
+; left in sync mode looks like a broken
+; interpreter to whoever types the next
+; command, and so does a turtle still
+; wearing a costume and still flipping
+; with its heading.
 to berzerk
-  splitscreen
-  window
-  setrefresh "manual
-  ct
-  make "worst.ms 0
-  make "leaving false
-  draw.room
-  show.room
-  walk
+  play.game
   setrefresh "auto
+  setsh 0
+  setrot "fixed
+  setpensize 1
+  setpc :wall.pc
+  st
   textscreen
   ct
 end
