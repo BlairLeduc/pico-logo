@@ -1,0 +1,512 @@
+; Berzerk.
+; See docs/berzerk-design.md.
+;
+;   load "berzerk
+;   berzerk
+;
+; M1 IS THE ROOM, and the room is all
+; that is here yet. Arrows walk from one
+; room to the next, ESC quits. There is
+; no man, no robot and no bolt: those
+; are M2, M3 and M4, and each one is a
+; section of the design document.
+;
+; THE MILESTONE'S GATE is one sentence,
+; and you close it with your fingers:
+; the maze is a function of ROOM.X and
+; ROOM.Y, so walk out of a room and back
+; into it and it is the same room.
+; Nothing is kept between the two. The
+; maze is thrown away at the doorway and
+; generated again from the room's own
+; coordinates, which is why an infinite
+; maze costs two globals and no storage
+; at all (design section 6.1). It is the
+; best thing in the Berzerk ROM and it
+; ports for nothing.
+;
+; SO THE FIFTEEN WALL MASKS ARE ON THE
+; SCREEN, under the picture, laid out
+; five across and three down the way
+; design section 6.3 prints them. Two
+; rooms can look alike at a glance and
+; their masks cannot, so walking out and
+; back is a PROOF when the fifteen
+; numbers come back identical and an
+; impression when only the drawing does.
+;
+; The masks earn their place twice over.
+; They are what the robots will consult
+; in M3 -- a wall test is "which cell am
+; I in, is the edge I am crossing
+; walled", four statements and no pixels
+; -- so if the table and the picture
+; ever disagree, a robot walks through a
+; wall you can see. Putting both on the
+; screen together is the cheapest guard
+; this milestone can carry, and it costs
+; three text rows the game does not need
+; until M6.
+;
+; DESIGN QUESTION 3, ANSWERED HERE
+; because M1 is where the room
+; coordinates live: the maze WRAPS at
+; 256 in each axis. ROOM_X and ROOM_Y
+; are one byte each in the cabinet
+; ($4345 holds ROOM_X in L and ROOM_Y in
+; H), and the seed is ROOM_X plus 256
+; times ROOM_Y -- so a coordinate
+; outside 0..255 is not a room the
+; cabinet can be in.
+; Letting them run instead would alias
+; badly rather than usefully: room
+; (256, 0) and room (0, 1) share a seed
+; and are therefore the same room, which
+; is a wrap nobody chose. `modulo` takes
+; the sign of its divisor, so one call
+; folds -1 to 255 and 256 to 0, and the
+; whole decision is two lines.
+;
+; THE KEYBOARD IS READ AS A CHARACTER
+; STREAM, not as key state. Design
+; section 8.2 puts the game on
+; `pollkeys` and `keydown?` and it is
+; right about the GAME: a man who walks
+; while you hold an arrow wants key
+; state, and M2 brings it. This
+; milestone is turn based -- one press
+; is one room -- and key state read in a
+; loop with nothing else to do reports
+; the same press three or four times, so
+; one tap would walk you three rooms
+; away. The Snake Temple lost a
+; milestone to exactly that.
+;
+; AND THE TRANSITION IS TIMED, on the
+; two text rows below the masks, because
+; a room change is the one hitch this
+; game has that is not a frame. Read on
+; a Pico 2 W on 2026-08-30: 30 ms at
+; `fast`, worst 33, and 44 at `normal`,
+; worst 53 -- M0's parts (7.37 ms to
+; generate, 3.34 to draw, plus a
+; full-canvas present) to within 3 %.
+;
+; The two clocks are what makes the
+; reading worth keeping: 1.47x rather
+; than 2x, so 13.2 ms of a room change
+; is CPU and 16.8 is the SPI wire. More
+; than half of it is the panel, and
+; nothing this file could be written
+; differently would touch that half.
+;
+; A number on this display cannot be
+; copied anywhere else, so any new
+; reading goes into the roadmap by
+; hand, with the clock beside it.
+
+;=====================================
+; The playfield, at 1:1 with the cabinet
+; (design section 5)
+;
+;   turtle x = arcade x - 126
+;   turtle y = 142 - arcade y
+;
+; 244 arcade pixels of 320 across and
+; 204 of the 240 rows `splitscreen`
+; presents, centred at (0, +40). Every
+; constant in the disassembly then
+; transfers verbatim in x and NEGATED in
+; y, and that sign is the one thing here
+; worth checking twice.
+;
+; The 5 x 3 cell grid: column boundaries
+; at turtle x = -70, -22, 26, 74 and row
+; boundaries at turtle y = 74, 6.
+
+; White, as the cabinet's walls are at
+; difficulty 0.
+make "wall.pc 254
+
+; WINDOW, not the default `wrap`. It
+; costs nothing to set now and M2 cannot
+; do without it: the man's contact box
+; hangs four steps past him, and at the
+; right-hand wall a wrapped probe lands
+; on the far side of the screen.
+window
+
+;=====================================
+; The room (design section 6)
+
+make "room.x 0
+make "room.y 0
+make "seed   0
+
+; MAZE_ZONES, 15 bytes, one per cell,
+; five wide and row-major:
+;
+;   bit 0 (1) = wall on this cell's LEFT
+;   bit 1 (2) = wall on its RIGHT
+;   bit 2 (4) = wall on its TOP
+;   bit 3 (8) = wall on its BOTTOM
+;
+; Built with `list` and never written as
+; a literal in a procedure body: a
+; literal belongs to the stored body of
+; whatever holds it, and `.setitem`
+; would scribble on it for good.
+make "cell []
+
+; The eight interior segments, one per
+; interior grid intersection: start
+; point in turtle steps, heading and
+; length. Four lists of eight rather
+; than thirty-two names, which is design
+; section 18's arithmetic on the
+; 254-global ceiling.
+make "seg.x (list 0 0 0 0 0 0 0 0)
+make "seg.y (list 0 0 0 0 0 0 0 0)
+make "seg.h (list 0 0 0 0 0 0 0 0)
+make "seg.l (list 0 0 0 0 0 0 0 0)
+
+; The generator at $2678: a 16-bit LCG
+; whose output is the high byte. It has
+; to be THIS one and not `random`,
+; because the whole point is reproducing
+; the room, and `rerandom` reseeds a
+; different stream that is not
+; indexable by room coordinate.
+;
+; 7 * 65535 + 12627 is 471,372, well
+; inside the 2^24 a single-precision
+; float holds exactly, so the modulo is
+; not rounding anything away.
+to rnd
+  make "seed modulo ((7 * :seed) + 12627) 65536
+  output int (:seed / 256)
+end
+
+to wall.set :idx :bit
+  .setitem :idx :cell bitor (item :idx :cell) :bit
+end
+
+; The template at $268C, `ldir`-copied
+; into MAZE_ZONES at $2567 before the
+; eight segments set their bits into it.
+;
+; THE BORDER CELLS ARE WALLED ON ALL
+; FOUR OUTER SIDES EVEN WHERE THE EXITS
+; ARE -- cell (row 1, col 0) carries a
+; LEFT wall although the left doorway is
+; exactly there. That is not a bug. The
+; table is what ROBOTS consult, and
+; robots never leave the room; the
+; player's exits are his own position
+; test (design section 8.3, M2), which
+; is why the arcade needs both.
+to wall.template
+  output (list 5 4 4 4 6 1 0 0 0 2 9 8 8 8 10)
+end
+
+; One intersection. `c` is the column
+; boundary 1-4 (between cells c-1 and c)
+; and `r` the row boundary 1-2; `k` is
+; which of the eight slots this segment
+; goes in.
+;
+; The four choices are the `set`
+; instructions at $2617-$264B against
+; ix+0, ix+1, ix+5 and ix+6 -- an index
+; into the 5-wide array where +1 is the
+; next column and +5 the next row, which
+; is what makes the mapping legible:
+;
+;   rand & 3 = 2  horizontal, one cell
+;     RIGHT: bottom of above-right, top
+;     of below-right
+;   rand & 3 = 3  horizontal, one cell
+;     LEFT: bottom of above-left, top of
+;     below-left
+;   rand & 3 = 0  vertical, one cell
+;     ABOVE: right of above-left, left
+;     of above-right
+;   rand & 3 = 1  vertical, one cell
+;     BELOW: right of below-left, left
+;     of below-right
+;
+; That is the entire maze generator.
+; Nothing checks connectivity and
+; nothing prevents a sealed pocket, and
+; the rooms it makes are the rooms
+; everybody remembers.
+to room.seg :k :c :r
+  local "w local "ix local "iy
+  local "a local "b
+  make "w bitand rnd 3
+  make "ix (48 * :c) - 118
+  make "iy 142 - (68 * :r)
+  make "a (5 * (:r - 1)) + :c
+  make "b (5 * :r) + :c
+  .setitem :k :seg.x :ix
+  .setitem :k :seg.y :iy
+  if 2 = :w [
+    .setitem :k :seg.h 90
+    .setitem :k :seg.l 48
+    wall.set (:a + 1) 8
+    wall.set (:b + 1) 4
+    stop]
+  if 3 = :w [
+    .setitem :k :seg.h 270
+    .setitem :k :seg.l 48
+    wall.set :a 8
+    wall.set :b 4
+    stop]
+  if 0 = :w [
+    .setitem :k :seg.h 0
+    .setitem :k :seg.l 68
+    wall.set :a 2
+    wall.set (:a + 1) 1
+    stop]
+  .setitem :k :seg.h 180
+  .setitem :k :seg.l 68
+  wall.set :b 2
+  wall.set (:b + 1) 1
+end
+
+; RNG_SEED := ROOM_X + 256.ROOM_Y at the
+; top of every room build ($2540), so
+; the maze -- and, from M3, the robot
+; placement that follows it -- is a pure
+; function of where you are.
+;
+; CREATE_ROOM ($25EB) is called twice,
+; once per interior row boundary, and
+; each call steps x by 48 while x < 220,
+; so x = 56, 104, 152, 200. Eight
+; intersections in all, and THE ORDER
+; MATTERS: it is the order the generator
+; is drawn from, and the room only
+; reproduces if it is kept.
+to setup.room
+  make "seed :room.x + (256 * :room.y)
+  make "cell wall.template
+  room.seg 1 1 1
+  room.seg 2 2 1
+  room.seg 3 3 1
+  room.seg 4 4 1
+  room.seg 5 1 2
+  room.seg 6 2 2
+  room.seg 7 3 2
+  room.seg 8 4 2
+end
+
+; WALLINDEX ($1CE7): a point to a cell
+; index, 1-based. This is the room's
+; whole public interface from M2 on --
+; the cabinet did wall collision by
+; DRAWING, with sprites XOR-ed into
+; magic RAM and a hardware intercept
+; bit, and we have no such bit and must
+; not fake one with `colourunder`.
+;
+; The clamps are not defensive padding.
+; M3's `iq` probes points four steps
+; outside a robot, which at a wall are
+; outside the playfield, and the arcade
+; clamps there too.
+to cell.at :x :y
+  local "c local "r
+  make "c int ((:x + 118) / 48)
+  make "r int ((142 - :y) / 68)
+  if 0 > :c [make "c 0]
+  if :c > 4 [make "c 4]
+  if 0 > :r [make "r 0]
+  if :r > 2 [make "r 2]
+  output (5 * :r) + :c + 1
+end
+
+;=====================================
+; The walls (design section 7.1)
+;
+; Sixteen runs at most: eight of border
+; and up to eight interior. The border
+; is one closed circuit with the pen
+; toggling -- twelve statements and no
+; `setpos` after the first, against
+; sixteen `setpos`-and-`fd` pairs if
+; each run were placed on its own.
+;
+; The doorway is the middle cell of each
+; side: 48 steps wide top and bottom, 68
+; tall left and right. The top run is
+; 100 + 48 + 96 rather than a symmetric
+; 98 + 48 + 98 because the cabinet's
+; leftmost column is 52 arcade pixels
+; and the other four are 48.
+;
+; PEN SIZE STAYS 1. A 2-pixel pen reads
+; better and costs round caps that spill
+; outside the stroke, which is the
+; artefact that once made a present-cost
+; harness measure every frame as a full
+; screen (docs/hardware-notes.md 9.1).
+to draw.border
+  pu setpos [-122 142] seth 90 pd
+  fd 100  pu fd 48  pd fd 96
+  rt 90
+  fd 68  pu fd 68  pd fd 68
+  rt 90
+  fd 96  pu fd 48  pd fd 100
+  rt 90
+  fd 68  pu fd 68  pd fd 68
+  pu
+end
+
+to draw.walls
+  local "i
+  draw.border
+  repeat 8 [
+    make "i repcount
+    pu setx item :i :seg.x
+    sety item :i :seg.y
+    seth item :i :seg.h
+    pd fd item :i :seg.l
+  ]
+  pu
+end
+
+;=====================================
+; Walking out, and walking back
+;
+; The whole milestone is the four
+; procedures below, and the timing is on
+; the one that does the work: generate
+; the room, clear the canvas, draw the
+; walls, present. `clean` and not `cs`,
+; because `cs` restores automatic
+; refresh and would quietly end the
+; measurement.
+
+make "room.ms  0    ; the last one
+make "worst.ms 0    ; and the worst
+
+to draw.room
+  local "t0
+  make "t0 ticks
+  setup.room
+  clean
+  setpc :wall.pc
+  draw.walls
+  refresh
+  make "room.ms ticks - :t0
+  if :room.ms > :worst.ms [
+    make "worst.ms :room.ms]
+end
+
+; Design question 3, taken here: the
+; coordinates wrap at 256, because the
+; cabinet holds each in a byte and a
+; seed of ROOM_X + 256.ROOM_Y has no
+; room outside 0..255 to name.
+to go.room :dx :dy
+  make "room.x modulo (:room.x + :dx) 256
+  make "room.y modulo (:room.y + :dy) 256
+  draw.room
+  show.room
+end
+
+; The fifteen masks in their 5 x 3
+; layout, each in a three-column field.
+; A mask is 0 to 15, so a number is one
+; digit or two and the trailing space is
+; the erase: "10 " covers three columns
+; and "9 " covers the first two of them,
+; leaving the third blank from last
+; time.
+to show.masks
+  local "r local "c
+  repeat 3 [
+    make "r repcount
+    repeat 5 [
+      make "c repcount
+      setcursor list 3 * (:c - 1) 25 + :r
+      (type item (5 * (:r - 1)) + :c :cell "| |)
+    ]
+  ]
+end
+
+to show.room
+  setcursor [0 25]
+  (type "|ROOM | :room.x "| | :room.y "|    |)
+  show.masks
+  setcursor [20 26]
+  (type "|ROOM MS | :room.ms "|  |)
+  setcursor [20 27]
+  (type "|WORST   | :worst.ms "|  |)
+  setcursor [0 29]
+  type "|ARROWS WALK OUT, ESC QUITS|
+end
+
+;=====================================
+; The session
+
+; The codes `readchar` hands back. The
+; arrows have no printable character, so
+; they arrive as codes of their own; the
+; `keydown?` entry in the reference
+; lists them all.
+make "key.left  180
+make "key.right 183
+make "key.up    181
+make "key.down  182
+make "key.esc   177
+
+make "leaving false
+
+; One press is one room. Up is ROOM_Y
+; MINUS one because arcade y runs down
+; the screen -- the exit table at $2157
+; sends `y < 2` to ROOM_Y - 1 -- and
+; that is the same negated y as
+; everything else here.
+to walk
+  local "k
+  until [:leaving] [
+    make "k ascii readchar
+    if :k = :key.left  [go.room -1 0]
+    if :k = :key.right [go.room 1 0]
+    if :k = :key.up    [go.room 0 -1]
+    if :k = :key.down  [go.room 0 1]
+    if :k = :key.esc   [make "leaving true]
+  ]
+end
+
+; ONE EXIT, and it puts the screen back
+; the way it found it -- `setrefresh
+; "auto` above all, because a session
+; left in manual mode looks like a
+; broken interpreter to whoever types
+; the next command.
+;
+; There is no key drain here and there
+; is nothing to drain: the game is
+; entered by typing its name and Enter,
+; which the REPL has already taken, and
+; M6's attract screen is where a
+; keypress can outlive the screen that
+; asked for it.
+to berzerk
+  splitscreen
+  window
+  setrefresh "manual
+  ct
+  make "worst.ms 0
+  make "leaving false
+  draw.room
+  show.room
+  walk
+  setrefresh "auto
+  textscreen
+  ct
+end

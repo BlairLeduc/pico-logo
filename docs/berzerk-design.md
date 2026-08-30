@@ -333,7 +333,12 @@ still the right mechanism; what is wrong is the price.
 
 **The fix is not to make the lookup cheaper but to stop doing it.** A robot
 moves two steps a frame inside a 48 × 68 cell, so it needs re-probing only when
-it **crosses a cell boundary** — about one frame in twenty. M1 owns it.
+it **crosses a cell boundary** — about one frame in twenty. ~~M1 owns it.~~
+**M3 owns it** (corrected 2026-08-30): M1 is the room and there is no robot in
+it to re-probe, and a robot only compares the cell it is in against the cell it
+was in if it has a previous cell — which is why M0 could not measure the saving
+either. What M1 does own is `cell.at` itself, which is the room's whole public
+interface from M2 on.
 
 ## 7. The figures
 
@@ -1261,8 +1266,10 @@ against a pen walk's ~45, and the whole six now cost **229 ms at 150 / ~111 at
 300**.
 
 At startup that is invisible — once, behind an attract screen. At a room
-transition, swapping four costumes is 72 ms on top of the room generation's own
-7.4, which is a hitch rather than a frame. So either **the working set fits in
+transition, swapping four costumes is 72 ms on top of ~~the room generation's
+own 7.4~~ **a room change measured at 30 ms** (M1, 2026-08-30, `fast`), so
+**~102 ms — two dropped frames at 20 fps rather than a hitch**, which is a
+worse answer than this paragraph was written with. So either **the working set fits in
 fifteen**, or the renderer gets cheaper: drawing each row as *runs* of set bits
 rather than eight pixel steps is roughly 3×, and is the obvious lever if it is
 ever needed. **M2 and M3 own the budget**; nothing is built for it now. It is
@@ -1295,7 +1302,7 @@ Each leaves `ctest --preset=tests` green, and each ends with a board reading.
 | M | What | Gate |
 |---|---|---|
 | **M0** | The measurement harness | **DONE 2026-08-29 — all six questions answered on a Pico 2 W, gate FAILED at 77.35 ms against 50** (106.30 before §7's figures changed). Erase strategy decided: **erase-in-place**, once the figures are stamps. §15.3, and the decision it leaves is §22 Q2 |
-| M1 | The room | The maze is a function of `(room.x, room.y)`; walk out and back and it is the same room |
+| M1 | The room | **DONE 2026-08-30.** The maze is a function of `(room.x, room.y)`; walk out and back and it is the same room. Read on a board at both clocks: a room change is **30 ms at `fast`** (worst 33) and 44 at `normal`, which is M0's parts to 3 %. §19's M1 note |
 | M2 | The man | Walls kill, doors work, the eight directions read right on the keyboard |
 | M3 | The robots | Seek, `IQ`, the count cycle, robots killing robots |
 | M4 | The bolts | Both bolt kinds, the three firing windows, the alignment rule confirmed against MAME (§10.2) |
@@ -1423,6 +1430,88 @@ list — and the script still ran, still wrote its file, and still contained
 every substring an obvious test would look for. The guard is a maximum line
 length on the written report, which is the shape the failure actually has.
 
+### M1 — the room, and the decision it had to take (2026-08-30)
+
+`logo/games/berzerk` — **14 procedures** against §18's budget of 100 — is the
+room and nothing else: §6's LCG, the eight intersections, the fifteen masks,
+§7.1's one-circuit border and its eight interior runs, `cell.at`, and a walk
+from room to room. There is no man, no robot and no bolt; those are M2, M3 and
+M4. `tests/test_berzerk.c` is **17 host tests** and `ctest` is green at 83/83
+suites.
+
+**The gate is a claim about a pure function, so it is put on the screen as
+numbers.** "Walk out and back and it is the same room" is something a person
+closes with their fingers, and what they see is a maze that *looks* the same —
+eight segments have few enough shapes that two rooms often do. So the fifteen
+wall masks sit under the picture in §6.3's own 5 × 3 layout, and walking out
+and back is a **reading** when the fifteen numbers come back identical and an
+impression when only the drawing does. The masks earn the three text rows
+twice over: they are what M3's robots consult, so a room whose picture and
+table disagree is a robot walking through a wall you can see.
+
+**The one test this milestone exists for is that the picture and the table
+agree**, and it is the check §6.2 says is worth writing out. The two are
+computed down *different paths* from the same `rand & 3` — one produces a start
+point, a heading and a length, the other sets bits into a 5-wide array through
+`ix+0/ix+1/ix+5/ix+6` — and §5 warns that the disassembly's two coordinate
+conventions are named backwards with respect to each other. Each half is
+self-consistent under any test that checks only that half. So
+`test_the_drawn_walls_agree_with_the_wall_masks` stands ten steps off both
+sides of every drawn segment in sixteen rooms and asks `cell.at` what it finds:
+a horizontal run must be the BOTTOM of the cell above and the TOP of the cell
+below, a vertical run the RIGHT of the cell left and the LEFT of the cell
+right. Verified to fail on a mutation in **each** path — the bits swapped, and
+the segment's `y` negated.
+
+**`readchar`, not `pollkeys` — for this milestone only.** §8.2 puts the game on
+key *state* and is right about the game: a man who walks while an arrow is held
+needs it, and M2 brings it. M1 is turn based, one press is one room, and key
+state read in a loop with nothing else to do reports the same tap three or four
+times — which is the defect the Snake Temple lost a milestone to, and here it
+would walk you three rooms from one press.
+
+**Q3 is answered** (§22), because M1 is where the room coordinates live: they
+wrap at 256, and the reason is that the seed is one number rather than two.
+
+#### The board reading (2026-08-30)
+
+**30 ms a room change at `fast`, worst 33; 44 ms at `normal`, worst 53.** M0's
+parts predicted ~29 ms at 300 MHz (7.37 to generate + 3.34 to draw + a
+full-canvas splitscreen present) and the transition measures **30**, so it is
+exactly the sum of its measured pieces and M0's figures transfer to a game.
+
+**The pair of clocks is the more useful half, and it corrects what was written
+above.** A room change is not "roughly double at 150 MHz" — it is **1.47×** —
+because it is the one cost in this game that is mostly **not** interpretation.
+Split it on P13 M0's measured 2.059 interpretation ratio, `I + W = 30` and
+`2.059·I + W = 44`, and it comes apart as **13.2 ms of CPU and 16.8 ms of SPI
+wire**. Both halves check out against numbers measured separately: 13.2 against
+M0's 10.71 ms of Logo plus the line rasteriser and the `clean`, and 16.8
+against M0's directly measured **18.60 ms** full-canvas splitscreen present.
+So **more than half a room change is the panel**, no interpreter lever in §16
+reaches it, and the only thing that would make it cheaper is presenting less of
+the canvas — which a room change, where every pixel does change, is the one
+place in this game that cannot.
+
+**The spread is CPU-side**: +3 ms over the mean at `fast` and +9 at `normal`,
+so it narrows with the clock and is not the wire. The likely cause is in the
+generator's own output — the eight interior segments are 48 steps or 68
+depending on `rand & 3`, so a room of verticals draws about 40 % more wall than
+a room of horizontals, and that is rasteriser time.
+
+**Two consequences the later milestones should have.** A transition's worst
+case is **33 ms against §15.3's 50 ms frame**, so from M2 the man can walk
+through a doorway and the next room can be built *inside the frame he walks in*
+with ~17 ms left for the frame's own work — the build does not need spreading
+over two frames. And §18's costume escape now has its arithmetic: four
+`snapsh`es at ~18 ms on top of a 30 ms transition is **~102 ms**, two dropped
+frames rather than a hitch, which is the argument for a per-game working set
+that fits in the fifteen slots rather than a per-room one that is swapped.
+
+M1 does not ask for the overclock — §15.5's precondition is about a frame loop
+and the frame loop arrives with M2 — so both readings above are of a game that
+never touched `hw.cpu`.
+
 ## 20. Tests
 
 `tests/test_berzerk.c`, mirroring `tests/test_battlezone.c`: the game is pure
@@ -1489,6 +1578,17 @@ repeating them.
 - **Q3 — how many rooms should a maze remember?** None, by §6.1 — but the
   cabinet's rooms repeat every 256 in each axis, and whether to reproduce that
   wrap or let the coordinates run is a one-line decision nobody has taken.
+  **ANSWERED 2026-08-30 at M1, which is where the room coordinates live: they
+  wrap at 256.** The argument turns out not to be about fidelity at all. The
+  seed is `ROOM_X + 256 · ROOM_Y` and that is *one number*, so letting the
+  coordinates run does not give an unbounded maze — it aliases room (256, 0)
+  onto room (0, 1), which is a wrap nobody chose and one that makes the maze
+  fold along a diagonal. Wrapping each axis reproduces the cabinet (`$4345`
+  holds `ROOM_X` in L and `ROOM_Y` in H, a byte each), keeps every room's seed
+  in 0–65535 where the LCG's `modulo 65536` is exact, and removes the negative
+  seed that walking left out of room 0 would otherwise produce. `modulo` takes
+  the sign of its divisor, so it is two lines and no test of a special case.
+  The maze still remembers **nothing**; it is 65,536 rooms on a torus.
 - **Q4 — does the scroll survive?** §17 cuts it and M7 reconsiders it. 112 ms
   of present for a transition is either the best 112 ms in the game or an
   irritation, and only playing it says which.

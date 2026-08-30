@@ -137,6 +137,15 @@ add_logo_test(test_battlezone)
 target_compile_definitions(test_battlezone PRIVATE
     BATTLEZONE_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/battlezone")
 
+# Berzerk (P15), M1: the room. The game is pure Logo -- what the host can check
+# is that the maze is a FUNCTION of the room coordinates, which is the half of
+# this milestone a board cannot see, and that the drawn walls and the wall masks
+# describe the same maze. What a room costs was measured by M0 on a board
+# (tests/logo/p15m0).
+add_logo_test(test_berzerk)
+target_compile_definitions(test_berzerk PRIVATE
+    BERZERK_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/berzerk")
+
 # P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
 # regression guard on relative numbers (interpreter-throughput-design.md §6).
 # P14 M1 added the two vector-game subjects (Asteroids, Battlezone) that
