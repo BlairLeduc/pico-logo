@@ -497,7 +497,7 @@ void test_the_border_is_a_closed_circuit_with_four_doorways(void)
 {
     run("clean");
     mock_device_clear_graphics();
-    run("draw.border");
+    run("draw.border 0 0");
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(8, mock_device_line_count(),
         "the border is not eight runs, so a doorway is missing or doubled");
@@ -527,7 +527,7 @@ void test_a_room_is_eight_border_runs_and_eight_interior_ones(void)
     in_room(6, 3);
     run("clean");
     mock_device_clear_graphics();
-    run("draw.walls");
+    run("draw.walls 0 0");
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(16, mock_device_line_count(),
         "a room is not sixteen runs");
@@ -1158,7 +1158,7 @@ void test_the_mans_outline_never_touches_a_wall(void)
             room_y = num(":room.y");
             run("clean");
             mock_device_clear_graphics();
-            run("draw.walls");
+            run("draw.walls 0 0");
             nw = mock_device_line_count();
             TEST_ASSERT_EQUAL_INT(16, nw);
             for (int w = 0; w < nw; w++)
@@ -1635,10 +1635,11 @@ void test_berzerk_puts_the_screen_back(void)
 
     // IT HAS TO HAVE PLAYED.  From M3 a board that will not take the fast
     // clock is refused (§15.5), and a refusal skips `play.game` — which leaves
-    // every assertion below true for the wrong reason.  Eight costumes is
-    // `init.game` having run.
+    // every assertion below true for the wrong reason.  Thirteen costumes is
+    // `init.game` having run: four of the man walking, four of the robot, and
+    // M4's five shooting poses (§7.4's allocation, now spent but for two).
     const MockDeviceState *st = mock_device_get_state();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(8, st->costume.snap_count,
+    TEST_ASSERT_EQUAL_INT_MESSAGE(13, st->costume.snap_count,
         "the game never started, so this proved nothing about putting it back");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("auto", word_of("refreshmode"),
         "the game left the display in sync refresh");
@@ -1652,6 +1653,34 @@ void test_berzerk_puts_the_screen_back(void)
     // rather than about the screen (B50).
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(LOGO_CPU_KHZ_NORMAL, mock_cpu_khz,
         "the game left the board overclocked");
+}
+
+// Running out of men is worth a card and ESC is not, which is Battlezone's
+// split.  The attract screen is still M6's (§21, risk 6); what M4 owes is that
+// the game ENDS, because the difficulty ramp is bounded by nothing else.
+//
+// The two halves are checked apart: `test_three_deaths_end_the_game_...` drives
+// the frame loop to the flag, and this drives the card off it.  A whole
+// three-life game cannot be run through `berzerk` here, because `play.game`
+// paces on `sync` and the mock clock only moves when a test moves it.
+void test_the_last_life_is_worth_a_card_and_esc_is_not(void)
+{
+    run("setrefresh \"manual  init.game  make \"score 750");
+    mock_device_clear_output();
+    run("show.game.over");
+    const char *card = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(card, "GAME OVER"), "the card does not say so");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(card, "750"), "the card does not carry the score");
+
+    // ESC quits without one, and a fresh `berzerk` is a fresh game.
+    press(K_ESC);
+    mock_device_clear_output();
+    run("berzerk");
+    release(K_ESC);
+    TEST_ASSERT_NULL_MESSAGE(strstr(mock_device_get_output(), "GAME OVER"),
+        "quitting showed a game-over card");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3.0f, num(":lives"),
+        "the new game did not restore the lives");
 }
 
 // WINDOW, not the default `wrap`.  M1 set it and nothing needed it; M2 cannot
@@ -1706,6 +1735,14 @@ void test_the_game_is_inside_the_procedure_ceiling(void)
 static void no_robots(void)
 {
     run("repeat 11 [.setitem repcount :r.state 0]  make \"rob.live 0");
+}
+
+// Empty every slot.  A test that wants one bolt gets one, and `bolt.live` is
+// the gate the whole pass hangs off, so it has to agree with the slots.
+static void no_bolts(void)
+{
+    run("repeat 7 [.setitem repcount :b.dir 0  .setitem repcount :b.len 0]  "
+        "make \"bolt.live 0");
 }
 
 // One robot, placed by hand with a cold wall cache.
@@ -2063,31 +2100,126 @@ void test_no_robot_spawns_touching_a_wall(void)
 // number the workspace has not held before interns a word (B52), so eleven
 // robots writing fractional coordinates into two lists would mint two words a
 // robot a frame for as long as the game ran.
-void test_a_robot_moves_at_the_arcades_reload_rate(void)
+// Put `n` robots in open ground in a line due west of the man, run the real
+// logic pass for `frames` frames, and hand back how far the first of them
+// travelled.
+//
+// THE LINE IS THE POINT.  They sit at the man's own seek row (`p.y - 2`, which
+// is $23EF's compensation for his being taller than a robot), so every one of
+// them walks due EAST and one step is one pixel of x.  Eleven apart is clear of
+// `hit.robots`' eight, and they hold that spacing because they all move at the
+// same rate -- spread them in y instead and they converge on his row, collide,
+// and the measurement is of a crowd that killed itself.
+static int crowd_travel(int n, int tp, int frames)
 {
-    static const struct { int tprime, frames, pixels; } rate[] = {
-        { 5, 5, 3 }, { 4, 4, 3 }, { 3, 3, 3 }, { 2, 2, 3 }, { 1, 1, 3 },
-    };
-    run("make \"cell wall.template");
-    for (size_t k = 0; k < sizeof(rate) / sizeof(rate[0]); k++)
+    no_robots();
+    no_bolts();
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    char cmd[224];
+    snprintf(cmd, sizeof(cmd),
+             "make \"p.x 110  make \"p.y 40  make \"p.dying 0  "
+             "make \"rob.bolts 0  make \"rob.wait 9999  "
+             "make \"rob.tp %d  make \"rob.vecs %d  make \"rob.live %d",
+             tp, n, n);
+    run(cmd);
+    for (int i = 1; i <= n; i++)
+        robot_at(i, -120.0f + 11.0f * (float)(i - 1), 38.0f, 0, 1);
+    for (int f = 0; f < frames; f++)
+        run("logic.robots");
+
+    char msg[96];
+    snprintf(msg, sizeof(msg), "the crowd of %d lost one during the measurement", n);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)n, num(":rob.vecs"), msg);
+    return (int)(robot_x(1) + 120.0f);
+}
+
+// ROBOT_SPEED IS NOT THE WHOLE PERIOD: THE CROWD TAKES TURNS.  B72, and the
+// number that found it came off a recording of the cabinet -- "at the start of
+// the game, the robots move about once per second" -- against a port that was
+// moving them fifteen pixels a second.
+//
+// `BOTTOM_OF_SCREEN_INTERRUPT` ($26D9) runs once a video frame and moves
+// exactly two things: the man, through MAN_PTR, and ONE vector through V.PTR.
+// Then $2701-$270C walks V.PTR on to the next vector.  So the man moves every
+// interrupt and a robot moves only when his turn comes round, and the period is
+//
+//     (vectors in the list) x ROBOT_SPEED  interrupts per pixel.
+//
+// The man is exempt because he is not in that list: $1FD6 allocates his vector
+// inline with a NULL link word where $200E links a robot's into the chain.
+//
+// The start of a game is about ten robots at ROBOT_SPEED 4 -- forty interrupts,
+// two thirds of a second a pixel -- which is what the board was watching.
+void test_a_robot_takes_about_a_second_a_pixel_at_the_start_of_a_game(void)
+{
+    // Three seconds of the opening room.
+    int px = crowd_travel(10, 4, 60);
+    float seconds_per_pixel = 3.0f / (float)px;
+
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "ten robots at ROBOT_SPEED 4 moved %d pixels in three seconds, "
+             "which is %g seconds a pixel and not about one",
+             px, (double)seconds_per_pixel);
+    TEST_ASSERT_TRUE_MESSAGE(seconds_per_pixel > 0.5f && seconds_per_pixel < 1.2f, msg);
+}
+
+// AND KILLING ROBOTS SPEEDS UP THE SURVIVORS, because they are the
+// denominator.  Eleven robots share the room's step rate and the last one has
+// all of it -- which is the thing everybody remembers about the end of a room,
+// and it is not a rule anybody wrote, it is the round robin.
+void test_killing_robots_speeds_up_the_ones_left(void)
+{
+    int crowd = crowd_travel(10, 4, 60);
+    int alone = crowd_travel(1, 4, 60);
+
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "one robot travelled %d pixels where ten each travelled %d, "
+             "so thinning the room did not speed up what is left of it",
+             alone, crowd);
+    TEST_ASSERT_TRUE_MESSAGE(alone >= crowd * 8, msg);
+}
+
+// AND A ROBOT IS NEVER FASTER THAN THE MAN UNTIL HE IS THE LAST ONE, which is
+// the correction to §8.1 and §9.1: they say robots run at twice the player's
+// rate from the fourth room on, and that is true of a room with ONE robot left
+// in it and of nothing else.  The man is 1.5 steps a frame.
+void test_a_robot_only_outruns_the_man_as_the_last_one_left(void)
+{
+    // Two robots at the floor: one pixel every two interrupts, which is the
+    // man's own rate.
+    int two = crowd_travel(2, 1, 60);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(90, two,
+        "two robots at ROBOT_SPEED 1 are not exactly the man's speed");
+
+    // One: twice it, and only here.
+    int one = crowd_travel(1, 1, 60);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(180, one,
+        "the last robot at ROBOT_SPEED 1 is not twice the man's speed");
+}
+
+// THE AGGREGATE IS THE CHECK ON THE WHOLE MODEL.  The cabinet moves at most one
+// robot per interrupt, so a room produces 60/ROBOT_SPEED robot-steps a second
+// however many robots are standing in it.  Here each robot steps
+// 3/(vectors x tp) a frame and there are `vectors` of them, so the room
+// produces 3/tp a frame -- the same number.  If the total moved with the crowd
+// size, the per-robot rate would be wrong even where it looked right.
+void test_the_rooms_step_rate_does_not_depend_on_how_many_robots_are_in_it(void)
+{
+    static const int crowd[] = { 2, 5, 10 };
+    for (size_t k = 0; k < sizeof(crowd) / sizeof(crowd[0]); k++)
     {
-        char cmd[64];
-        no_robots();
-        man_at(60, 38);                 // due east, so seek says RIGHT alone
-        hoist_player_cell();
-        robot_at(1, -20, 38, 0, 1);
-        snprintf(cmd, sizeof(cmd), "make \"rob.tp %d", rate[k].tprime);
-        run(cmd);
-
-        for (int f = 0; f < rate[k].frames; f++)
-            run("step.robot 1");
-
-        char msg[160];
+        int each = crowd_travel(crowd[k], 3, 60);
+        int total = each * crowd[k];
+        char msg[176];
         snprintf(msg, sizeof(msg),
-                 "at TPRIME %d a robot moved %g pixels in %d frames, not %d",
-                 rate[k].tprime, (double)(robot_x(1) + 20.0f),
-                 rate[k].frames, rate[k].pixels);
-        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-20.0f + (float)rate[k].pixels, robot_x(1), msg);
+                 "%d robots at ROBOT_SPEED 3 took %d steps between them in 60 "
+                 "frames, where the interrupt allows 60",
+                 crowd[k], total);
+        // Three ticks a frame over a period of 3n, n robots: sixty steps
+        // between them, whatever n is.
+        TEST_ASSERT_EQUAL_INT_MESSAGE(60, total, msg);
     }
 }
 
@@ -2255,8 +2387,22 @@ void test_the_explosion_is_four_frames_and_then_the_slot_is_empty(void)
 // the only wide pen that does not spill is pen 3 -- a wider one is a filled
 // disc whose round caps would eat the wall he died against (B64).  Inside his
 // own box, his own eraser is the only one it ever needs.
+// SIXTY EXPLOSIONS AND NOT ONE, which is B68 and is the whole of why this test
+// passed while a board watched robots leave a pixel behind.  The assertion was
+// right; the sample was four frames of six strokes, against a corner that needs
+// `random 6` and `random 4` to come up together -- one stroke in twenty-four.
+// A stroke starts somewhere in the box and steps ONE PIXEL in one of four
+// directions, so the start has to be inset by one on the side the step can
+// leave from, and it was not: from x + 0 a westward stroke reached x - 1, a
+// column `erase.robots` does not cover.
 void test_the_explosion_stays_inside_the_robots_own_box(void)
 {
+    // AND THE RANDOM SOURCE HAS TO MOVE.  `mock_random` is a constant 42, so
+    // `random 6` is always 0 and `random 4` always 2 -- one of the twenty-four
+    // strokes this procedure can draw, and not the one that leaves the box.
+    set_mock_random_walking(true);
+    for (int e = 0; e < 60; e++)
+    {
     no_robots();
     robot_at(1, -30, 44, 0, 1);
     run("rob.dies 1");
@@ -2280,6 +2426,7 @@ void test_the_explosion_stays_inside_the_robots_own_box(void)
             TEST_ASSERT_TRUE_MESSAGE(l->y2 <= 44.01f && l->y2 >= 32.99f, msg);
         }
         run("step.boom 1");
+    }
     }
 }
 
@@ -2555,13 +2702,12 @@ void test_a_doorway_brings_a_new_crowd(void)
 }
 
 
-// A DEATH RESTARTS THE ROOM, which M2 did not need and M3 cannot do without:
-// he respawns in the left doorway cell and the thing that killed him is
-// standing there.  The crowd comes back on the eleven spawn cells -- the
+// A DEATH SENDS HIM TO ANOTHER ROOM, which M2 did not need and M3 cannot do
+// without: he respawns in the left doorway cell and the thing that killed him
+// is standing there.  The crowd comes back on the eleven spawn cells -- the
 // fifteen less the four doorway cells -- so the cell he arrives in is the one
-// cell no robot starts in.  Same room, same maze, same threshold, because a
-// death is not a doorway.
-void test_a_death_restarts_the_room_around_him(void)
+// cell no robot starts in.
+void test_a_death_sends_him_to_another_room_and_costs_him_a_life(void)
 {
     run("setrefresh \"manual  init.game");
     run("make \"room.x 6  make \"room.y 2  make \"rob.ti 4  "
@@ -2578,11 +2724,26 @@ void test_a_death_restarts_the_room_around_him(void)
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":p.dying"), "he never came back");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-96.0f, num(":p.x"), "he did not respawn at the doorway");
     TEST_ASSERT_TRUE_MESSAGE(num(":rob.live") > 0.0f, "the crowd did not come back");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(6.0f, num(":room.x"), "the death moved him to another room");
 
-    // AND IT COSTS HIM DIFFICULTY, which is the cabinet charging for a death
-    // rather than resetting the room around him: $1806 is the per-life entry
-    // and it calls the same $209D a doorway does, so $20D8 and $20E1 run.
+    // ANOTHER ROOM, WHICH M3 GOT WRONG AND M4 READ OUT OF $1806 -- reversed once
+    // on a board's report and put back by watching the cabinet (2026-08-31).
+    // The per-life entry builds a room from the current coordinates and then
+    // sets ROOM_X and ROOM_Y from `call RANDOM` ($1821, low byte to ROOM_X) --
+    // and since $209D does not return until you die, what it writes is where
+    // the NEXT life starts.  So a death does not put you back in the maze that
+    // killed you.  It is deterministic rather than arbitrary: the room he lands
+    // in is a function of the stream the room he died in left behind.
+    TEST_ASSERT_TRUE_MESSAGE(num(":room.x") != 6.0f || num(":room.y") != 2.0f,
+        "the death put him back in the room that had just killed him");
+    TEST_ASSERT_TRUE_MESSAGE(num(":room.x") >= 0.0f && num(":room.x") <= 255.0f,
+        "the new room's x is not a byte");
+    TEST_ASSERT_TRUE_MESSAGE(num(":room.y") >= 0.0f && num(":room.y") <= 255.0f,
+        "the new room's y is not a byte");
+
+    // AND IT COSTS HIM A LIFE AND SOME DIFFICULTY.  A death is a room build,
+    // so $20D8 and $20E1 run and the cabinet charges you for dying; the three
+    // lives are what stop that running away.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2.0f, num(":lives"), "the death was free");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":rob.ti"),
         "a death did not advance the threshold, but it re-enters the same room init");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2.0f, num(":rob.tp"),
@@ -2606,6 +2767,71 @@ void test_a_death_restarts_the_room_around_him(void)
         "he was killed again the frame he came back");
 }
 
+// THREE LIVES AND THEN THE GAME ENDS, which is the whole reason the ramp is
+// survivable.  $209D advances the robot threshold and decrements ROBOT_SPEED,
+// and BOTH a doorway ($2209 ends `jp $20D7`, which falls into that block) and a
+// death ($1806 -> $181E) reach it -- so the game gets harder every room and
+// every death, ROBOT_SPEED runs 4, 3, 2, 1 over the first four builds and stays
+// at 1, where a robot moves twice the player's speed.  In the cabinet that is
+// bounded by the game ENDING and DEFAULT_PLAYER_STATE being copied back; here
+// it was bounded by nothing at all, and a board reported the obvious symptom:
+// the game gets very hard very quickly.
+void test_three_deaths_end_the_game_and_a_new_one_starts_over(void)
+{
+    run("setrefresh \"manual  init.game");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3.0f, num(":lives"), "a game does not start with three");
+
+    for (int life = 3; life >= 1; life--)
+    {
+        run("make \"p.dying 0  man.dies");
+        for (int f = 0; f < 16; f++)
+            frame();
+        char msg[96];
+        snprintf(msg, sizeof(msg), "after %d death(s) he has %g lives",
+                 4 - life, (double)num(":lives"));
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)(life - 1), num(":lives"), msg);
+    }
+
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":over"),
+        "the third death did not end the game");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":leaving"),
+        "the game over did not stop the frame loop");
+
+    // And a new game puts the whole ramp back where $187F puts it: threshold,
+    // robot speed, score and lives.  Without this a session only ever gets
+    // harder, which is not a difficulty curve.
+    run("make \"score 4321  init.game");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3.0f, num(":lives"), "the new game did not restore the lives");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":score"), "the new game kept the score");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":over"), "the new game started over");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4.0f, num(":rob.tp"),
+        "the new game kept the robots at the speed the last one reached");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2.0f, num(":rob.ti"),
+        "the new game kept the last one's threshold");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":rob.bolts"),
+        "the new game kept the last one's robot bolts");
+}
+
+// The ramp itself, read straight: ROBOT_SPEED starts at 5 ($187F byte 8) and
+// $20E1 decrements it at the top of every room build with a floor of 1, and the
+// threshold at $434A starts at $60 and has $60 added as BCD -- so the FIRST
+// room a player sees is the 87.5 % one and the FOURTH is already at the floor.
+// This is the cabinet, and it is a great deal steeper than "robots begin slower
+// than you"; what it is not is unbounded.
+void test_the_ramp_reaches_the_floor_in_four_room_builds(void)
+{
+    static const int speed[6] = { 4, 3, 2, 1, 1, 1 };
+    run("setrefresh \"manual  init.game");
+    for (int room = 0; room < 6; room++)
+    {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "after %d room build(s) ROBOT_SPEED is %g",
+                 room + 1, (double)num(":rob.tp"));
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)speed[room], num(":rob.tp"), msg);
+        run("go.room 1 0");
+    }
+}
+
 
 // A FRAME THAT BUILDS A ROOM WRITES NO TEXT, which is M3's widening of M2's
 // "one text job a frame" and came off a board: `WORST` read 100 ms at `fast`
@@ -2624,6 +2850,9 @@ void test_a_frame_that_builds_a_room_writes_no_other_text(void)
     man_at(119, 42);                 // one step from the right-hand doorway
     press(K_RIGHT);
 
+    // A game starts in a random room ($17D6), so the door is read as a step
+    // rather than as a coordinate.
+    float was = num(":room.x");
     // Force the collision: the second's beat falls on the frame he leaves in.
     run("make \"frames 19  make \"masks.due false");
     mock_device_clear_output();
@@ -2631,7 +2860,8 @@ void test_a_frame_that_builds_a_room_writes_no_other_text(void)
     release(K_RIGHT);
     const char *screen = mock_device_get_output();
 
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":room.x"), "he did not go through the door");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(fmodf(was + 1.0f, 256.0f), num(":room.x"),
+        "he did not go through the door");
     TEST_ASSERT_NULL_MESSAGE(strstr(screen, "FRAME"),
         "the timing rows were written in the frame that built a room");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":room.built"),
@@ -2788,6 +3018,1136 @@ void test_the_spawn_bands_are_the_cabinets_own(void)
 
 //==========================================================================
 
+//==========================================================================
+// M4: the bolts (design section 10)
+//==========================================================================
+
+// One bolt, placed by hand with its wall cache primed the way `fire.bolt`
+// primes it -- the cell of its own head, so the first frame does not report a
+// crossing that never happened.
+static void bolt_at(int i, int dir, float x, float y, int len, int own)
+{
+    char cmd[400];
+    snprintf(cmd, sizeof(cmd),
+             ".setitem %d :b.dir %d  .setitem %d :b.x %g  .setitem %d :b.y %g  "
+             ".setitem %d :b.len %d  .setitem %d :b.own %d  "
+             ".setitem %d :b.cell cell.at %g %g  "
+             "make \"bolt.live :bolt.live + 1",
+             i, dir, i, (double)x, i, (double)y,
+             i, len, i, own,
+             i, (double)x, (double)y);
+    run(cmd);
+}
+
+static int bolt_dir(int i) { char e[32]; snprintf(e, sizeof(e), "item %d :b.dir", i); return (int)num(e); }
+static int bolt_len(int i) { char e[32]; snprintf(e, sizeof(e), "item %d :b.len", i); return (int)num(e); }
+static float bolt_x(int i) { char e[32]; snprintf(e, sizeof(e), "item %d :b.x", i); return num(e); }
+static float bolt_y(int i) { char e[32]; snprintf(e, sizeof(e), "item %d :b.y", i); return num(e); }
+
+// SHOOT ($287F) is asked directly: the seek direction it is handed comes from
+// $241B and is the RAW one, before `iq` has cleared anything, so a test has to
+// hoist it the way `step.robot` does.
+static const char *robot_fires(float px, float py, float rx, float ry)
+{
+    char cmd[220];
+    snprintf(cmd, sizeof(cmd),
+             "make \"p.x %g  make \"p.y %g  make \"rob.bolts 5  "
+             "make \"s.k seek %g %g",
+             (double)px, (double)py, (double)rx, (double)ry);
+    run(cmd);
+    char e[96];
+    snprintf(e, sizeof(e), "robot.fires 1 %g %g", (double)rx, (double)ry);
+    return word_of(e);
+}
+
+// SHOOT refuses entirely unless one of three windows matches, and the windows
+// are read off the compares rather than off the prose: `cp -2 / jp nc` with
+// `cp 6 / jr c` is dx in -2..5 INCLUSIVE, `cp -4` with `cp 7` is dy in -4..6,
+// and `cp $F6` with `cp 6` on abs(dy) - abs(dx) is -10..5.
+//
+// The robot sits at the origin throughout and the man is moved to put the
+// deltas on their boundaries, with the other two windows held wide open --
+// which is the only way to test a window that is third in a chain of three.
+//
+// The 2600 manual's "unlike you, robots cannot shoot on the diagonal" is right
+// about the 2600 and wrong about the arcade.  The third window is right there.
+void test_the_three_firing_windows_at_their_boundaries(void)
+{
+    static const struct { float px, py; bool fires; const char *what; } way[] = {
+        //  dx = p.x, dy = 2 - p.y, with the robot at the origin.
+        {   5.0f, -98.0f, true,  "dx = 5, the top of the vertical window" },
+        {  -2.0f, -98.0f, true,  "dx = -2, the bottom of it" },
+        {   6.0f, -98.0f, false, "dx = 6, one past the vertical window" },
+        {  -3.0f, -98.0f, false, "dx = -3, one under it" },
+        { 100.0f,  -4.0f, true,  "dy = 6, the top of the horizontal window" },
+        { 100.0f,   6.0f, true,  "dy = -4, the bottom of it" },
+        { 100.0f,  -5.0f, false, "dy = 7, one past the horizontal window" },
+        { 100.0f,   7.0f, false, "dy = -5, one under it" },
+        {  20.0f, -23.0f, true,  "abs(dy) - abs(dx) = 5, the top of the diagonal window" },
+        {  20.0f,  -8.0f, true,  "abs(dy) - abs(dx) = -10, the bottom of it" },
+        {  20.0f, -24.0f, false, "abs(dy) - abs(dx) = 6, one past the diagonal window" },
+        {  20.0f,  -7.0f, false, "abs(dy) - abs(dx) = -11, one under it" },
+        {  20.0f, -98.0f, false, "well off every window" },
+    };
+
+    for (size_t k = 0; k < sizeof(way) / sizeof(way[0]); k++)
+    {
+        no_bolts();
+        const char *got = robot_fires(way[k].px, way[k].py, 0.0f, 0.0f);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(way[k].fires ? "true" : "false", got, way[k].what);
+    }
+}
+
+// The direction is SEEK's, MASKED: a vertical window keeps the up/down bits
+// ($28D8's `and $0C`), a horizontal one the left/right bits ($28D2's
+// `and $03`), and a diagonal keeps both.  So a robot nearly in your column
+// shoots straight down it rather than at you.
+void test_a_robots_shot_is_seeks_direction_masked_to_the_window(void)
+{
+    no_bolts();
+    robot_fires(5.0f, -98.0f, 0.0f, 0.0f);       // vertical window
+    TEST_ASSERT_EQUAL_INT_MESSAGE(8, bolt_dir(3),
+        "a shot down the column kept its sideways bit");
+
+    no_bolts();
+    robot_fires(100.0f, -4.0f, 0.0f, 0.0f);      // horizontal window
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, bolt_dir(3),
+        "a shot along the row kept its vertical bit");
+
+    no_bolts();
+    robot_fires(20.0f, -18.0f, 0.0f, 0.0f);      // diagonal window
+    TEST_ASSERT_EQUAL_INT_MESSAGE(10, bolt_dir(3),
+        "a diagonal shot did not keep both bits");
+}
+
+// The bolt goes in the FIRST free robot slot of the RBOLTS the difficulty
+// table allows ($289F scans exactly that many), and slots 1 and 2 are the
+// player's and are never scanned.
+void test_a_robot_takes_the_first_free_robot_slot_and_never_the_players(void)
+{
+    no_bolts();
+    run("make \"rob.wait 0");
+    robot_fires(100.0f, -4.0f, 0.0f, 0.0f);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1), "a robot took a player slot");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(2), "a robot took a player slot");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, bolt_dir(3), "the robot's bolt is not in slot 3");
+
+    // Every robot slot full and the shot is refused rather than dropped on a
+    // player bolt.
+    no_bolts();
+    run("repeat 5 [.setitem repcount + 2 :b.dir 2]  make \"bolt.live 5");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", robot_fires(100.0f, -4.0f, 0.0f, 0.0f),
+        "a robot fired with every robot slot in use");
+}
+
+// RWAIT ($434D) IS SHARED BY THE ROOM and not held per robot: SHOOT's first
+// act is to read the timer at TIMER_LIST_PTR+1 and return if it is running,
+// and $2931 reloads it from RWAIT after any robot fires.  So a room of robots
+// lined up on you produces ONE bolt, not eleven -- which is also what makes
+// the fire test one comparison a frame instead of eleven.
+void test_only_one_robot_fires_per_holdoff(void)
+{
+    no_robots();
+    no_bolts();
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    for (int i = 1; i <= 5; i++)
+        robot_at(i, -60.0f + 4.0f * (float)i, 40.0f, 0, 1);
+    run("make \"p.x 100  make \"p.y 44  make \"rob.bolts 5  make \"rob.wait 0  "
+        "make \"rob.wait0 70");
+    run("logic.robots");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, (int)num(":bolt.live"),
+        "a room of robots all fired in the same frame");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(70, (int)num(":rob.wait"),
+        "the shot did not reload the room's holdoff");
+
+    // And nothing fires while it runs.
+    run("logic.robots");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, (int)num(":bolt.live"),
+        "a robot fired while the holdoff was still running");
+}
+
+// $28EF zeroes both of the firing robot's velocities, with the best comment in
+// the disassembly beside it: "if you didn't do this, the robot could walk into
+// the bolt it's just fired and blow itself up."  Both S.TAB pattern pointers
+// are $1000, the STANDING group, so he also stops looking where he was going.
+void test_a_firing_robot_stops_dead_and_stands(void)
+{
+    no_robots();
+    no_bolts();
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    robot_at(1, 0.0f, 40.0f, 0, 1);
+    run("make \"p.x 100  make \"p.y 44  make \"rob.bolts 5  make \"rob.wait 0  "
+        "make \"rob.wait0 70  make \"rob.tp 1  .setitem 1 :r.time 0");
+    run("logic.robots");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, robot_x(1),
+        "the robot walked in the frame he fired in");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)num("item 1 :r.dir"),
+        "the firing robot is not wearing the standing group");
+}
+
+// SR.TAB ($2067): the pose the man wears, where his bolt starts and which way
+// it goes, all off the DURL bits through DIRECTION_OFFSET_TABLE.  Every number
+// here is the ROM's, with the y column negated as every y in this file is.
+void test_space_and_a_direction_starts_the_roms_own_bolt(void)
+{
+    static const struct { int a, b; int dir; float dx, dy; const char *way; } way[] = {
+        { K_RIGHT, 0,      2,  7.0f, -3.0f, "right" },
+        { K_LEFT,  0,      1,  0.0f, -3.0f, "left" },
+        { K_UP,    0,      4,  7.0f, -2.0f, "up" },
+        { K_DOWN,  0,      8,  6.0f, -7.0f, "down" },
+        { K_UP,    K_RIGHT, 6, 7.0f, -1.0f, "up and right" },
+        { K_UP,    K_LEFT,  5, 0.0f,  0.0f, "up and left" },
+        { K_DOWN,  K_RIGHT, 10, 6.0f, -6.0f, "down and right" },
+        { K_DOWN,  K_LEFT,  9, 0.0f, -6.0f, "down and left" },
+    };
+
+    in_room(0, 0);
+    for (size_t k = 0; k < sizeof(way) / sizeof(way[0]); k++)
+    {
+        no_bolts();
+        man_at(-40.0f, 40.0f);
+        run("make \"p.shoot 0");
+        press(K_SPACE);
+        press(way[k].a);
+        if (way[k].b) press(way[k].b);
+        run("poll.input  fire.man");
+        release(K_SPACE);
+        release(way[k].a);
+        if (way[k].b) release(way[k].b);
+
+        char msg[160];
+        snprintf(msg, sizeof(msg), "shooting %s took the wrong direction", way[k].way);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(way[k].dir, bolt_dir(1), msg);
+        snprintf(msg, sizeof(msg), "shooting %s started the bolt in the wrong place", way[k].way);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-40.0f + way[k].dx, bolt_x(1), msg);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(40.0f + way[k].dy, bolt_y(1), msg);
+    }
+}
+
+// TRY_FIRE ($1F01) takes the first of the two player slots that is free and
+// refuses if neither is, and $1F8A holds the trigger for 12 ticks -- four of
+// our frames, counted down three a frame, so the fifth frame is the next shot.
+// Holding the key re-arms it on exactly the frame it expires, which is why the
+// pose does not blink between shots.
+void test_the_man_holds_two_bolts_and_reloads_for_twelve_ticks(void)
+{
+    in_room(0, 0);
+    no_bolts();
+    no_robots();
+    man_at(-40.0f, 40.0f);
+    run("make \"p.shoot 0");
+    press(K_SPACE);
+    press(K_UP);
+
+    run("poll.input  fire.man");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, bolt_dir(1), "the first shot did not go out");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(12, (int)num(":p.shoot"), "the reload is not the ROM's 12");
+
+    for (int f = 1; f <= 3; f++)
+    {
+        run("poll.input  fire.man");
+        char msg[96];
+        snprintf(msg, sizeof(msg), "a second bolt went out %d frame(s) into the reload", f);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(2), msg);
+    }
+    run("poll.input  fire.man");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, bolt_dir(2), "the reload never expired");
+
+    // Both slots are now in use, so the next expiry has nowhere to put a bolt.
+    for (int f = 0; f < 4; f++)
+        run("poll.input  fire.man");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, (int)num(":bolt.live"),
+        "a third player bolt went out with both slots in use");
+
+    release(K_SPACE);
+    release(K_UP);
+}
+
+// THE ARRAY IS PROCESSED THREE TIMES A TICK AND NOT TWICE, which is M4's
+// correction to section 10.2 and the one mechanism that section marked as
+// inferred.  HANDLE_PLAYER_BOLTS is `ld b,2 / call`, then `(mod+2) and 7 /
+// call`, and then `ld b,7` FALLING THROUGH into the same loop -- so a slot
+// gets 1 + (i <= 2) + (i <= (mod+2) and 7) passes.  One pixel a pass at 60 Hz
+// is three of our frames.
+//
+// Player bolts are therefore nine steps a frame at every difficulty, and robot
+// bolts three at mod 0 and six at mod 5.  Section 10.2 expected parity at
+// mod 5; there is no difficulty at which they are equal.
+void test_a_player_bolt_is_three_pixels_a_tick_and_a_robot_bolt_one(void)
+{
+    static const int mod0[7] = { 9, 9, 3, 3, 3, 3, 3 };
+    static const int mod5[7] = { 9, 9, 6, 6, 6, 6, 6 };
+
+    run("make \"score 0  place.bolts");
+    for (int i = 1; i <= 7; i++)
+    {
+        char e[32], msg[128];
+        snprintf(e, sizeof(e), "item %d :b.spd", i);
+        snprintf(msg, sizeof(msg), "at mod 0 slot %d moves %g steps a frame", i, (double)num(e));
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)mod0[i - 1], num(e), msg);
+    }
+
+    // mod 1 is the last two rows of the below-10,000 table; mod 5 is the top of
+    // the second one, which M6 owns -- set it directly, since what is being
+    // pinned is the pass arithmetic and not the table.
+    run("make \"bolt.hi bitand (5 + 2) 7  "
+        "repeat 7 [make \"k.i repcount  make \"k.n 3  "
+        "if not :k.i > 2 [make \"k.n :k.n + 3]  "
+        "if not :k.i > :bolt.hi [make \"k.n :k.n + 3]  "
+        ".setitem :k.i :b.spd :k.n]");
+    for (int i = 1; i <= 7; i++)
+    {
+        char e[32], msg[128];
+        snprintf(e, sizeof(e), "item %d :b.spd", i);
+        snprintf(msg, sizeof(msg), "at mod 5 slot %d moves %g steps a frame", i, (double)num(e));
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)mod5[i - 1], num(e), msg);
+    }
+
+    // And the step is actually taken.
+    run("make \"score 0  place.bolts");
+    no_bolts();
+    no_robots();
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    bolt_at(1, 2, -40.0f, 40.0f, 0, 0);
+    bolt_at(3, 2, -40.0f, 20.0f, 0, 0);
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-31.0f, bolt_x(1), "the player's bolt is not nine steps a frame");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-37.0f, bolt_x(3), "a robot's bolt is not three steps a frame");
+}
+
+// Length grows one a pass with the head and stops at MaxLength -- 8 for the
+// player ($1F7C) and 5 for a robot ($2921).  A player bolt is at full length
+// after one tick, which is why nine steps a frame leaves no gap behind it:
+// the new tail lands one pixel past the old head.
+void test_a_bolt_grows_to_the_roms_own_length(void)
+{
+    no_bolts();
+    no_robots();
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    run("make \"score 0  place.bolts");
+    bolt_at(1, 4, -40.0f, -40.0f, 0, 0);
+    bolt_at(3, 4, 0.0f, -40.0f, 0, 0);
+
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(8, bolt_len(1), "the player's bolt is not eight long");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, bolt_len(3), "a robot's bolt grew faster than it moved");
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(8, bolt_len(1), "the player's bolt grew past eight");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, bolt_len(3), "a robot's bolt is not five long");
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, bolt_len(3), "a robot's bolt grew past five");
+}
+
+// A bolt is a one-pixel stroke drawn from its HEAD backwards along its own
+// direction, and a diagonal one is `len` pixels in BOTH axes -- so the stroke
+// is len * sqrt 2 turtle steps long.  Drawing it `len` long would put the tail
+// at 71 % of where it belongs and leave the head where the collision test is
+// not looking.
+void test_a_diagonal_bolt_is_drawn_its_full_length(void)
+{
+    no_bolts();
+    bolt_at(1, 2, 0.0f, 40.0f, 8, 0);       // right
+    bolt_at(2, 10, 0.0f, 0.0f, 8, 0);       // down and right
+    mock_device_clear_graphics();
+    run("mark.bolts :wall.pc");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, mock_device_line_count(), "a bolt is not one stroke");
+    const MockLine *a = mock_device_get_line(0);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.0f, a->x1, "the head moved");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, -8.0f, a->x2, "the tail is not eight steps behind the head");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 40.0f, a->y2, "a horizontal bolt is not level");
+
+    const MockLine *b = mock_device_get_line(1);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.02f, -8.0f, b->x2,
+        "the diagonal bolt is not eight pixels wide, so it was drawn `len` rather than len * sqrt 2");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.02f, 8.0f, b->y2,
+        "the diagonal bolt is not eight pixels tall");
+}
+
+// A bolt hits the cell edge the wall is drawn on, and the test is a CROSSING
+// rather than the occupancy the man needs (section 8.3, B66): he has extent
+// and can stand beside a wall he never crossed, a bolt is one pixel and cannot.
+// One `cell.at` a bolt a frame, cached the way `iq` caches its probe, with the
+// crossed edge coming out of the index arithmetic.
+void test_a_bolt_dies_on_a_wall(void)
+{
+    //                     cell 1..5     6  7  8..10      11..15
+    set_cells((const int[15]){ 0,0,0,0,0,  2, 1, 0,0,0,  0,0,0,0,0 });
+    no_bolts();
+    no_robots();
+    run("make \"score 0  place.bolts");
+
+    // Cell 6 is walled on its RIGHT, at x = -70.  Nine steps a frame from -80
+    // lands on -71 and then crosses.
+    bolt_at(1, 2, -80.0f, 40.0f, 8, 0);
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, bolt_dir(1), "the bolt died before it reached the wall");
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1), "the bolt went through a drawn wall");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_len(1),
+        "a dead bolt kept its length, so the next erase rubs a stroke nobody drew");
+
+    // And an unwalled edge is crossed without comment.
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    no_bolts();
+    bolt_at(1, 2, -80.0f, 40.0f, 8, 0);
+    run("step.bolts  step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, bolt_dir(1), "the bolt died on an edge with no wall on it");
+}
+
+// A BOLT TRAVELLING LEFT OR UP THAT LANDS EXACTLY ON THE WALL LINE is the case
+// the probe offset is for.  `cell.at` puts a boundary pixel in the cell to its
+// right and the one below it, so a leftward bolt that stops ON x = -70 is
+// still in the cell it started in and no crossing is seen -- it would be drawn
+// over the wall and rub a hole in it on the next frame's erase.
+void test_a_bolt_that_lands_on_the_wall_line_dies_on_it(void)
+{
+    set_cells((const int[15]){ 0,0,0,0,0,  2, 1, 0,0,0,  0,0,0,0,0 });
+    no_bolts();
+    no_robots();
+    run("make \"score 0  place.bolts");
+
+    // Cell 7 is walled on its LEFT, at x = -70.  From -61, three steps a frame
+    // lands on -64, then -67, then exactly -70.
+    bolt_at(3, 1, -61.0f, 40.0f, 5, 0);
+    run("step.bolts  step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, bolt_dir(3), "the bolt died short of the wall");
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-70.0f, bolt_x(3), "the bolt is not on the wall line");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(3),
+        "the bolt stopped ON the wall and lived, so the next erase eats a hole in it");
+}
+
+// The playfield rectangle is the border wall and CHECK_IF_BOLT_OFFSCREEN
+// ($157E) in one test: the border is drawn ON x = -122 and 122 and y = -62 and
+// 142, so a bolt that reaches the line has hit it.
+void test_a_bolt_dies_at_the_border(void)
+{
+    static const struct { int dir; float x, y; const char *way; } way[] = {
+        { 2, 115.0f,  40.0f, "east" },
+        { 1, -115.0f, 40.0f, "west" },
+        { 4, -40.0f,  135.0f, "north" },
+        { 8, -40.0f, -55.0f, "south" },
+    };
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    no_robots();
+    run("make \"score 0  place.bolts");
+
+    for (size_t k = 0; k < sizeof(way) / sizeof(way[0]); k++)
+    {
+        no_bolts();
+        bolt_at(1, way[k].dir, way[k].x, way[k].y, 8, 0);
+        run("step.bolts");
+        char msg[128];
+        snprintf(msg, sizeof(msg), "a bolt flew out of the playfield to the %s", way[k].way);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1), msg);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)num(":bolt.live"), msg);
+    }
+}
+
+// A BOLT CHECKS THE PLAYER FIRST AND THEN EVERY ROBOT ($15A4, $15AB), which is
+// what makes a robot's stray shot kill another robot and pay you for it.  That
+// is a rule and not an accident, and section 12 keeps it: fifty points a robot
+// however he died ($2480).
+void test_a_bolt_kills_a_robot_and_pays_fifty(void)
+{
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    no_robots();
+    no_bolts();
+    run("make \"score 0  place.bolts  make \"p.dying 0  make \"p.x -110  make \"p.y 120");
+    robot_at(1, 0.0f, 35.0f, 0, 1);
+
+    // The player's own bolt, walking up to him nine steps a frame: the first
+    // step ends at -2, one pixel short of his box, and the second sweeps him.
+    bolt_at(1, 2, -11.0f, 30.0f, 8, 0);
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, robot_state(1), "the bolt killed him two pixels short of his box");
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(1), "the bolt went straight through him");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1), "the bolt lived through the robot it killed");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(50.0f, num(":score"), "a robot is not fifty points");
+
+    // A ROBOT'S bolt kills another robot the same way, and pays you the same.
+    no_robots();
+    no_bolts();
+    run("make \"score 0");
+    robot_at(1, 0.0f, 35.0f, 0, 1);
+    bolt_at(3, 2, -2.0f, 30.0f, 5, 7);
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(1), "a robot's stray shot did not kill a robot");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(50.0f, num(":score"),
+        "a robot killed by a robot did not pay");
+}
+
+// And the other way round: a robot's bolt kills the man, and it is the only
+// kind that can.
+void test_a_robots_bolt_kills_the_man(void)
+{
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    no_robots();
+    no_bolts();
+    run("make \"score 0  place.bolts");
+    man_at(0.0f, 40.0f);
+    bolt_at(3, 2, -2.0f, 30.0f, 5, 7);
+    run("step.bolts");
+
+    TEST_ASSERT_TRUE_MESSAGE(num(":p.dying") > 0.0f, "a robot's bolt did not kill the man");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(3), "the bolt lived through the man it killed");
+}
+
+// A BOLT DOES NOT HIT WHOEVER FIRED IT, and that is a divergence worth naming
+// (section 17).  The cabinet does not need the rule -- it erases the player's
+// sprite before it processes bolts ($26E6 ahead of $26F4), so his own bolt has
+// no pixels of his to intercept, and it stops a firing robot dead so he cannot
+// walk into his.  Neither survives a nine-pixel step out of a spawn point that
+// is ON the firer's own box: SR.TAB starts the man's bolt at his x + 7 of 8.
+void test_a_bolt_does_not_hit_whoever_fired_it(void)
+{
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    no_robots();
+    no_bolts();
+    run("make \"score 0  place.bolts");
+    man_at(0.0f, 40.0f);
+    robot_at(4, 0.0f, 0.0f, 0, 1);
+
+    bolt_at(1, 2, 7.0f, 37.0f, 0, 0);         // the man's own, out of SR.TAB
+    bolt_at(3, 8, 7.0f, -6.0f, 0, 4);         // robot 4's own, out of S.TAB
+    run("step.bolts");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":p.dying"), "the man shot himself");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, robot_state(4), "a robot shot itself");
+
+    // And the exclusion is the FIRER's and not everybody's: the same bolt
+    // kills the robot standing beside him.
+    no_bolts();
+    robot_at(5, 0.0f, 40.0f, 0, 1);
+    bolt_at(1, 2, -2.0f, 35.0f, 8, 0);
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(5), "the exclusion took everybody with it");
+}
+
+// THE GATE IS AN OVER-ESTIMATE ON A DIAGONAL and the exact test is what stops
+// it costing a robot his life.  The two `abs` comparisons are satisfied on
+// each axis independently, where a 45-degree line ties them together, so a
+// robot in the corner of a diagonal bolt's bounding box passes the gate and
+// must survive.  Nine pixels of travel and an 8 x 12 box is a big enough
+// corner to be worth the parameter interval.
+void test_a_diagonal_bolt_misses_the_corner_of_its_own_bounding_box(void)
+{
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    no_robots();
+    no_bolts();
+    run("make \"score 0  place.bolts  make \"p.x -110  make \"p.y 120  make \"p.dying 0");
+
+    // The bolt runs (0,0) to (9,-9); the robot's box is x -8..0, y -21..-9,
+    // which is the far corner of the same bounding box and nowhere near the line.
+    robot_at(1, -8.0f, -9.0f, 0, 1);
+    // And one squarely on it.
+    robot_at(2, 4.0f, -2.0f, 0, 1);
+
+    bolt_at(1, 10, 0.0f, 0.0f, 8, 0);
+    run("step.bolts");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, robot_state(1),
+        "a diagonal bolt killed a robot in the corner of its bounding box");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(2),
+        "a diagonal bolt missed a robot standing on it");
+}
+
+// Section 13's below-10,000 table ($3794), at every threshold and either side
+// of it.  RBOLTS is 0 below 300 points, which is the manuals' "robots don't
+// shoot in the first maze", and the difficulty RESETS at 7,500 -- five bolts
+// drops back to one, with the modifier raised, which is the 2600 manual's
+// "their firing speeds remain equal to your man's" in the arcade's currency.
+//
+// RWAIT is set by the table and then decremented by ten, floor ten ($20FA's
+// `cp $14`), which does not accumulate because the table is read again every
+// room: the table sets the level and the room walks it down one step.
+void test_the_difficulty_table_at_every_threshold(void)
+{
+    static const struct { int score, bolts, mod, wait; } band[] = {
+        {     0, 0, 0, 70 }, {   299, 0, 0, 70 },
+        {   300, 1, 0, 70 }, {  1499, 1, 0, 70 },
+        {  1500, 2, 0, 10 }, {  2999, 2, 0, 10 },
+        {  3000, 3, 0, 10 }, {  4499, 3, 0, 10 },
+        {  4500, 4, 0, 10 }, {  5999, 4, 0, 10 },
+        {  6000, 5, 0, 15 }, {  7499, 5, 0, 15 },
+        {  7500, 1, 1, 50 }, {  8999, 1, 1, 50 },
+        {  9000, 1, 1, 40 }, { 99999, 1, 1, 40 },
+    };
+
+    for (size_t k = 0; k < sizeof(band) / sizeof(band[0]); k++)
+    {
+        char cmd[64], msg[160];
+        snprintf(cmd, sizeof(cmd), "make \"score %d  place.bolts", band[k].score);
+        run(cmd);
+
+        snprintf(msg, sizeof(msg), "at %d points the room allows %g robot bolts",
+                 band[k].score, (double)num(":rob.bolts"));
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)band[k].bolts, num(":rob.bolts"), msg);
+
+        snprintf(msg, sizeof(msg), "at %d points the bolt slot modifier is %g",
+                 band[k].score, (double)(num(":bolt.hi") - 2.0f));
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)((band[k].mod + 2) & 7), num(":bolt.hi"), msg);
+
+        snprintf(msg, sizeof(msg), "at %d points the firing holdoff is %g",
+                 band[k].score, (double)num(":rob.wait0"));
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)band[k].wait, num(":rob.wait0"), msg);
+    }
+}
+
+// "Robots don't shoot in the first maze", read end to end rather than off the
+// table: a room's worth of robots lined up on the man, the holdoff expired,
+// and no bolt because RBOLTS is zero.
+void test_robots_do_not_shoot_in_the_first_maze(void)
+{
+    no_robots();
+    no_bolts();
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    run("make \"score 0  place.bolts  make \"rob.wait 0");
+    for (int i = 1; i <= 5; i++)
+        robot_at(i, -60.0f + 4.0f * (float)i, 40.0f, 0, 1);
+    run("make \"p.x 100  make \"p.y 44");
+    for (int f = 0; f < 20; f++)
+        run("logic.robots");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)num(":bolt.live"),
+        "a robot fired below 300 points");
+}
+
+// A room build clears the bolts, because $209D is where the difficulty table
+// is read and the screen is cleared: a doorway does not carry last room's
+// shots into the next one, and neither does a death.
+void test_a_room_change_clears_the_bolts(void)
+{
+    in_room(0, 0);
+    no_bolts();
+    bolt_at(1, 2, -40.0f, 40.0f, 8, 0);
+    bolt_at(3, 1, 40.0f, 20.0f, 5, 4);
+    run("setrefresh \"manual  go.room 1 0");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)num(":bolt.live"), "a bolt crossed a doorway");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1), "a bolt crossed a doorway");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_len(3),
+        "a bolt kept its length across a room build, so the next erase draws on the new maze");
+}
+
+// THE ROM'S EIGHT SHOOT SPRITES ARE NOT FOUR MIRRORED PAIRS, which is what
+// section 7.4 says and what the fifteen slots were balanced on.  Reversed byte
+// for byte only ONE pair is exact, and the obvious pairing of the rest is
+// wrong -- $132B (down-right) is a plain body with one arm and $134D
+// (down-left) carries the DOWN sprite's two shoulder rows, so they are
+// different drawings.
+//
+// The count survives because the pairs are different ones: DOWN mirrors to
+// down-left in two rows and up-right to up-left in three, both inside the
+// licence section 7.4 already took for the walk cycle.  Down-right and up
+// pair with nothing and wear their own slot.  Five slots, eight poses.
+void test_the_roms_shoot_sprites_are_not_the_pairs_the_design_named(void)
+{
+    static const int ur[15] = { 24, 25,  4, 28, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 28 };
+    static const int rt[15] = { 24, 24,  0, 31, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 28 };
+    static const int dr[15] = { 24, 24,  0, 24, 24, 28, 26, 24, 24, 24, 24, 24, 24, 24, 28 };
+    static const int dn[15] = { 24, 24,  0, 60, 60, 58, 58, 58, 24, 24, 24, 24, 24, 24, 28 };
+    static const int dl[15] = { 24, 24,  0, 60, 60, 92,156, 28, 24, 24, 24, 24, 24, 24, 56 };
+    static const int lf[15] = { 24, 24,  0,248, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 56 };
+    static const int ul[15] = {152, 88, 32, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 56 };
+
+    static const struct { const int *a, *b; int rows; const char *what; } pair[] = {
+        { rt, lf, 0, "$131A mirrors to $135E exactly, so right and left are one slot" },
+        { dn, dl, 2, "$133C mirrors to $134D in all but two rows" },
+        { ur, ul, 3, "$1309 mirrors to $136F in all but three rows" },
+        { dr, dl, 5, "$132B and $134D are not each other's mirror at all" },
+    };
+
+    for (size_t k = 0; k < sizeof(pair) / sizeof(pair[0]); k++)
+    {
+        int differ = 0;
+        for (int r = 0; r < 15; r++)
+        {
+            int m = 0;
+            for (int b = 0; b < 8; b++)
+                if (pair[k].a[r] & (1 << b))
+                    m |= 1 << (7 - b);
+            if (m != pair[k].b[r])
+                differ++;
+        }
+        char msg[192];
+        snprintf(msg, sizeof(msg), "%s -- %d rows differ, not %d",
+                 pair[k].what, differ, pair[k].rows);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(pair[k].rows, differ, msg);
+    }
+
+    // And the five the game holds are the ROM's own five, padded to sixteen
+    // rows so every costume the man has is one size and one erase rectangle.
+    static const int *held[5] = { ur, rt, dr, dn, NULL };
+    static const int up[15] = { 24, 24, 0, 29, 27, 25, 24, 24, 24, 24, 24, 24, 24, 24, 56 };
+    held[4] = up;
+    for (int i = 0; i < 5; i++)
+        for (int r = 0; r < 16; r++)
+        {
+            char e[32], msg[128];
+            snprintf(e, sizeof(e), "item %d :sb%d", r + 1, i + 1);
+            snprintf(msg, sizeof(msg), "row %d of shoot sprite %d is wrong", r, i + 1);
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(r < 15 ? (float)held[i][r] : 0.0f, num(e), msg);
+        }
+}
+
+// Five slots and thirteen of fifteen spent, which is section 18's third
+// ceiling closed rather than deferred.
+void test_the_shooting_poses_are_five_costumes_at_the_mans_size(void)
+{
+    int before = mock_device_get_state()->costume.snap_count;
+    run("setrefresh \"manual  cache.shoot");
+    const MockDeviceState *st = mock_device_get_state();
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, st->costume.snap_count - before,
+        "the shooting poses are not five costumes");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(8, st->costume.last_snap_w, "a shooting pose is not eight wide");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(16, st->costume.last_snap_h,
+        "a shooting pose is not sixteen rows, so the man has two erase rectangles");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(9, st->costume.last_snap_slot,
+        "the shooting poses are not slots 5 to 9");
+}
+
+// Every direction the trigger can point, off DIRECTION_OFFSET_TABLE: the eight
+// real ones and the four "defaults" the table gives for two opposite arrows.
+// Three of the eight are somebody else mirrored, which is the whole of why
+// five slots hold eight poses.
+void test_every_shot_direction_wears_the_roms_own_pose(void)
+{
+    static const struct { int fire, slot; float face; const char *way; } way[] = {
+        {  6, 5,  90.0f, "up and right" },
+        {  2, 6,  90.0f, "right" },
+        { 10, 7,  90.0f, "down and right" },
+        {  8, 8,  90.0f, "down" },
+        {  9, 8, 270.0f, "down and left, which is DOWN flipped" },
+        {  1, 6, 270.0f, "left, which is RIGHT flipped" },
+        {  5, 5, 270.0f, "up and left, which is UP-RIGHT flipped" },
+        {  4, 9,  90.0f, "up" },
+        {  7, 9,  90.0f, "up with both sideways arrows: the table's up default" },
+        { 11, 8,  90.0f, "down with both: the down default" },
+        { 13, 6, 270.0f, "left with both vertical arrows: the left default" },
+        { 14, 6,  90.0f, "right with both: the right default" },
+    };
+
+    in_room(0, 0);
+    run("setrot \"flip");
+    man_at(-40.0f, 40.0f);
+    for (size_t k = 0; k < sizeof(way) / sizeof(way[0]); k++)
+    {
+        char cmd[96];
+        snprintf(cmd, sizeof(cmd), "make \"p.fire %d  make \"p.shoot 12", way[k].fire);
+        run(cmd);
+        mock_device_clear_graphics();
+        run("draw.man");
+
+        char msg[160];
+        snprintf(msg, sizeof(msg), "shooting %s wore slot %d at heading %g",
+                 way[k].way, mock_device_get_stamp(0)->shape, (double)num("heading"));
+        TEST_ASSERT_EQUAL_INT_MESSAGE(way[k].slot, mock_device_get_stamp(0)->shape, msg);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(way[k].face, num("heading"), msg);
+    }
+
+    // And two opposite arrows alone point nowhere, so the pose is standing and
+    // no bolt goes out -- $2042's entry 0.
+    no_bolts();
+    run("make \"p.fire 3  make \"p.shoot 0  make \"p.fires \"true  fire.man");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)num(":bolt.live"),
+        "the man fired with the stick in a direction the table calls neutral");
+}
+
+// A WALL STOPS A BOLT WHERE IT IS, NOT AT THE END OF THE STEP -- B69, reported
+// from a board in two shapes: "if a robot is standing on the other side of a
+// wall, I can kill it", and "I shot diagonally at the point of the wall, the
+// wall stopped it but I killed the robots diagonally on the other side".
+//
+// Both are the same defect.  The first build tested actors over the WHOLE nine
+// pixels of a step and then asked about the wall, on the grounds that a robot
+// standing against a wall is the case that matters -- and it is, which is why
+// wall-first was not the answer either.  The answer is to find where along the
+// step the wall is and shorten the swept segment to end there, which keeps the
+// robot in front and drops the one behind.
+void test_a_bolt_does_not_kill_through_a_wall(void)
+{
+    // A wall on the boundary at x = -70: cell 6's RIGHT and cell 7's LEFT.
+    set_cells((const int[15]){ 0,0,0,0,0,  2, 1, 0,0,0,  0,0,0,0,0 });
+    no_robots();
+    no_bolts();
+    run("make \"score 0  place.bolts  make \"p.x -110  make \"p.y 120  make \"p.dying 0");
+
+    // Nine steps from -74 would end at -65, four pixels into a robot standing
+    // just past the wall.
+    robot_at(1, -68.0f, 40.0f, 0, 1);
+    bolt_at(1, 2, -74.0f, 35.0f, 8, 0);
+    run("step.bolts");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, robot_state(1),
+        "the bolt killed a robot on the far side of a wall (B69)");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1), "the bolt went through the wall");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-70.0f, bolt_x(1),
+        "the bolt did not stop on the wall pixel");
+}
+
+// And the case wall-first would have broken: the robot IN FRONT of the wall is
+// inside the shortened segment and still dies.
+void test_a_bolt_stopped_by_a_wall_still_kills_what_is_in_front_of_it(void)
+{
+    set_cells((const int[15]){ 0,0,0,0,0,  2, 1, 0,0,0,  0,0,0,0,0 });
+    no_robots();
+    no_bolts();
+    run("make \"score 0  place.bolts  make \"p.x -110  make \"p.y 120  make \"p.dying 0");
+
+    robot_at(1, -78.0f, 40.0f, 0, 1);
+    bolt_at(1, 2, -74.0f, 35.0f, 8, 0);
+    run("step.bolts");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(1),
+        "the wall swallowed a shot the player could see connecting");
+}
+
+// The diagonal shape of B69, and it is the one that says the clip is a
+// DISTANCE and not a coordinate: the bolt crosses the wall's column part way
+// through its step, so everything past that point on the line has to go with
+// it -- including a robot the unclipped segment reaches two pixels later.
+//
+// The far robot is slot 1 and the near one slot 2, so the far one is tested
+// FIRST: on the shipped code it died and the bolt stopped there, which left
+// the near robot alive.  Both halves fail before the fix.
+void test_a_diagonal_bolt_stopped_by_a_wall_kills_nothing_past_it(void)
+{
+    set_cells((const int[15]){ 0,0,0,0,0,  2, 1, 0,0,0,  0,0,0,0,0 });
+    no_robots();
+    no_bolts();
+    run("make \"score 0  place.bolts  make \"p.x -110  make \"p.y 120  make \"p.dying 0");
+
+    robot_at(1, -69.0f, 44.0f, 0, 1);      // past the wall, on the line
+    robot_at(2, -78.0f, 40.0f, 0, 1);      // in front of it, also on the line
+    bolt_at(1, 6, -76.0f, 30.0f, 8, 0);    // up and right, nine steps
+    run("step.bolts");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, robot_state(1),
+        "a diagonal bolt killed past the point of the wall that stopped it (B69)");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(2),
+        "the clip took the robot in front of the wall with it");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1), "the bolt lived through the wall");
+}
+
+// A BOLT FIRED ALONG A WALL RUNS DOWN THE LINE IT IS DRAWN ON -- B70, reported
+// from a board as "if I shoot edge on a wall the shot will erase the wall (does
+// not stop)".  A crossing test asks whether the head went THROUGH a wall line,
+// which is everything a bolt fired across the room can do and nothing a bolt
+// fired along one does: it crosses nothing, so nothing stopped it, and it was
+// drawn over the wall every frame and the next frame's erase took the wall away
+// with it.
+//
+// So the head is also asked whether it is ON ink, which for something one pixel
+// wide is exact and is two `modulo`s -- every wall pixel in the room is named
+// exactly once by "my own left boundary" or "my own top boundary".
+void test_a_bolt_fired_along_a_wall_dies_on_it(void)
+{
+    no_robots();
+    run("make \"score 0  place.bolts  make \"p.x -110  make \"p.y 120  make \"p.dying 0");
+
+    // Horizontal: the wall on the boundary at y = 74, which is cell 6's TOP.
+    set_cells((const int[15]){ 0,0,0,0,0,  4, 0, 0,0,0,  0,0,0,0,0 });
+    no_bolts();
+    bolt_at(1, 2, -100.0f, 74.0f, 8, 0);
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1),
+        "a bolt ran along a horizontal wall, erasing it as it went (B70)");
+
+    // Vertical: the wall on the boundary at x = -70, which is cell 7's LEFT.
+    set_cells((const int[15]){ 0,0,0,0,0,  0, 1, 0,0,0,  0,0,0,0,0 });
+    no_bolts();
+    bolt_at(1, 8, -70.0f, 60.0f, 8, 0);
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1),
+        "a bolt ran down a vertical wall, erasing it as it went (B70)");
+}
+
+// AND NOT ONE PIXEL EAGER, which is the other half of an occupancy test.  A
+// bolt one step off the wall line must live, or a room becomes unshootable
+// along every corridor; and the playfield's own left edge is NOT an interior
+// wall -- column 0's left boundary is x = -118 while the border is drawn at
+// -122, and the mask table carries a LEFT bit there for the robots that consult
+// it (§6.3).  `bolt.out?` owns the border; this must not.
+void test_a_bolt_beside_a_wall_and_at_the_grids_edge_lives(void)
+{
+    no_robots();
+    run("make \"score 0  place.bolts  make \"p.x -110  make \"p.y 120  make \"p.dying 0");
+
+    set_cells((const int[15]){ 0,0,0,0,0,  4, 0, 0,0,0,  0,0,0,0,0 });
+    no_bolts();
+    bolt_at(1, 2, -100.0f, 73.0f, 8, 0);       // one step below the wall line
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, bolt_dir(1),
+        "a bolt died beside a wall it was never on");
+
+    // Column 0 carries a LEFT bit for the border, drawn four steps further out.
+    set_cells((const int[15]){ 1,0,0,0,0,  1, 0, 0,0,0,  1,0,0,0,0 });
+    no_bolts();
+    bolt_at(1, 8, -118.0f, 40.0f, 8, 0);
+    run("step.bolts");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(8, bolt_dir(1),
+        "a bolt died on the grid's left boundary, where no wall is drawn");
+}
+
+// A bolt is a one-pixel stroke and its erase is the same stroke in the
+// background colour, so it puts back exactly what it took -- no cap arithmetic
+// and no B64.  What has to hold is that it retraces the stroke it DREW: the
+// frame erases before it steps, so a bolt that has moved must not be erased at
+// its new head.
+void test_the_erase_retraces_the_stroke_the_bolt_drew(void)
+{
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    no_robots();
+    no_bolts();
+    run("make \"score 0  place.bolts  make \"p.x -110  make \"p.y 120  make \"p.dying 0");
+    bolt_at(1, 2, -40.0f, 40.0f, 8, 0);
+
+    mock_device_clear_graphics();
+    run("mark.bolts :wall.pc");
+    const MockLine *drew = mock_device_get_line(0);
+    float x1 = drew->x1, y1 = drew->y1, x2 = drew->x2, y2 = drew->y2;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, drew->pen_size, "a bolt is not a one-pixel stroke");
+
+    mock_device_clear_graphics();
+    run("mark.bolts :bg.pc");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, mock_device_line_count(), "the erase is not one stroke");
+    const MockLine *rub = mock_device_get_line(0);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, x1, rub->x1, "the erase starts somewhere else");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, y1, rub->y1, "the erase starts somewhere else");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, x2, rub->x2, "the erase ends somewhere else");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, y2, rub->y2, "the erase ends somewhere else");
+
+    // A dead bolt has nothing left on the screen, and a slot that kept its
+    // length would rub out a stroke nobody drew.
+    run("step.bolts");
+    run("bolt.dies 1");
+    mock_device_clear_graphics();
+    run("mark.bolts :bg.pc");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_line_count(),
+        "a dead bolt was erased at a head it never reached");
+}
+
+// Section 18's fourth ceiling, with the trigger held down.  A bolt writes six
+// numbers into six lists every frame it lives and its head is on whole pixels
+// for exactly this reason (B52): `.setitem` of a number the workspace has not
+// held before interns a word, and the man's own x is a half-pixel every other
+// frame.  `fire.bolt` rounds, and every step after it is whole.
+void test_a_frame_with_bolts_in_the_air_spends_no_cells(void)
+{
+    run("setrefresh \"manual");
+    in_room(9, 9);
+    man_at(-5, 45);
+    run("make \"score 6000  place.bolts");
+    press(K_RIGHT);
+    press(K_SPACE);
+    for (int i = 0; i < 200; i++)   // warm: every slot used, every number minted
+        frame();
+
+    float nodes0 = num("nodes");
+    for (int i = 0; i < 40; i++)
+        frame();
+    release(K_RIGHT);
+    release(K_SPACE);
+
+    char msg[160];
+    snprintf(msg, sizeof(msg), "forty frames of shooting spent %g cells",
+             (double)(nodes0 - num("nodes")));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(nodes0, num("nodes"), msg);
+}
+
+//==========================================================================
+// The scroll between rooms (design section 17, and question 4 with it)
+//==========================================================================
+
+// WHAT THE CABINET DOES.  SCROLL_LEFT ($2274) is `ld a,$20` and thirty-two
+// one-byte `ldir`s of the whole screen image; SCROLL_UP ($21E6) is twenty-
+// seven $0100-byte ones.  Either way the bitmap moves EIGHT PIXELS A STEP for
+// one full screen.  Our canvas is 320 x 240 where the cabinet's is 256 x 216,
+// so the step is the thing kept and the count falls out of it: 40 across and
+// 30 down.
+//
+// AND NOTHING SLIDES IN BEHIND IT, which is the finding that made the scroll
+// affordable here at all.  All four routines zero the rows the move vacated
+// ("remove junk left after scroll") and only THEN does $2209 seed the new room
+// and fall into $20D7 to draw it.  So a step draws ONE room -- the one being
+// left -- and section 17's price for the cut, "the room has to be drawn twice
+// during it", was double what it costs.
+//
+// Nothing here is a timing, and the pause least of all: a step ends on `sync`,
+// so the transition is thirty or forty FRAME PERIODS -- 1.50 s down and 2.00 s
+// across at 20 fps, against the cabinet's own 1.53 and 1.92 -- and the mock
+// clock does not advance over a sleep, so only a board can read that back.
+// What the host can say is that there are the right number of steps, that the
+// maze on the last one is gone from the presented band, and that it is still
+// the room he is leaving.
+
+static int refreshes(void)
+{
+    return mock_device_get_state()->refresh_now_count;
+}
+
+void test_the_maze_leaves_by_a_whole_screen_eight_pixels_at_a_time(void)
+{
+    // `bound` and `sign`: where the whole picture has to be by the last step.
+    // The presented band is turtle x in [-160, 160] and y in [-79, 160]
+    // (design section 4), and the room is 244 x 204 about (0, +40).
+    static const struct
+    {
+        const char *way; int steps; float dx, dy, bound; int sign;
+    } trips[] = {
+        { "slide.room 1 0",  40, -320.0f,    0.0f, -160.0f, -1 },
+        { "slide.room -1 0", 40,  320.0f,    0.0f,  160.0f, +1 },
+        { "slide.room 0 1",  30,    0.0f,  240.0f,  160.0f, +1 },
+        { "slide.room 0 -1", 30,    0.0f, -240.0f,  -79.0f, -1 },
+    };
+
+    for (size_t t = 0; t < sizeof(trips) / sizeof(trips[0]); t++)
+    {
+        // The room as it stands, which is what has to be sliding.
+        in_room(7, 2);
+        run("clean");
+        mock_device_clear_graphics();
+        run("draw.walls 0 0");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(16, mock_device_line_count(),
+            "a room is not sixteen runs");
+        MockLine home[16];
+        for (int i = 0; i < 16; i++)
+            home[i] = *mock_device_get_line(i);
+
+        int before = refreshes();
+        run(trips[t].way);
+
+        char msg[192];
+        snprintf(msg, sizeof(msg), "%s presented %d times, not %d",
+                 trips[t].way, refreshes() - before, trips[t].steps);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(trips[t].steps, refreshes() - before, msg);
+
+        // Every step begins with `clean`, which truncates the mock's record,
+        // so what is left is the LAST step and nothing else.
+        snprintf(msg, sizeof(msg), "%s: the last step is not one room", trips[t].way);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(16, mock_device_line_count(), msg);
+
+        for (int i = 0; i < 16; i++)
+        {
+            const MockLine *l = mock_device_get_line(i);
+            snprintf(msg, sizeof(msg),
+                     "%s: run %d ended at %g,%g to %g,%g and not the room "
+                     "displaced by %g,%g", trips[t].way, i,
+                     (double)l->x1, (double)l->y1, (double)l->x2, (double)l->y2,
+                     (double)trips[t].dx, (double)trips[t].dy);
+            TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, home[i].x1 + trips[t].dx, l->x1, msg);
+            TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, home[i].y1 + trips[t].dy, l->y1, msg);
+            TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, home[i].x2 + trips[t].dx, l->x2, msg);
+            TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, home[i].y2 + trips[t].dy, l->y2, msg);
+
+            // OUT OF VIEW, which is the whole claim: a travel of one room
+            // would leave the far wall of the old maze standing in the band.
+            float a = trips[t].dx != 0.0f ? l->x1 : l->y1;
+            float b = trips[t].dx != 0.0f ? l->x2 : l->y2;
+            snprintf(msg, sizeof(msg),
+                     "%s: run %d is still inside the band at %g,%g", trips[t].way,
+                     i, (double)a, (double)b);
+            if (trips[t].sign > 0)
+                TEST_ASSERT_TRUE_MESSAGE(a > trips[t].bound && b > trips[t].bound, msg);
+            else
+                TEST_ASSERT_TRUE_MESSAGE(a < trips[t].bound && b < trips[t].bound, msg);
+        }
+    }
+}
+
+// $2209 SEEDS THE NEW ROOM AFTER THE SCROLL, not before it, so what slides out
+// is the maze he walked in -- and the room ahead does not exist while it does.
+// Here that is the order in `go.room`: slide, then move the coordinates, then
+// build.  It is also why the slide needs no copy of anything.
+void test_the_slide_shows_the_room_it_is_leaving_and_not_the_one_ahead(void)
+{
+    in_room(4, 9);
+    float here[15], after[15];
+    Segment segs0[8], segs1[8];
+    read_cell(here);
+    read_segments(segs0);
+
+    run("slide.room 1 0");
+
+    read_cell(after);
+    read_segments(segs1);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4.0f, num(":room.x"), "the slide moved the room");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(9.0f, num(":room.y"), "the slide moved the room");
+    for (int i = 0; i < 15; i++)
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(here[i], after[i],
+            "the slide generated the next room under itself");
+    for (int k = 0; k < 8; k++)
+    {
+        TEST_ASSERT_EQUAL_FLOAT(segs0[k].x, segs1[k].x);
+        TEST_ASSERT_EQUAL_FLOAT(segs0[k].y, segs1[k].y);
+        TEST_ASSERT_EQUAL_FLOAT(segs0[k].h, segs1[k].h);
+        TEST_ASSERT_EQUAL_FLOAT(segs0[k].l, segs1[k].l);
+    }
+}
+
+// ONLY A DOORWAY SCROLLS.  $21CF -- the doorway -- reaches the scroll and then
+// falls into the room build; the per-life entry at $1806 calls $209D directly,
+// so a death gets the build and none of the travel.  It changes the room
+// ([B71](bugs.md)) without ever being a journey.
+//
+// Every step ends on `sync` and so does the frame, and `sync` presents in any
+// refresh mode -- so an ordinary frame reads 1 present and a frame that walked
+// out of the left doorway reads 41.  `slid` is the other
+// half of it: a frame that scrolled is a deliberate hold rather than a frame
+// that overran, so it is kept out of WORST (what it costs is a board reading).
+void test_a_doorway_scrolls_and_a_death_does_not(void)
+{
+    run("setrefresh \"manual  init.game");
+    run("make \"room.x 3  make \"room.y 4  draw.room");
+
+    // Nobody to interrupt the walk: an unlucky robot at the doorway would
+    // make this a death test rather than a doorway one.
+    run("repeat 11 [.setitem repcount :r.state 0]  make \"rob.live 0");
+
+    man_at(-129, 42);
+    int before = refreshes();
+    press(K_LEFT);
+    frame();
+    release(K_LEFT);
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2.0f, num(":room.x"),
+        "he did not walk out of the left doorway");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":slid"),
+        "the frame that scrolled is not marked as one, so WORST is charged for it");
+    char msg[160];
+    snprintf(msg, sizeof(msg), "a doorway presented %d times, not 40 and a sync",
+             refreshes() - before);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(41, refreshes() - before, msg);
+
+    // And an ordinary frame is its own `sync` and nothing else.
+    before = refreshes();
+    frame();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, refreshes() - before,
+        "an ordinary frame presented more than once");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":slid"),
+        "an ordinary frame is marked as a scroll");
+
+    // A death rebuilds without scrolling: fifteen frames of electrocution and
+    // the build at the end of them, and not one present beyond their own.  It
+    // still lands in a NEW room -- that is B71 -- and the point here is that it
+    // gets there without the forty presents a doorway costs.
+    run("make \"room.x 3  make \"room.y 4  draw.room  man.dies");
+    before = refreshes();
+    for (int f = 0; f < 16; f++)
+        frame();
+    snprintf(msg, sizeof(msg), "a death presented %d times over sixteen frames",
+             refreshes() - before);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(16, refreshes() - before, msg);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":slid"),
+        "the death scrolled");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -2829,6 +4189,7 @@ int main(void)
     RUN_TEST(test_esc_leaves_the_game);
     RUN_TEST(test_the_frame_cadence_is_seeded_before_the_loop);
     RUN_TEST(test_berzerk_puts_the_screen_back);
+    RUN_TEST(test_the_last_life_is_worth_a_card_and_esc_is_not);
     RUN_TEST(test_the_game_sets_up_in_window_mode_and_flips);
     RUN_TEST(test_the_game_is_inside_the_procedure_ceiling);
 
@@ -2844,7 +4205,10 @@ int main(void)
     RUN_TEST(test_the_crowd_reproduces_for_a_room_and_a_threshold);
     RUN_TEST(test_the_spawn_bands_are_the_cabinets_own);
     RUN_TEST(test_no_robot_spawns_touching_a_wall);
-    RUN_TEST(test_a_robot_moves_at_the_arcades_reload_rate);
+    RUN_TEST(test_a_robot_takes_about_a_second_a_pixel_at_the_start_of_a_game);
+    RUN_TEST(test_killing_robots_speeds_up_the_ones_left);
+    RUN_TEST(test_a_robot_only_outruns_the_man_as_the_last_one_left);
+    RUN_TEST(test_the_rooms_step_rate_does_not_depend_on_how_many_robots_are_in_it);
     RUN_TEST(test_a_robot_never_leaves_the_room);
     RUN_TEST(test_two_robots_that_meet_both_die);
     RUN_TEST(test_robots_level_with_each_other_do_not_touch);
@@ -2861,10 +4225,46 @@ int main(void)
     RUN_TEST(test_a_dying_robot_is_still_erased);
     RUN_TEST(test_a_full_room_of_robots_leaves_the_workspace_where_it_found_it);
     RUN_TEST(test_a_doorway_brings_a_new_crowd);
-    RUN_TEST(test_a_death_restarts_the_room_around_him);
+    RUN_TEST(test_a_death_sends_him_to_another_room_and_costs_him_a_life);
+    RUN_TEST(test_three_deaths_end_the_game_and_a_new_one_starts_over);
+    RUN_TEST(test_the_ramp_reaches_the_floor_in_four_room_builds);
     RUN_TEST(test_a_frame_that_builds_a_room_writes_no_other_text);
     RUN_TEST(test_the_game_asks_for_the_fast_clock_and_reads_it_back);
     RUN_TEST(test_the_game_gives_the_clock_back_when_it_exits);
     RUN_TEST(test_a_board_that_will_not_overclock_is_told_why_and_does_not_play);
+    RUN_TEST(test_the_three_firing_windows_at_their_boundaries);
+    RUN_TEST(test_a_robots_shot_is_seeks_direction_masked_to_the_window);
+    RUN_TEST(test_a_robot_takes_the_first_free_robot_slot_and_never_the_players);
+    RUN_TEST(test_only_one_robot_fires_per_holdoff);
+    RUN_TEST(test_a_firing_robot_stops_dead_and_stands);
+    RUN_TEST(test_space_and_a_direction_starts_the_roms_own_bolt);
+    RUN_TEST(test_the_man_holds_two_bolts_and_reloads_for_twelve_ticks);
+    RUN_TEST(test_a_player_bolt_is_three_pixels_a_tick_and_a_robot_bolt_one);
+    RUN_TEST(test_a_bolt_grows_to_the_roms_own_length);
+    RUN_TEST(test_a_diagonal_bolt_is_drawn_its_full_length);
+    RUN_TEST(test_a_bolt_dies_on_a_wall);
+    RUN_TEST(test_a_bolt_that_lands_on_the_wall_line_dies_on_it);
+    RUN_TEST(test_a_bolt_dies_at_the_border);
+    RUN_TEST(test_a_bolt_kills_a_robot_and_pays_fifty);
+    RUN_TEST(test_a_robots_bolt_kills_the_man);
+    RUN_TEST(test_a_bolt_does_not_hit_whoever_fired_it);
+    RUN_TEST(test_a_diagonal_bolt_misses_the_corner_of_its_own_bounding_box);
+    RUN_TEST(test_the_difficulty_table_at_every_threshold);
+    RUN_TEST(test_robots_do_not_shoot_in_the_first_maze);
+    RUN_TEST(test_a_room_change_clears_the_bolts);
+    RUN_TEST(test_the_roms_shoot_sprites_are_not_the_pairs_the_design_named);
+    RUN_TEST(test_the_shooting_poses_are_five_costumes_at_the_mans_size);
+    RUN_TEST(test_every_shot_direction_wears_the_roms_own_pose);
+    RUN_TEST(test_a_bolt_does_not_kill_through_a_wall);
+    RUN_TEST(test_a_bolt_stopped_by_a_wall_still_kills_what_is_in_front_of_it);
+    RUN_TEST(test_a_diagonal_bolt_stopped_by_a_wall_kills_nothing_past_it);
+    RUN_TEST(test_a_bolt_fired_along_a_wall_dies_on_it);
+    RUN_TEST(test_a_bolt_beside_a_wall_and_at_the_grids_edge_lives);
+    RUN_TEST(test_the_erase_retraces_the_stroke_the_bolt_drew);
+    RUN_TEST(test_a_frame_with_bolts_in_the_air_spends_no_cells);
+    RUN_TEST(test_the_maze_leaves_by_a_whole_screen_eight_pixels_at_a_time);
+    RUN_TEST(test_the_slide_shows_the_room_it_is_leaving_and_not_the_one_ahead);
+    RUN_TEST(test_a_doorway_scrolls_and_a_death_does_not);
+
     return UNITY_END();
 }

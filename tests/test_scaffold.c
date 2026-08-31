@@ -193,9 +193,21 @@ void mock_sleep(int milliseconds)
     // No-op for testing
 }
 
+static bool mock_random_walks = false;
+static uint32_t mock_random_state = 42;
+
 uint32_t mock_random(void)
 {
-    return 42; // Fixed value for testing
+    if (!mock_random_walks)
+        return 42; // Fixed value for testing
+    mock_random_state = mock_random_state * 1103515245u + 12345u;
+    return mock_random_state >> 16;
+}
+
+void set_mock_random_walking(bool walking)
+{
+    mock_random_walks = walking;
+    mock_random_state = 42;
 }
 
 uint32_t mock_ticks_ms(void)
@@ -560,6 +572,7 @@ void test_scaffold_setUp(void)
     mock_pause_requested = false; // Reset pause request flag
     mock_freeze_requested = false; // Reset freeze request flag
     mock_ticks_value = 0;         // Reset mock monotonic clock
+    set_mock_random_walking(false); // `random` is a constant unless a test asks
     mock_battery_level = 100;     // Reset mock battery state
     mock_battery_charging = false;
     mock_temperature_celsius = 25.0f; // Reset mock on-chip temperature

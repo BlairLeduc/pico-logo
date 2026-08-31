@@ -165,6 +165,21 @@ uint32_t mock_ticks_ms(void);
 void set_mock_ticks(uint32_t ms);
 
 // ============================================================================
+// Mock Random Helper
+// ============================================================================
+//
+// `random` is a constant 42 by default, which is what almost every test wants:
+// a fixed answer it can assert on.  It is also a trap for anything asserting a
+// BOUND over a random draw -- `random 6` is then always 0 and `random 4` always
+// 2, so a claim like "the explosion stays inside the robot's box" can only ever
+// exercise one of its twenty-four shapes, and it will pass while a board sees
+// the other twenty-three (B68).
+//
+// Turn this on to make the source walk a deterministic LCG instead.  Reset by
+// `test_scaffold_setUp`, so a test that wants it says so.
+void set_mock_random_walking(bool walking);
+
+// ============================================================================
 // Mock Key State Helpers
 // ============================================================================
 //

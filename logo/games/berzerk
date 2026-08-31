@@ -4,6 +4,168 @@
 ;   load "berzerk
 ;   berzerk
 ;
+; M4 IS THE BOLTS, both kinds, and with
+; them the game stops being a dodging
+; exercise. Seven slots in one array --
+; two the player's and five the robots'
+; -- the three firing windows, the
+; player's five shooting poses, and the
+; first row of the score, because RBOLTS
+; is read out of the difficulty table by
+; SCORE and "robots do not shoot in the
+; first maze" IS that lookup.
+;
+; THE MILESTONE'S GATE is one sentence
+; (design section 19): both bolt kinds,
+; the three firing windows, and the
+; alignment rule confirmed. Two of the
+; three you close with your eyes. The
+; third is a reading of the ROM and it
+; is written up beside `b.spd`.
+;
+; THREE THINGS M4 FOUND, each written
+; out where it is coded:
+;
+; THE ARRAY IS PROCESSED THREE TIMES A
+; TICK AND NOT TWICE, which is design
+; section 10.2's one openly-inferred
+; mechanism corrected. There is a third
+; pass and it is a FALL-THROUGH -- `ld
+; b,7` with no `call` under it -- so a
+; player bolt is nine steps a frame at
+; every difficulty and a robot bolt is
+; three or six. Section 10.2 expected
+; them to be equal at the top of the
+; table and they never are.
+;
+; THE ROM'S EIGHT SHOOTING SPRITES ARE
+; NOT FOUR MIRRORED PAIRS. Section 7.4
+; says they are and the fifteen costume
+; slots were balanced on it. Reversed
+; byte for byte only ONE pair is exact,
+; and two of the four the section names
+; are not pairs at all. The count still
+; comes to five, because the pairs are
+; different ones -- see `cache.shoot`,
+; which is where the arithmetic is
+; redone.
+;
+; A BOLT DOES NOT HIT WHOEVER FIRED IT,
+; which the cabinet never had to say.
+; It erases the player before it moves
+; the bolts and it stops a firing robot
+; dead; neither survives a nine-pixel
+; step out of a spawn point that is on
+; the firer's own box. Section 17 gets a
+; row.
+;
+; READ ON A BOARD 2026-08-30: HUD 26,
+; FRAME 56, WORST 114, ROOM 24 at `fast`,
+; AND SECTION 22'S Q2 IS ANSWERED. An
+; ordinary frame with eleven robots AND
+; bolts in the air is 56 ms -- 17.9 fps
+; -- against M3's 53 with nothing firing,
+; so the whole bolt system costs about
+; three milliseconds where the projection
+; allowed five. And a person playing it
+; called 17.9 fps very good, which is the
+; half of that question no measurement
+; supplies: section 15.3 chose 50 ms and
+; 20 fps "by argument rather than
+; measurement", and the argument has now
+; been tested. THE GATE IS 55 MS AND 18
+; FPS AND ELEVEN ROBOTS STAY.
+;
+; WORST 114 IS NOT ANSWERED and it is a
+; hitch you can see: two frame periods
+; and a bit, on every doorway and every
+; death. ROOM 24 plus a 56 ms body is 80
+; and the rest wants splitting on a board
+; rather than guessing at here. Two
+; things are known to be in it and
+; neither is 34 ms: a body carrying seven
+; bolts rather than two, and `show.room`
+; writing fourteen characters INSIDE the
+; build frame -- which is M2's own "one
+; text job a frame" rule bypassed,
+; because `show.room` is called straight
+; from `go.room` and `step.death` instead
+; of through `show.text`.
+;
+; THREE DEFECTS CAME BACK WITH IT and all
+; three are fixed, each beside the code
+; that had them.
+;
+; B69, AND IT IS THE DECISION ABOVE
+; COMING BACK: a bolt killed robots
+; through a wall, and diagonally past the
+; point of a wall it had visibly stopped
+; on. Nine pixels in one step makes
+; wall-versus-actor an ORDER and M4 chose
+; actors first, deliberately -- and
+; neither order is the answer. Clipping
+; is: find where along the step the wall
+; is, shorten the swept segment to end
+; there, then look for actors. See
+; `bolt.crossed?`.
+;
+; B70, WHICH IS B66 ONE MILESTONE LATER:
+; a shot fired ALONG a wall ran down the
+; line it is drawn on, crossing nothing,
+; and the erase took the wall away with
+; it. A crossing test cannot see
+; something moving parallel to the edge
+; it is asking about. See `bolt.wall?`,
+; which now also asks the cabinet's own
+; question -- may this pixel be here --
+; in two `modulo`s.
+;
+; B68, THE EXPLOSION'S WESTMOST PIXEL,
+; which is small; its test is not. See
+; `boom`.
+;
+; AND B72, WHICH IS THE FINDING OF THE
+; MILESTONE AND IS NOT A BOLT AT ALL. A
+; recording of the cabinet said the
+; robots move about once a second at the
+; start of a game, against a port moving
+; them fifteen pixels a second -- ten
+; times too fast. ROBOT_SPEED is not one
+; robot's period, it is the period the
+; whole CROWD shares, because the
+; interrupt moves the man and exactly ONE
+; other object per video frame. It is
+; written out beside `rob.vecs`, and what
+; falls out of it is most of the game:
+; the crowd is slow because it is a
+; crowd, killing robots speeds up the
+; survivors, and a robot is never faster
+; than the man until he is the last one
+; left.
+;
+; AND A SECOND PLAY SESSION SAID THE GAME
+; GETS VERY HARD VERY QUICKLY, which is a
+; missing game over rather than a
+; difficulty curve. The ramp was checked
+; against the ROM before anything was
+; changed and it is FAITHFUL: both the
+; doorway path ($2209 ends `jp $20D7`)
+; and the per-life entry ($1806) fall
+; into $209D's counter block, so every
+; room and every death advances the
+; threshold and speeds the robots up, and
+; ROBOT_SPEED reaches its floor of 1 in
+; four room builds and stays there --
+; which is the step rate the whole crowd
+; SHARES (B72), not one robot's. What the
+; cabinet has and this did not is the
+; BOUND: three lives, then the game ends
+; and $187F puts the threshold, the
+; speed, the bolts and the score back.
+; The lives are beside `score`; B71, a
+; death sending you to a NEW room, is
+; beside `step.death`.
+;
 ; M3 IS THE ROBOTS. Up to eleven of them
 ; walk straight at you and everything
 ; else they do follows from that: they
@@ -509,8 +671,20 @@ end
 ; artefact that once made a present-cost
 ; harness measure every frame as a full
 ; screen (docs/hardware-notes.md 9.1).
-to draw.border
-  pu setpos [-122 142] seth 90 pd
+;
+; AND THE PICTURE MOVES, which is all
+; the scroll wants from this pair.
+; `ox` and `oy` displace the whole room
+; -- border and segments together -- and
+; a room build passes 0 0. The corner is
+; `setx`/`sety` rather than the literal
+; `setpos [-122 142]` for the same
+; reason a frame conses nothing: a
+; displaced corner would be a fresh
+; two-element list forty times a
+; doorway.
+to draw.border :ox :oy
+  pu setx (:ox - 122)  sety (:oy + 142)  seth 90 pd
   fd 100  pu fd 48  pd fd 96
   rt 90
   fd 68  pu fd 68  pd fd 68
@@ -521,13 +695,13 @@ to draw.border
   pu
 end
 
-to draw.walls
+to draw.walls :ox :oy
   local "i
-  draw.border
+  draw.border :ox :oy
   repeat 8 [
     make "i repcount
-    pu setx item :i :seg.x
-    sety item :i :seg.y
+    pu setx (item :i :seg.x) + :ox
+    sety (item :i :seg.y) + :oy
     seth item :i :seg.h
     pd fd item :i :seg.l
   ]
@@ -683,6 +857,136 @@ to cache.man
 end
 
 ;=====================================
+; The man, shooting (design section 7.4
+; re-counted, which is M4's own finding)
+;
+; THE ROM'S EIGHT SHOOT SPRITES ARE NOT
+; FOUR MIRRORED PAIRS. Section 7.4 says
+; they are -- "four right-facing ones
+; and their four mirrors" -- and that is
+; the arithmetic the fifteen slots were
+; balanced on, so M4 had to reverse them
+; byte for byte before spending the
+; five. Reversed, only ONE pair is
+; exact: $131A (right) against $135E
+; (left). The obvious pairing of the
+; rest is simply wrong -- $132B
+; (down-right) is a plain body with one
+; arm and $134D (down-left) has the two
+; shoulder rows of the DOWN sprite, so
+; they are different drawings and
+; neither is the other reflected.
+;
+; THE COUNT SURVIVES ANYWAY AND IT IS
+; STILL FIVE, because the pairs are not
+; the ones that section names:
+;
+;   $1309 up-right -> up-left, 3 rows out
+;   $131A right    -> left, EXACT
+;   $132B down-rt  -> pairs with nothing
+;   $133C down     -> down-left, 2 rows
+;   $1380 up       -> pairs with nothing
+;
+; Mirroring DOWN gives down-left and
+; mirroring UP-RIGHT gives up-left, both
+; inside the licence section 7.4 already
+; took for the walk cycle ("a row or two
+; differs where the artist's hand did"):
+; the up-left arm comes out one row low
+; and reads as the same gesture at 1:1.
+; Down-right and up have no partner and
+; wear their own slot. Five slots, eight
+; poses, and the table in `cache.man`
+; stands -- for a different reason than
+; the one written under it.
+;
+; FIFTEEN ROWS, NOT SIXTEEN, and they
+; take a blank sixteenth for the reason
+; the robot's twelfth is blank: one size
+; is one erase rectangle and one stamp
+; offset for every costume the man has.
+; The missing row is his bottom one
+; ($10BF's trailing 10), so the pad goes
+; at the BOTTOM and his head stays where
+; the walk cycle puts it.
+;
+; $1309, $131A, $132B, $133C, $1380.
+make "sb1 (list 24 25 4 28 24 24 24 24 24 24 24 24 24 24 28 0)
+make "sb2 (list 24 24 0 31 24 24 24 24 24 24 24 24 24 24 28 0)
+make "sb3 (list 24 24 0 24 24 28 26 24 24 24 24 24 24 24 28 0)
+make "sb4 (list 24 24 0 60 60 58 58 58 24 24 24 24 24 24 28 0)
+make "sb5 (list 24 24 0 29 27 25 24 24 24 24 24 24 24 24 56 0)
+
+make "shoot.bits (list :sb1 :sb2 :sb3 :sb4 :sb5)
+
+; Slots 5 to 9, which is section 18's
+; allocation spent. Thirteen of fifteen
+; are now built and the two spare are
+; M5's and M7's.
+to cache.shoot
+  local "c.i
+  setpc :wall.pc
+  repeat 5 [
+    make "c.i repcount
+    clean
+    render.sprite (item :c.i :shoot.bits) 0 0
+    pu  setx 3.5  sety -7.5  seth 0
+    snapsh (:c.i + 4) 8 16
+  ]
+  clean
+end
+
+;=====================================
+; The shoot tables ($2042, $2067, $2944)
+;
+; DIRECTION_OFFSET_TABLE ($2042) maps
+; the sixteen DURL masks onto the nine
+; entries of the two shoot tables, which
+; is where the four "default" answers
+; for two opposite arrows come from --
+; LEFT and RIGHT held together is entry
+; 1, no shot, and UP with both is UP.
+; `s.idx` is that map with the offsets
+; turned into 1-based entry numbers
+; ($1F30's three `add hl,de` multiply
+; the offset by three and an entry is
+; six bytes, so entry = offset / 2 + 1).
+;
+;   1 nothing   4 down-right  7 left
+;   2 up-right  5 down        8 up-left
+;   3 right     6 down-left   9 up
+make "s.idx (list 1 7 3 1 9 8 2 9 5 6 4 5 1 7 3 1)
+
+; The DURL bits the bolt itself travels
+; on, which are the tables' own fifth
+; byte and are the same in SR.TAB and
+; S.TAB. A shot is therefore NORMALISED
+; here: two opposite arrows have already
+; become one direction or none.
+make "s.dir (list 0 6 2 10 8 9 1 5 4)
+
+; Which costume each pose wears and
+; which way the turtle has to face to
+; get it. Group 6, 7 and 8 are the three
+; that are somebody else mirrored.
+make "s.slot (list 1 5 6 7 8 8 6 5 9)
+make "s.face (list 90 90 90 90 90 270 270 270 90)
+
+; SR.TAB's third and fourth bytes: where
+; the man's bolt starts, as an offset
+; from his sprite's top-left corner. The
+; y column is NEGATED, as every y in
+; this file is.
+make "sr.dx (list 0 7 7 6 6 0 0 0 7)
+make "sr.dy (list 0 -1 -3 -6 -7 -6 -3 0 -2)
+
+; S.TAB's, which are the robot's and are
+; coarser -- 7 or 0 across and 6 down
+; for everything but a shot straight up.
+make "s.dx (list 0 7 7 7 7 0 0 0 7)
+make "s.dy (list 0 -6 -6 -6 -6 -6 -6 -6 -1)
+
+;=====================================
 ; The robot is the ROM's eleven bytes
 ; (design section 7.3)
 ;
@@ -778,6 +1082,24 @@ end
 ; cabinet's, so UP is +1 here.
 make "d.dx (list 0 -1 1 0 0 -1 1 0 0 -1 1 0 0 -1 1 0)
 make "d.dy (list 0 0 0 0 1 1 1 1 -1 -1 -1 -1 0 0 0 0)
+
+; The same sixteen for the bolts, which
+; are the one thing in this game still
+; drawn as lines (section 7.2).
+;
+; `d.hd` IS THE HEADING and `d.ml` the
+; step a unit of BOLT.Length is worth:
+; the cabinet moves a diagonal bolt one
+; pixel in BOTH axes a pass, so a length
+; of 8 spans 8 across and 8 down and the
+; stroke that draws it is 8 * sqrt 2
+; turtle steps long. Getting that wrong
+; draws a diagonal bolt at 71 % of its
+; length and puts its head short of
+; where the collision test says it is.
+make "d.hd (list 0 270 90 0 0 315 45 0 180 225 135 180 0 270 90 0)
+make "d.ml (list 1 1 1 1 1 1.41421 1.41421 1 1 1.41421 1.41421 1 1 1 1 1)
+
 
 ;=====================================
 ; The man (design sections 8.1 to 8.3)
@@ -876,6 +1198,68 @@ make "p.fire   2     ; the direction the arms point
 make "p.face   90    ; 90 or 270; flip does the rest
 make "p.step   1     ; where he is in the walk cycle
 make "p.dying  0     ; frames of electrocution left
+make "p.shoot  0     ; ticks of shoot pose and reload
+make "p.fires  false ; SPACE and a direction, this frame
+
+; THE SCORE ARRIVES AT M4 AND ONLY THE
+; FIRST LINE OF IT. Section 12 and the
+; whole of section 13 are M6's -- lives,
+; the bonus, the second table, the
+; colour column, the score on the
+; cabinet's own HUD -- but RBOLTS is
+; read out of the difficulty table by
+; SCORE ($369F), and "robots do not
+; shoot in the first maze" IS that
+; lookup: 0 robot bolts below 300
+; points. There is no honest way to have
+; a robot fire without it, and 50 a
+; robot however it died ($2480) is one
+; line in `rob.dies`. So M4 takes
+; section 12's first row and section
+; 13's first table, and leaves the rest
+; where it is.
+make "score 0
+
+; LIVES, AND THEY ARE HERE BECAUSE THE
+; RAMP HAS NOTHING ELSE TO STOP IT. A
+; board played M4 and said the game gets
+; very hard very quickly, and the
+; reading is that the RAMP IS THE
+; CABINET'S and the BOUND is not. $209D
+; advances the robot threshold and
+; decrements ROBOT_SPEED, and both the
+; doorway path ($2209 ends `jp $20D7`,
+; which falls into that block) and the
+; per-life entry ($1806 -> $181E) reach
+; it -- so a doorway and a death each
+; cost you one step of the ramp,
+; ROBOT_SPEED runs 4, 3, 2, 1 over the
+; first four room builds and STAYS at 1,
+; where a robot moves three pixels a
+; frame against the man's one and a
+; half.
+;
+; In the cabinet that is bounded by the
+; game ENDING: three lives, then
+; DEFAULT_PLAYER_STATE ($187F, twelve
+; bytes: 01 00 00 1E 64 03 60 00 05 5A
+; 00 00) is copied back over $4344-$434F
+; and the threshold, the speed, the
+; bolts and the score all go back to the
+; start. Without lives this port
+; ratchets forever: every death made it
+; harder and nothing ever made it easier
+; again, which is not a difficulty
+; curve, it is a missing game over.
+; Section 19 put lives in M6 with the
+; rest of the campaign; M4 takes the
+; three and the reset, because the game
+; cannot be judged without them, and
+; leaves the attract screen, the bonus
+; life and the HUD where they are.
+make "start.lives 3
+make "lives 3
+make "over  false
 
 make "paused false
 
@@ -973,10 +1357,27 @@ end
 ; slots on. He keeps the way he last
 ; faced while standing, which is what
 ; the cabinet does.
+; THE SHOOTING POSE COMES FIRST, because
+; the arcade's fire test does ($1EEF, and
+; FIRE at $1F33 zeroes both velocities
+; before CHANGE_PLAYER_DIRECTION is ever
+; reached). `p.shoot` is the ROM's own
+; 12-tick reload ($1F8A) counted down
+; three ticks a frame, so it is four
+; frames of pose and the next shot lands
+; on the fifth -- and holding the trigger
+; re-arms it on exactly the frame it
+; expires, which is why the pose does not
+; blink between shots.
 to draw.man
   pu
-  ifelse 0 = :p.dir [setsh 1] [setsh item :p.step :man.cyc]
-  seth :p.face
+  if :p.shoot > 0 [
+    make "p.pose item (:p.fire + 1) :s.idx
+    setsh item :p.pose :s.slot
+    seth item :p.pose :s.face]
+  if 0 = :p.shoot [
+    ifelse 0 = :p.dir [setsh 1] [setsh item :p.step :man.cyc]
+    seth :p.face]
   make "p.dx round :p.x
   make "p.dy round :p.y
   setx :p.dx + 3.5
@@ -1233,37 +1634,78 @@ to man.dies
   if :p.dying > 0 [stop]
   make "p.dying 15
   make "p.dir 0
+  make "p.shoot 0
 end
 
-; AND THE ROOM RESTARTS WITH HIM, which
-; is M3's addition and the cabinet's own
-; behaviour: a death puts the maze back
-; up with a fresh crowd in it. M2 could
-; respawn him in place because there was
-; nothing in the room to respawn into;
-; with robots that is a death loop, since
-; the thing that killed him is standing
-; where he comes back.
+; AND A LIFE ENDS HERE. M3 restarted the
+; room he died in, on the stated grounds
+; that the arcade restarts the room; M4
+; read $1806 and it does not. The
+; per-life entry sets MAN_X/MAN_Y to the
+; start pair ($641E, which is arcade 30,
+; 100), calls $209D to build a room from
+; the CURRENT coordinates -- and $209D
+; does not return until you die, so what
+; $1821 does next is for the NEXT life:
+; `call RANDOM` and `ld ($4345),hl`,
+; which puts ROOM_X and ROOM_Y in the
+; low and high bytes of the RNG seed. So
+; every life after the first starts in a
+; DIFFERENT room, and so does the first
+; ($17D6 does the same before it).
 ;
-; It is the SAME room -- same
-; coordinates, same maze, same threshold,
-; because a death is not a doorway -- so
-; the crowd comes back on the eleven
-; spawn cells, which are the fifteen less
-; the four doorway cells, and the doorway
-; cell he respawns in is not one of them.
-; That is the breathing room the arcade
-; gives you and it costs no rule of its
-; own.
+; AND IT IS WATCHED, NOT JUST READ. This
+; file has had it both ways -- M3 read
+; the room restarting, B71 read $1806, a
+; board's report reversed B71 and a
+; second look at the cabinet (2026-08-31)
+; put it back. The ROM and the cabinet
+; agree: a death moves you.
 ;
-; LIVES ARE STILL M6'S. This is the room
-; restarting, not the game.
+; That is deterministic rather than
+; arbitrary, and it is the same stream:
+; $2540 seeds the generator from the
+; room coordinates, so the room a death
+; sends you to is a function of the room
+; you died in. It is also the better
+; answer to the problem M3 was solving
+; -- he does not come back into the maze
+; that has just proved it can kill him,
+; though the eleven spawn cells are the
+; fifteen less the four doorway cells,
+; so a rebuilt room would not have put
+; a robot on him either.
+;
+; A death still costs a room build, and
+; the room build is what advances the
+; threshold and the robot speed, which
+; is the cabinet charging you for dying.
+; What stops that running away is the
+; three lives above.
 to step.death
   make "p.dying :p.dying - 1
   if :p.dying > 0 [stop]
+  make "lives :lives - 1
+  if 1 > :lives [
+    make "over true
+    make "leaving true
+    stop]
+  next.room
   reset.man
   draw.room
   show.room
+end
+
+; $2678 once, and its 16 bits ARE the
+; two coordinates ($17D9: `ld
+; hl,($435C)`, `ld ($4345),hl`, low byte
+; to ROOM_X). `rnd` keeps the whole seed
+; and hands back the high byte, so the
+; seed is what this reads.
+to next.room
+  ignore rnd
+  make "room.x modulo :seed 256
+  make "room.y int (:seed / 256)
 end
 
 ; DEFAULT_PLAYER_STATE ($187F): arcade
@@ -1277,6 +1719,8 @@ to reset.man
   make "p.face 90
   make "p.step 1
   make "p.dying 0
+  make "p.shoot 0
+  make "p.fires false
 end
 
 ;=====================================
@@ -1339,6 +1783,7 @@ end
 to poll.input
   local "d
   pollkeys
+  make "p.fires false
   if keydown? :key.esc [make "leaving true stop]
   if keyhit? :key.pause [toggle.pause stop]
   if :paused [stop]
@@ -1352,7 +1797,9 @@ to poll.input
   make "p.dir :d
   if not keydown? :key.space [stop]
   make "p.dir 0
-  if not 0 = :d [make "p.fire :d]
+  if 0 = :d [stop]
+  make "p.fire :d
+  make "p.fires true
 end
 
 ; The walk cycle advances with the move,
@@ -1457,14 +1904,102 @@ make "rob.ti 1
 ; ROOM TOO, in the same block as the
 ; threshold, so the first room runs at 4
 ; and the FOURTH is already at the floor
-; of 1 -- three pixels a frame, twice the
-; player's rate, from the fourth room on
-; and for the rest of the game. That is
+; of 1 from the fourth room on. That is
 ; the cabinet, and it is a great deal
 ; steeper than "robots begin slower than
-; you".
+; you" -- but ROBOT_SPEED is the period
+; the whole crowd SHARES and not one
+; robot's, so read it beside `rob.vecs`
+; (B72): eleven robots at the floor are
+; each slower than the man, and the last
+; one left is twice his speed.
 make "rob.tp 5
 make "rob.live 0
+
+;=====================================
+; AND ROBOT_SPEED IS NOT THE WHOLE
+; PERIOD: THE CROWD TAKES TURNS (B72)
+;
+; This is the number a board found by
+; watching a recording of the cabinet --
+; "at the start of the game, the robots
+; move about once per second" -- against
+; a port that was moving them fifteen
+; pixels a second. Ten times too fast,
+; and the whole of it is one instruction
+; in the interrupt handler.
+;
+; BOTTOM_OF_SCREEN_INTERRUPT ($26D9)
+; runs once a video frame and moves
+; EXACTLY TWO THINGS: the man, through
+; MAN_PTR ($26FA), and ONE vector
+; through V.PTR ($26FE). Then
+; $2701-$270C walks V.PTR on to the next
+; vector in the list. So the man moves
+; every interrupt and a robot moves ONLY
+; WHEN HIS TURN COMES ROUND.
+;
+; The man is not in that list, which is
+; why he is exempt: $1FD6 allocates his
+; vector inline and pushes a NULL link
+; word in front of it, where $200E links
+; a robot's into the circular chain --
+; and $2704 tests V.PTR for null before
+; walking it.
+;
+; So a robot steps one pixel every
+;
+;   (vectors in the list) x ROBOT_SPEED
+;
+; interrupts, where the vectors are the
+; live robots, the ones still exploding
+; (SPLICE_VECTOR at $24F7 removes a
+; vector when its death animation
+; finishes, not when it dies) and, from
+; M5, Otto. At the start of a game that
+; is about ten robots at ROBOT_SPEED 4:
+; forty interrupts, two thirds of a
+; second a pixel, which is the board's
+; "about once per second".
+;
+; THREE THINGS FALL OUT OF IT and all
+; three are the game people remember.
+;
+; The crowd is SLOW while it is a crowd
+; -- one and a half pixels a second each
+; in the first room, against the man's
+; thirty -- so a full room is a maze
+; problem and not a footrace.
+;
+; KILLING ROBOTS SPEEDS UP THE
+; SURVIVORS, because they are the
+; denominator. Eleven robots share the
+; room's step rate; the last one has it
+; all.
+;
+; AND A ROBOT IS NEVER FASTER THAN THE
+; MAN UNTIL HE IS THE LAST ONE. Two
+; robots at ROBOT_SPEED 1 is one pixel
+; every two interrupts, which is exactly
+; the man's rate; one robot is twice it.
+; Design sections 8.1 and 9.1 said
+; robots run at twice the player's speed
+; from the fourth room on, and that is
+; true of a room with one robot left in
+; it and of nothing else.
+;
+; THE AGGREGATE IS THE CHECK. The
+; cabinet moves at most one robot an
+; interrupt, so a room produces
+; 60/ROBOT_SPEED robot-steps a second
+; however many robots are in it. Here
+; each robot steps 3/(vecs x tp) a frame
+; and there are `vecs` of them, so the
+; room produces 3/tp a frame -- 60/tp a
+; second. The same number, which is what
+; says the per-robot rate is right too.
+make "rob.vecs 0
+make "rob.per  1
 
 ; RobotStartingPositionTable at $23A0,
 ; transcribed from the ARCADE
@@ -1554,13 +2089,23 @@ to place.robots
       .setitem :i :r.x (item :i :rob.sx) + (bitand rnd 31)
       .setitem :i :r.y (item :i :rob.sy) - (bitand rnd 31)
       .setitem :i :r.dir 0
-      .setitem :i :r.time 0
+      ; THE PHASE, so eleven robots do not
+      ; all step on the same frame. The
+      ; cabinet staggers them because they
+      ; take turns; here they each carry
+      ; their own counter, and without a
+      ; spread the crowd would march in
+      ; lockstep. `modulo :i 5` is a small
+      ; closed set (B52) and any spread
+      ; does the job.
+      .setitem :i :r.time modulo :i 5
       .setitem :i :r.tl 0
       .setitem :i :r.br 0
       .setitem :i :r.blk 15
       .setitem :i :r.state 1
       make "rob.live :rob.live + 1]
   ]
+  make "rob.vecs :rob.live
 end
 
 ; SEEK ($23EF) is the whole AI: two
@@ -1743,15 +2288,26 @@ make "s.y 0
 make "s.d 0
 make "s.n 0
 make "s.t 0
+make "s.k 0
 
+; SEEK'S ANSWER IS KEPT NOW AND NOT ONLY
+; `iq`'S, because SHOOT is handed C from
+; $241B -- the raw direction to the
+; player, before any wall is consulted.
+; A bolt does not care which way the
+; robot may WALK, and a robot pinned
+; against a wall still shoots down the
+; line it cannot follow.
 to step.robot :i
   make "s.x item :i :r.x
   make "s.y item :i :r.y
-  make "s.d iq :i :s.x :s.y (seek :s.x :s.y)
+  make "s.k seek :s.x :s.y
+  make "s.d iq :i :s.x :s.y :s.k
+  if :rob.can [if robot.fires :i :s.x :s.y [make "s.d 0]]
   .setitem :i :r.dir :s.d
   make "s.t 3 + item :i :r.time
-  .setitem :i :r.time modulo :s.t :rob.tp
-  make "s.n int (:s.t / :rob.tp)
+  .setitem :i :r.time modulo :s.t :rob.per
+  make "s.n int (:s.t / :rob.per)
   if not 0 = :s.d [ if not 0 = :s.n [
     make "s.x :s.x + (:s.n * item (:s.d + 1) :d.dx)
     make "s.y :s.y + (:s.n * item (:s.d + 1) :d.dy)
@@ -1791,17 +2347,35 @@ end
 ; three places -- a wall, another robot,
 ; and (from M4) a bolt -- and two of them
 ; can name the same robot in one frame.
+; FIFTY, HOWEVER HE DIED ($2480, with B=1
+; and C=5), which is section 12's first row
+; and the only part of the scoring M4 needs:
+; the difficulty table is indexed on the
+; score and RBOLTS is in it. The bonus, the
+; lives and the cabinet's own HUD are M6's.
 to rob.dies :i
   if not 1 = item :i :r.state [stop]
   .setitem :i :r.state 5
   make "rob.live :rob.live - 1
+  make "score :score + 50
 end
 
 ; 5 4 3 2 and then gone, which is design
 ; section 7.6's four explosion frames.
+; AND THE VECTOR LEAVES THE ROUND-ROBIN
+; HERE AND NOT AT THE KILL, which is
+; SPLICE_VECTOR ($24F7), "called when a
+; robot's death animation finishes": a
+; dying robot is still a vector and still
+; takes its turn, which is how it gets
+; animated at all. So `rob.vecs` drops
+; when the slot empties, not when
+; `rob.dies` runs.
 to step.boom :i
   .setitem :i :r.state (item :i :r.state) - 1
-  if 1 = item :i :r.state [.setitem :i :r.state 0]
+  if 1 = item :i :r.state [
+    .setitem :i :r.state 0
+    make "rob.vecs :rob.vecs - 1]
 end
 
 ;=====================================
@@ -1870,8 +2444,26 @@ end
 make "l.i 0
 make "l.s 0
 
+; THE FIRE TEST IS GATED ONCE A FRAME
+; AND NOT ONCE A ROBOT, which is the
+; cheapest of the savings section 15.3
+; counted on and it falls out of the
+; cabinet's own structure: the holdoff
+; at TIMER_LIST_PTR+1 is shared by the
+; room, so if it is running no robot can
+; fire and eleven `fires?` tests are one
+; comparison. `rob.can` is also cleared
+; by the robot that fires, so the rest
+; of the pass skips it too.
 to logic.robots
   make "p.cell cell.at :p.x :p.y
+  make "rob.per :rob.tp * :rob.vecs
+  if 1 > :rob.per [make "rob.per 1]
+  make "rob.can "false
+  if 0 = :rob.wait [if :rob.bolts > 0 [make "rob.can "true]]
+  if :rob.wait > 0 [
+    make "rob.wait :rob.wait - 3
+    if 0 > :rob.wait [make "rob.wait 0]]
   repeat 11 [
     make "l.i repcount
     make "l.s item :l.i :r.state
@@ -1967,19 +2559,702 @@ end
 ; that does not spill is pen 3 at three
 ; pixels -- a wider one is a filled disc
 ; whose round caps would eat the wall he
-; died against (B64). Starting at
-; x + 0..5 and y - 1..-10 and stepping
-; one, a stroke cannot leave x..x+7 and
-; y..y-11, which is the box `erase.robots`
-; already covers.
+; died against (B64).
+;
+; ONE PLUS `random 6`, AND THE ONE IS THE
+; WHOLE OF B68. A stroke starts somewhere
+; in the box and steps ONE PIXEL in one
+; of four directions, so the start has to
+; be inset by one on the side the step
+; can leave from -- and it was not. From
+; x + 0 a westward stroke reaches x - 1,
+; which is a column `erase.robots` does
+; not cover (its three pen-3 strokes at
+; x + 1, x + 4 and x + 6 cover x..x+7
+; exactly), so one robot in twenty-four
+; left a pixel on his left for the rest
+; of the room. Starting at x + 1..x + 6
+; the stroke covers x..x+7 and no more,
+; which also uses the whole width rather
+; than six eighths of it. The y start was
+; always inset: s.y is r.y - 1, so a
+; northward stroke reaches r.y and a
+; southward one r.y - 11.
+;
+; A board found this and a host test had
+; the assertion right and the sample
+; wrong -- four frames of six strokes,
+; against a corner that needs `random 6`
+; and `random 4` to land together.
 to boom :i
   make "s.x item :i :r.x
   make "s.y (item :i :r.y) - 1
   repeat 6 [
-    pu  setx :s.x + random 6
+    pu  setx :s.x + 1 + random 6
     sety :s.y - random 10
     seth 90 * random 4
     pd  fd 1]
+  pu
+end
+
+;=====================================
+; The bolts (design section 10)
+;
+; "Bolts are programatically plotted
+; pixel-by-pixel on screen, starting
+; from the head at X,Y and ending at the
+; tail at TailX,TailY. They do not have
+; pattern data in ROM." A Berzerk bolt
+; IS a line segment with a head, a tail
+; and a direction and there was never a
+; sprite to convert, which is the half
+; of section 1's restoration claim that
+; survived section 7's decision.
+;
+; ONE ARRAY OF SEVEN, NOT TWO ARRAYS,
+; and the disassembly's own equate hides
+; it. ROBOT_BOLTS is given as $438F,
+; which is four bytes past the third
+; 8-byte slot -- but the free-slot scan
+; at $289F loads $438F and then
+; DECREMENTS HL FOUR TIMES before
+; writing, because what it scanned was
+; BOLT.LastDirection at offset 4 (the
+; same field TRY_FIRE tests at $1F0C).
+; So the first robot bolt is at $438B
+; and the seven structures run
+; contiguously from PLAYER_BOLTS. Slots
+; 1 and 2 are the player's and 3 to 7
+; are the robots'.
+;
+; THE ARRAY IS PROCESSED THREE TIMES A
+; TICK AND NOT TWICE, which is M4's
+; correction to design section 10.2 --
+; the one mechanism that document
+; flagged as inferred rather than read.
+; HANDLE_PLAYER_BOLTS ($14F3) is `ld b,2
+; / call $1505`, then `(mod+2) and 7 /
+; call $1505`, and then `ld b,7` FALLING
+; THROUGH into $1505. The fall-through
+; is a third pass and it covers all
+; seven slots, so a slot gets
+;
+;   1 + (i <= 2) + (i <= (mod + 2) and 7)
+;
+; passes: THREE for a player bolt at
+; every difficulty, ONE for a robot bolt
+; at mod 0 and TWO at mod 5. Section
+; 10.2 read the two calls and concluded
+; "player bolts travel at twice a robot
+; bolt's speed until the score is high
+; enough"; it is three times at the
+; bottom of the table and one and a half
+; at the top, and there is no difficulty
+; at which they are equal.
+;
+; MAME WAS NOT AVAILABLE HERE and the
+; milestone list asked for it, so this
+; is worth saying plainly: the reading
+; above is still taken from the loop
+; structure rather than from a running
+; cabinet. What changed is that it is
+; now read from
+; docs/berzerk-source-arcade.asm, which
+; is in this tree and which the design's
+; own note was written without -- an
+; inference from three instructions
+; instead of two. A board or an emulator
+; can still overturn it and the number
+; is in one list if it does.
+;
+; One pixel a pass at 60 Hz is three of
+; our frames, so `b.spd` holds 9, 6 or 3
+; steps a frame. A player bolt crosses
+; the 244-wide room in 1.4 seconds and
+; the man walks it in 8.1.
+;
+; MaxLength is 8 for the player ($1F7C)
+; and 5 for a robot ($2921), and Length
+; grows one a pass with the head, so a
+; player bolt is at full length after
+; one tick. The tail is NOT stored: it
+; is the head walked back `b.len` along
+; the direction, which is one `bk`
+; rather than two lists and two
+; `.setitem`s a bolt a frame. The
+; cabinet stores TailX/TailY because it
+; plots and unplots pixel by pixel; we
+; draw a stroke.
+make "b.dir  (list 0 0 0 0 0 0 0)
+make "b.x    (list 0 0 0 0 0 0 0)
+make "b.y    (list 0 0 0 0 0 0 0)
+make "b.len  (list 0 0 0 0 0 0 0)
+make "b.spd  (list 9 9 3 3 3 3 3)
+make "b.own  (list 0 0 0 0 0 0 0)
+make "b.cell (list 1 1 1 1 1 1 1)
+
+make "bolt.live 0
+make "bolt.hi   2   ; (mod + 2) and 7
+
+; RBOLTS ($434B) and RWAIT ($434D) out
+; of the difficulty table at $3794,
+; indexed on the score. RWAIT is the
+; holdoff between robot shots and it is
+; SHARED BY THE WHOLE ROOM, not per
+; robot: SHOOT's first act ($287F-$2885)
+; is to read the timer at
+; TIMER_LIST_PTR+1 and return if it is
+; not zero, and $2931-$2938 reloads it
+; from RWAIT after any robot fires. So
+; one shot a holdoff, from whichever
+; robot's turn comes first -- which is
+; also the cheapest possible gate on the
+; fire test, since one comparison a
+; frame skips it for every robot at
+; once.
+make "dt.thr   (list 300 1500 3000 4500 6000 7500 9000)
+make "dt.bolts (list 0 1 2 3 4 5 1 1)
+make "dt.mod   (list 0 0 0 0 0 0 1 1)
+make "dt.wait  (list 80 80 20 10 10 15 60 50)
+
+make "rob.bolts 0
+make "rob.wait  80
+make "rob.wait0 80
+make "rob.can   false
+
+; The bolt pass's scratch, prefixed for
+; the reason `on.wall?` and `step.robot`
+; give: a `local` read costs about 1.5x
+; a global and this runs seven times a
+; frame with a quadratic inside it.
+make "k.i 0   make "k.j 0
+make "k.d 0   make "k.n 0   make "k.l 0
+make "k.x 0   make "k.y 0
+make "k.ox 0  make "k.oy 0
+make "k.sx 0  make "k.sy 0
+make "k.cx 0  make "k.cy 0
+make "k.gx 0  make "k.gy 0
+make "k.c 0   make "k.o 0
+make "k.q 0   make "k.r 0
+make "k.s 0   make "k.t 0   make "k.b 0
+make "k.w   false
+make "k.die false
+make "t.lo 0  make "t.hi 0
+make "p.pose 1
+
+to diff.i
+  repeat 7 [if :score < item repcount :dt.thr [output repcount]]
+  output 8
+end
+
+; The room's own bolt state, set where
+; `place.robots` sets the room's crowd
+; and its speed, because $369F (C.WALLS,
+; which reads the table) and $20F7
+; (which walks RWAIT down) are both
+; inside the same "initialise a new game
+; room" block a death re-enters.
+;
+; RWAIT IS SET BY THE TABLE AND THEN
+; DECREMENTED BY TEN, floor ten ($20FA's
+; `cp $14`), which does not accumulate
+; across rooms because the table is read
+; again every time -- the table sets the
+; level and the room walks it down one
+; step. The room opens with the holdoff
+; already loaded, which stands in for
+; the per-robot job delay of max(RWAIT,
+; 30) ticks at $23DF: a room does not
+; open with a bolt already in the air.
+to place.bolts
+  local "d
+  make "d diff.i
+  make "rob.bolts item :d :dt.bolts
+  make "rob.wait0 item :d :dt.wait
+  if not 20 > :rob.wait0 [make "rob.wait0 :rob.wait0 - 10]
+  make "rob.wait :rob.wait0
+  make "bolt.hi bitand ((item :d :dt.mod) + 2) 7
+  repeat 7 [
+    make "k.i repcount
+    .setitem :k.i :b.dir 0
+    .setitem :k.i :b.len 0
+    make "k.n 3
+    if not :k.i > 2 [make "k.n :k.n + 3]
+    if not :k.i > :bolt.hi [make "k.n :k.n + 3]
+    .setitem :k.i :b.spd :k.n
+  ]
+  make "bolt.live 0
+end
+
+; TRY_FIRE ($1F01) takes the first of
+; the two player slots that is free and
+; refuses if neither is; SHOOT ($289F)
+; scans the first RBOLTS robot slots the
+; same way. Zero means no slot, which is
+; a refusal and not an error.
+to free.bolt :lo :hi
+  repeat (:hi - :lo) + 1 [
+    if 0 = item ((:lo + repcount) - 1) :b.dir [output (:lo + repcount) - 1]
+  ]
+  output 0
+end
+
+; THE HEAD IS ROUNDED AND EVERY STEP
+; AFTER IT IS WHOLE, which is the rule
+; `step.robot` already lives by (B52):
+; `.setitem` of a number the workspace
+; has not held before interns a word,
+; and the man's position is a half-pixel
+; every other frame. Whole pixels in a
+; 244 x 204 playfield are a closed set;
+; his own x plus seven is not.
+to fire.bolt :i :d :bx :by :own
+  .setitem :i :b.dir :d
+  .setitem :i :b.x round :bx
+  .setitem :i :b.y round :by
+  .setitem :i :b.len 0
+  .setitem :i :b.own :own
+  .setitem :i :b.cell cell.at (round :bx) (round :by)
+  make "bolt.live :bolt.live + 1
+end
+
+; HANDLE_BOLT_COLLISION ($15A0)
+; deactivates the bolt before it looks
+; at what it hit, so a bolt kills one
+; thing. The length goes with the
+; direction because the frame has
+; already erased what was drawn last
+; time -- a dead bolt has nothing left
+; on the screen and a slot with a stale
+; length would erase a stroke nobody
+; drew, which on this canvas means a
+; hole in a wall.
+to bolt.dies :i
+  .setitem :i :b.dir 0
+  .setitem :i :b.len 0
+  make "bolt.live :bolt.live - 1
+end
+
+;=====================================
+; The player's trigger (section 8.2)
+;
+; "If you depress the fire button while
+; moving the Joystick, your man will
+; stand and fire lasers in any direction
+; you move the Joystick" -- the fire
+; test before the movement test, which
+; `poll.input` does by zeroing `p.dir`
+; and setting `p.fire`. What is here is
+; the rest of $1F1B: refuse with the
+; stick neutral, refuse while the
+; 12-tick reload is running, refuse with
+; both slots full, and otherwise start a
+; bolt at SR.TAB's offset for the pose.
+to fire.man
+  if :p.shoot > 0 [make "p.shoot :p.shoot - 3]
+  if :p.shoot > 0 [stop]
+  if not :p.fires [stop]
+  make "p.pose item (:p.fire + 1) :s.idx
+  if 1 = :p.pose [stop]
+  make "k.i free.bolt 1 2
+  if 0 = :k.i [stop]
+  make "p.shoot 12
+  (fire.bolt :k.i (item :p.pose :s.dir)
+             (:p.x + (item :p.pose :sr.dx))
+             (:p.y + (item :p.pose :sr.dy)) 0)
+end
+
+;=====================================
+; The robot's trigger (section 10.3)
+;
+; SHOOT ($287F) refuses entirely unless
+; one of three windows matches, and the
+; windows are read off the compares
+; rather than off the prose: `cp -2 / jp
+; nc` and `cp 6 / jr c` is dx in -2..5
+; INCLUSIVE, `cp -4` and `cp 7` is dy in
+; -4..6, and `cp $F6` and `cp 6` on
+; abs(dy) - abs(dx) is -10..5.
+;
+; The 2600 manual's "unlike you, robots
+; cannot shoot on the diagonal" is right
+; about the 2600 and wrong about the
+; arcade; the third window is right
+; there and this port follows the
+; cabinet (section 17).
+;
+; The direction is SEEK's, masked: a
+; vertical window keeps the up/down bits
+; ($28D8's `and $0C`), a horizontal one
+; the left/right bits ($28D2's `and
+; $03`), and a diagonal keeps both. A
+; robot exactly level with the man has
+; no vertical bit to keep, so the masked
+; direction is zero and the cabinet
+; writes an inactive bolt; here that is
+; a refusal, which is the same thing
+; without the wasted slot.
+;
+; AND THE ROBOT STOPS DEAD, which is
+; $28EF zeroing both velocities and
+; carries the best comment in the
+; disassembly: "if you didn't do this,
+; the robot could walk into the bolt
+; it's just fired and blow itself up."
+; Both S.TAB pattern pointers are $1000
+; -- the STANDING group -- so a firing
+; robot also wears the standing costume,
+; which is what `r.dir` of zero already
+; means here.
+to robot.fires :i :rx :ry
+  make "k.x :p.x - :rx
+  make "k.y :ry - (:p.y - 2)
+  make "k.d 0
+  if not :k.x > 5 [if not -2 > :k.x [make "k.d bitand :s.k 12]]
+  if 0 = :k.d [
+    if not :k.y > 6 [if not -4 > :k.y [make "k.d bitand :s.k 3]]]
+  if 0 = :k.d [
+    make "k.n (abs :k.y) - (abs :k.x)
+    if not :k.n > 5 [if not -10 > :k.n [make "k.d :s.k]]]
+  if 0 = :k.d [output "false]
+  make "k.j free.bolt 3 (2 + :rob.bolts)
+  if 0 = :k.j [output "false]
+  make "k.s item (:k.d + 1) :s.idx
+  (fire.bolt :k.j :k.d (:rx + (item :k.s :s.dx))
+             (:ry + (item :k.s :s.dy)) :i)
+  make "rob.can "false
+  make "rob.wait :rob.wait0
+  output "true
+end
+
+;=====================================
+; The bolt's turn
+;
+; THE WALL COMES FIRST AND IT CLIPS THE
+; SWEEP, which is B69 and B70 and was
+; the other way round when a board first
+; played it. The cabinet plots one pixel
+; a pass and the intercept bit answers
+; for whatever that pixel landed on, so
+; the order never arises there; nine
+; pixels in one step has to choose, and
+; the first build chose ACTORS FIRST on
+; the grounds that a robot standing
+; against a wall is the case that
+; matters. It is -- and testing actors
+; over the whole nine pixels kills the
+; robot on the FAR side of the wall as
+; well, which is what a board reported
+; in two shapes: straight through a
+; wall, and past the point of one on the
+; diagonal with the bolt itself stopping
+; dead.
+;
+; Clipping answers both at once and it
+; costs nothing an ordinary frame can
+; feel, because it only runs on the
+; frame a bolt crosses a cell edge: find
+; where along the step the wall is,
+; shorten the swept segment to end
+; there, and then look for actors. A
+; robot in FRONT of the wall is still
+; inside the shortened segment and still
+; dies, which is the case actors-first
+; was protecting.
+;
+; ONE `cell.at` A BOLT A FRAME, which is
+; the same trade `iq` takes: the head's
+; cell is cached and the crossing test
+; only does work when it changes. Which
+; edge was crossed comes out of the
+; index arithmetic rather than another
+; lookup -- a cell index is 5r + c + 1
+; and a step of nine cannot cross two
+; boundaries on one axis, so the
+; difference is 5.dr + dc with both in
+; -1..1 and `round (diff / 5)` separates
+; them. A diagonal that crosses both
+; stops at the nearer, which is the
+; conservative reading of a corner.
+to step.bolts
+  if 0 = :bolt.live [stop]
+  repeat 7 [
+    make "k.i repcount
+    make "k.d item :k.i :b.dir
+    if not 0 = :k.d [step.bolt :k.i]
+  ]
+end
+
+to step.bolt :i
+  make "k.sx item (:k.d + 1) :d.dx
+  make "k.sy item (:k.d + 1) :d.dy
+  make "k.n item :i :b.spd
+  make "k.ox item :i :b.x
+  make "k.oy item :i :b.y
+  make "k.x :k.ox + (:k.n * :k.sx)
+  make "k.y :k.oy + (:k.n * :k.sy)
+  make "k.die "false
+  if bolt.out? [make "k.die "true]
+  if not :k.die [if bolt.wall? :i [
+    make "k.die "true
+    make "k.n :k.t
+    make "k.x :k.ox + (:k.n * :k.sx)
+    make "k.y :k.oy + (:k.n * :k.sy)]]
+  .setitem :i :b.x :k.x
+  .setitem :i :b.y :k.y
+  make "k.l (item :i :b.len) + :k.n
+  ifelse :i > 2 [if :k.l > 5 [make "k.l 5]] [if :k.l > 8 [make "k.l 8]]
+  .setitem :i :b.len :k.l
+  make "k.cx ((:k.ox + :k.x) / 2) - 4
+  make "k.gx ((abs (:k.x - :k.ox)) / 2) + 5
+  make "k.cy ((:k.oy + :k.y) / 2) + 6
+  make "k.gy ((abs (:k.y - :k.oy)) / 2) + 7
+  bolt.man :i
+  if 0 = item :i :b.dir [stop]
+  bolt.robots :i
+  if 0 = item :i :b.dir [stop]
+  if :k.die [bolt.dies :i]
+end
+
+; The playfield rectangle, which is the
+; border wall and
+; CHECK_IF_BOLT_OFFSCREEN ($157E) in one
+; test: the border is drawn ON x = -122
+; and 122 and y = -62 and 142, so a bolt
+; that reaches the line has hit it. The
+; doorway is the one place the two
+; answers differ -- the cabinet lets a
+; bolt through the gap and deactivates
+; it a few pixels later, off screen --
+; and four pixels of flight nobody can
+; see is not worth four more comparisons
+; a bolt a frame.
+to bolt.out?
+  if not :k.x > -122 [output "true]
+  if not 122 > :k.x [output "true]
+  if not 142 > :k.y [output "true]
+  if not :k.y > -62 [output "true]
+  output "false
+end
+
+; TWO QUESTIONS AND NOT ONE, and the
+; second is B70. A crossing test asks
+; whether the head went THROUGH a wall
+; line, which is everything a bolt fired
+; across the room can do -- and nothing
+; a bolt fired ALONG one does. Shoot
+; level with a horizontal wall and the
+; bolt runs down the line the wall is
+; drawn on, cell after cell, crossing
+; nothing: it was drawn over the wall
+; every frame and the next frame's erase
+; took the wall away with it. A board
+; reported the maze coming apart under
+; the shot.
+;
+; So the head is also asked whether it
+; is ON ink, which for something one
+; pixel wide is exact and is two
+; `modulo`s. A vertical wall is drawn at
+; x = 48c - 118 and `cell.at` puts that
+; column in the cell to its RIGHT, whose
+; LEFT bit is the wall; a horizontal one
+; is drawn at y = 142 - 68r and belongs
+; to the row BELOW it, whose TOP bit is
+; the wall. So every wall pixel in the
+; room is named exactly once by "my own
+; left boundary" or "my own top
+; boundary", and standing on one is
+; `modulo (x + 118) 48` or `modulo (142
+; - y) 68` coming out zero -- the same
+; two divisions `cell.at` makes.
+;
+; The two grid edges that are NOT
+; interior walls are the exceptions and
+; both are already answered: x = -118 is
+; column 0's left boundary while the
+; border is drawn at -122, so it is
+; guarded here, and y = 142 and y = -62
+; are the border rows, where `bolt.out?`
+; has already killed the bolt.
+;
+; This also subsumes what a probe offset
+; used to do for a bolt travelling left
+; or up that LANDS on a wall line: its
+; cell does not change, so no crossing
+; is seen, and the occupancy test finds
+; it standing on the ink.
+to bolt.wall? :i
+  make "k.t :k.n
+  make "k.c cell.at :k.x :k.y
+  make "k.o item :i :b.cell
+  if not :k.c = :k.o [
+    .setitem :i :b.cell :k.c
+    if bolt.crossed? [output "true]]
+  if :k.x > -118 [
+    if 0 = modulo (:k.x + 118) 48 [
+      if walled? :k.c 1 [output "true]]]
+  if 0 = modulo (142 - :k.y) 68 [
+    if walled? :k.c 4 [output "true]]
+  output "false
+end
+
+; Which edge, and how far along the step
+; it was reached. `k.b` is the old
+; cell's column and then its row, so the
+; boundary is 48c - 118 or 142 - 68r and
+; the distance is the difference on that
+; axis -- whole pixels either way,
+; because a bolt's head is on whole
+; pixels and a boundary is an integer.
+; `k.t` keeps the NEARER of two
+; crossings, which is what stops a
+; diagonal past the corner it was
+; stopped by.
+to bolt.clip :t
+  make "k.w "true
+  if :k.t > :t [make "k.t :t]
+end
+
+to bolt.crossed?
+  make "k.w "false
+  make "k.r round ((:k.c - :k.o) / 5)
+  make "k.q (:k.c - :k.o) - (5 * :k.r)
+  make "k.b modulo (:k.o - 1) 5
+  if 0 > :k.q [
+    if walled? :k.o 1 [bolt.clip :k.ox - ((48 * :k.b) - 118)]]
+  if :k.q > 0 [
+    if walled? :k.o 2 [bolt.clip ((48 * (:k.b + 1)) - 118) - :k.ox]]
+  make "k.b int ((:k.o - 1) / 5)
+  if 0 > :k.r [
+    if walled? :k.o 4 [bolt.clip (142 - (68 * :k.b)) - :k.oy]]
+  if :k.r > 0 [
+    if walled? :k.o 8 [bolt.clip :k.oy - (142 - (68 * (:k.b + 1)))]]
+  output :k.w
+end
+
+;=====================================
+; What a bolt hits (section 10.4)
+;
+; The player first and then every robot
+; ($15A4, $15AB), which is the rule that
+; makes a robot's stray shot kill
+; another robot and pay you for it.
+; Section 12 keeps it and the 2600
+; manual teaches it as strategy.
+;
+; A BOLT DOES NOT HIT WHOEVER FIRED IT,
+; and that is a divergence worth naming
+; (section 17). The cabinet does not
+; need the rule: it erases the player's
+; sprite before processing bolts ($26E6
+; ahead of $26F4), so his own bolt has
+; no pixels of his to intercept, and it
+; stops a firing robot dead so he cannot
+; walk into his. Neither mechanism
+; survives a nine-pixel step out of a
+; spawn point that is ON the firer's own
+; box -- SR.TAB starts the man's bolt at
+; his x + 7 of 8 -- so the exclusion is
+; explicit here. It costs one
+; comparison, and it is paid only where
+; a hit is otherwise confirmed.
+;
+; THE GATE IS THE CHEAP ONE `hit.robots`
+; ALREADY USES, an `abs` on each axis
+; against the swept box's own
+; half-extent, and the exact test runs
+; only behind it. That is section 15.4's
+; quadratic with a bolt in front of it:
+; 77 pairs at seven bolts and eleven
+; robots, and a dead slot or an empty
+; room skips the whole thing.
+to bolt.man :i
+  if 0 = item :i :b.own [stop]
+  if :p.dying > 0 [stop]
+  if not bolt.hits? :p.x :p.y 16 [stop]
+  man.dies
+  bolt.dies :i
+end
+
+to bolt.robots :i
+  repeat 11 [
+    make "k.j repcount
+    if :k.gy > abs ((item :k.j :r.y) - :k.cy) [
+      if :k.gx > abs ((item :k.j :r.x) - :k.cx) [
+        if 1 = item :k.j :r.state [
+          if not :k.j = item :i :b.own [
+            if bolt.hits? (item :k.j :r.x) (item :k.j :r.y) 12 [
+              rob.dies :k.j
+              bolt.dies :i
+              stop]]]]]
+  ]
+end
+
+; The exact one: the swept segment is
+; (k.ox, k.oy) plus t times (k.sx, k.sy)
+; for t in 0..k.n, and a box is two
+; intervals. Narrow t to each in turn
+; and a non-empty interval is a hit. The
+; gate above is an over-estimate on a
+; diagonal -- its two axes are satisfied
+; independently, where the line ties
+; them together -- and this is what
+; stops a diagonal shot killing a robot
+; it went past the corner of.
+to bolt.hits? :bx :by :h
+  make "t.lo 0
+  make "t.hi :k.n
+  bolt.axis :k.ox :k.sx :bx (:bx + 8)
+  if :t.lo > :t.hi [output "false]
+  bolt.axis :k.oy :k.sy (:by - :h) :by
+  output not :t.lo > :t.hi
+end
+
+to bolt.axis :p0 :s :a :b
+  if 0 = :s [
+    if :p0 > :b [make "t.lo 1  make "t.hi 0]
+    if :a > :p0 [make "t.lo 1  make "t.hi 0]
+    stop]
+  if :s > 0 [
+    if (:a - :p0) > :t.lo [make "t.lo :a - :p0]
+    if :t.hi > (:b - :p0) [make "t.hi :b - :p0]
+    stop]
+  if (:p0 - :b) > :t.lo [make "t.lo :p0 - :b]
+  if :t.hi > (:p0 - :a) [make "t.hi :p0 - :a]
+end
+
+;=====================================
+; The bolts' two marks
+;
+; ONE PROCEDURE FOR BOTH, because a bolt
+; is a one-pixel stroke and a one-pixel
+; stroke erases exactly: the same start,
+; the same heading and the same length
+; in the background colour puts back
+; what it took, with none of pen 3's
+; arithmetic. `bk` from the HEAD rather
+; than `fd` from the tail -- the tail is
+; not stored and this is why it does not
+; have to be.
+;
+; The bolts are erased first and drawn
+; last, so they lie over the figures
+; rather than under them, and a bolt
+; that dies has already had its stroke
+; lifted this frame.
+to mark.bolts :pc
+  setpc :pc
+  repeat 7 [
+    make "k.i repcount
+    make "k.l item :k.i :b.len
+    if 0 < :k.l [
+      make "k.d item :k.i :b.dir
+      pu  setx item :k.i :b.x
+      sety item :k.i :b.y
+      seth item (:k.d + 1) :d.hd
+      pd  bk :k.l * (item (:k.d + 1) :d.ml)]
+  ]
   pu
 end
 
@@ -2015,9 +3290,10 @@ to draw.room
   make "t0 ticks
   setup.room
   place.robots
+  place.bolts
   clean
   setpc :wall.pc
-  draw.walls
+  draw.walls 0 0
   make "room.ms ticks - :t0
   make "room.built true
   if :room.ms > :worst.ms [
@@ -2047,10 +3323,107 @@ end
 ; the only place that is true of both
 ; paths is `place.robots`.
 to go.room :dx :dy
+  slide.room :dx :dy
   make "room.x modulo (:room.x + :dx) 256
   make "room.y modulo (:room.y + :dy) 256
   draw.room
   show.room
+end
+
+;=====================================
+; The scroll (design section 17, and
+; question 4 answered with it)
+;
+; SCROLL_LEFT ($2274) is `ld a,$20` and
+; an `ldir` of the whole screen image
+; one byte to the left, thirty-two
+; times: the cabinet slides its bitmap
+; EIGHT PIXELS A STEP for one full
+; screen. SCROLL_UP ($21E6) is the same
+; thing in $0100-byte strides, twenty-
+; seven of them. Our canvas is 320 x 240
+; where the cabinet's is 256 x 208, so
+; the STEP is kept and the count falls
+; out of it: 40 across, 30 down.
+;
+; AND NOTHING SLIDES IN BEHIND IT, which
+; is the finding that made this
+; affordable. All four routines zero the
+; rows the move vacated -- "remove junk
+; left after scroll" -- and only THEN
+; does $2209 seed the new room and fall
+; into $20D7 to draw it. The maze leaves
+; to black and the next one is simply
+; there, so a step draws ONE room and
+; not two: a `clean`, sixteen strokes
+; and a present.
+;
+; THE FIGURES DO NOT COME WITH IT, and
+; that is the one departure. In the
+; cabinet they are ink in the same
+; bitmap, so the man and the crowd slide
+; out with the walls; here they are
+; stamps over a canvas this loop
+; redraws, and carrying them means
+; threading the offset through every
+; figure for a fifth of a second of
+; company at the edge of the screen.
+; Half of it -- the man and not the
+; robots -- would be worse than neither.
+;
+; ONE STEP A FRAME, WHICH IS THE
+; CABINET'S OWN PAUSE AND NOT A
+; COMPROMISE WITH IT. A step's work is
+; about 21 ms -- a `clean`, sixteen
+; strokes and a present -- so run flat
+; out this is 0.84 s across, and the
+; cabinet takes twice that: its `ldir`
+; is 6,400 bytes at 21 T-states a byte
+; on a 2.5 MHz Z80, ~57 ms a step, which
+; is 1.53 s for twenty-seven of them
+; going up and 1.92 s for thirty-two
+; going across. Ours are 30 and 40 steps
+; and want 51 and 48 ms each, and that
+; is the 50 ms frame to within a
+; millisecond -- so `sync` paces it and
+; the pause comes out at 1.50 s and 2.00
+; s against the cabinet's 1.53 and 1.92.
+; The step even moves at the same speed:
+; 160 pixels a second against 138.
+;
+; So the transition is THIRTY OR FORTY
+; FRAMES, which is also how the cabinet
+; counts it, and `sync` is the same call
+; the frame loop ends on -- it presents,
+; then waits for the boundary, so a step
+; that fits costs exactly one period and
+; a step that does not still shows up in
+; `SL`.
+;
+; A DEATH DOES NOT SCROLL. Only $21CF,
+; the doorway, reaches the scroll; the
+; per-life entry at $1806 calls $209D
+; straight, so a death gets the build
+; and none of the travel -- it changes
+; the room (B71) without ever being a
+; journey. So this is called from
+; `go.room` and nowhere else.
+make "slide.ms 0     ; the last slide
+make "slid     false ; is THIS a slide?
+
+to slide.room :dx :dy
+  local "n local "k local "t0
+  make "t0 ticks
+  make "slid true
+  ifelse 0 = :dx [make "n 30] [make "n 40]
+  setpc :wall.pc
+  repeat :n [
+    make "k 8 * repcount
+    clean
+    draw.walls (0 - (:dx * :k)) (:dy * :k)
+    sync
+  ]
+  make "slide.ms ticks - :t0
 end
 
 ;=====================================
@@ -2177,6 +3550,20 @@ end
 ; actually used, so the margin is
 ; visible and an overrun still shows as
 ; a number above 50.
+;
+; AND A FRAME THAT SCROLLED IS NOT ONE.
+; The doorway slide is thirty or forty
+; PACED steps inside a single body, so
+; the frame carrying it measures a
+; second and a half of deliberate hold.
+; That is not an overrun and must not
+; read as one: it gets its own number --
+; `SL` on the readout, which should say
+; about 1500 going up or down and 2000
+; across -- and leaves WORST to say what
+; the game costs while it is being
+; played. `SL` above those two means a
+; step did not fit its frame.
 make "body.ms 0
 make "frame.ms 0
 make "worst.fr 0
@@ -2216,12 +3603,18 @@ to show.timing
   (type "|ROB | :rob.live "|  |)
   setcursor [20 25]
   (type "|HUD   | :worst.hud "|   |)
+  setcursor [32 25]
+  (type "|SL | :slide.ms "|  |)
   setcursor [20 26]
   (type "|FRAME | :frame.ms "|   |)
   setcursor [20 27]
   (type "|WORST | :worst.fr "|   |)
   setcursor [20 28]
   (type "|ROOM  | :room.ms "|   |)
+  setcursor [33 27]
+  (type "|LIV | :lives "| |)
+  setcursor [31 28]
+  (type "|SC | :score "| |)
   recycle
 end
 
@@ -2257,9 +3650,21 @@ end
 ; overrun is exactly when `sync` stops
 ; waiting.
 ;
-; The order is the erase-in-place one:
-; rub the man out where he is, move him,
-; put him back. A room change happens in
+; THE BOLTS MOVE BEFORE ANYTHING ELSE
+; DOES, which is the cabinet's order
+; ($26F4 calls HANDLE_PLAYER_BOLTS ahead
+; of the player's own move at $26FA) and
+; is what gives a bolt a frame of life
+; between the trigger and its first step.
+; Fired after the pass that moves them, a
+; player bolt would sweep nine pixels out
+; of a spawn point that is on the man's
+; own box in the same frame he pressed
+; the key.
+;
+; The order is otherwise the erase-in-place
+; one: rub the man out where he is, move
+; him, put him back. A room change happens in
 ; the middle of that, and it is safe
 ; there -- `draw.room` cleans the canvas
 ; and redraws the walls, so the erase
@@ -2301,22 +3706,27 @@ end
 
 to play.frame
   make "fr.t0 ticks
+  make "slid false
   poll.input
   if not :leaving [
     if not :paused [
       make "frames :frames + 1
+      mark.bolts :bg.pc
       erase.robots
       erase.man
+      step.bolts
       logic.robots
-      ifelse :p.dying > 0 [step.death] [step.man]
+      ifelse :p.dying > 0 [step.death] [fire.man  step.man]
       draw.robots
       if 0 = :p.dying [draw.man]
       if 1 = modulo :p.dying 2 [draw.man]
+      mark.bolts :wall.pc
       show.text
     ]
   ]
   make "body.ms ticks - :fr.t0
-  if :body.ms > :worst.fr [make "worst.fr :body.ms]
+  if not :slid [
+    if :body.ms > :worst.fr [make "worst.fr :body.ms]]
   sync
   make "frame.ms ticks - :fr.t0
 end
@@ -2333,15 +3743,16 @@ end
 ;
 ; The costumes are built here, once,
 ; behind a screen nobody is looking at:
-; eight sprites at ~18 ms is ~140 ms of
-; startup (design section 18's measured
-; figure, 7x what that section was
-; written with) and it is invisible
+; thirteen sprites at ~18 ms is ~230 ms
+; of startup (design section 18's
+; measured figure, 7x what that section
+; was written with) and it is invisible
 ; where a re-`snapsh` inside a frame
-; would not be. Four are the man's and
-; four are the robot's, which is eight
-; of the fifteen slots spent and five
-; left for M4's shooting poses.
+; would not be. Four are the man's walk,
+; four are the robot's facings and five
+; are the man's shooting poses, which is
+; thirteen of the fifteen slots spent
+; and two left for M5 and M7.
 ;
 ; WINDOW, not the default `wrap`. M1 set
 ; it and nothing needed it; M2 cannot do
@@ -2358,6 +3769,7 @@ to init.game
   ht
   cache.man
   cache.robots
+  cache.shoot
   setrot "flip
   make "leaving false
   make "paused false
@@ -2365,8 +3777,17 @@ to init.game
   make "worst.fr 0
   make "worst.ms 0
   make "worst.hud 0
+  make "slide.ms 0
+  make "slid false
   make "rob.ti 1
   make "rob.tp 5
+  make "score 0
+  make "lives :start.lives
+  make "over false
+  ; $17D6, and it is the same call a death
+  ; makes: a game starts in a random room
+  ; rather than at the origin.
+  next.room
   reset.man
   setcursor [0 29]
   type "|ARROWS WALK, SPACE AIMS, ESC QUITS|
@@ -2430,6 +3851,22 @@ end
 ; command, and so does a turtle still
 ; wearing a costume and still flipping
 ; with its heading.
+; THE CARD IS THE GAME ENDING AND NOT
+; THE ATTRACT SCREEN, which is still M6's
+; (section 21, risk 6). ESC means "I am
+; done" and gets nothing; running out of
+; men is worth a card, which is
+; Battlezone's split. A new `berzerk`
+; starts a new game, and `init.game` is
+; where $187F's reset lives.
+to show.game.over
+  setcursor [15 10]
+  print [GAME OVER]
+  setcursor [11 12]
+  (print [FINAL SCORE:] :score)
+  wait 3000
+end
+
 to berzerk
   if clock [play.game]
   restore.clock
@@ -2441,5 +3878,6 @@ to berzerk
   st
   textscreen
   ct
+  if :over [show.game.over]
   if not "fast = :cpu.at [no.clock]
 end

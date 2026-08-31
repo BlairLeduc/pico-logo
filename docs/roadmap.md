@@ -1573,7 +1573,190 @@ landed 2026-08-28, suite 78/78 green, all four presets link.**
 
 ### P15 — Berzerk (design first)
 
-Status: **M3 BUILT AND READ ON A BOARD 2026-08-30 — the gate fails by three
+Status: **THE SCREEN SCROLL BETWEEN ROOMS IS IN, TAKEN OUT OF M7 BECAUSE IT WAS
+ASKED FOR (2026-08-31) — and [§17](berzerk-design.md) had priced it at double.**
+The request names what it is for: *the cabinet slides the maze out of view
+between rooms, which gives the player a chance to breathe.* §17 had cut it on
+"a full-screen present per step **and the room has to be drawn twice during
+it**", and the second half of that is not what the ROM does.
+`SCROLL_UP`/`DOWN`/`LEFT`/`RIGHT` ($2175–$2419) step the whole bitmap **eight
+pixels** at a time for one full screen — `$20` one-byte `ldir`s across, `$1B`
+of `$0100` bytes up — and each step **zeroes the rows the move vacated**
+("remove junk left after scroll"). **Nothing scrolls in behind the maze**: it
+leaves to black, and only when the loop ends does `$2209` seed the next room
+and fall into `$20D7` to draw it. So a step draws **one** room — a `clean`,
+sixteen strokes and a present, ~21 ms — and the cabinet's step keeps its meaning
+on a 320 × 240 canvas as **40 steps across and 30 down**. **And the pause is the
+cabinet's too, which turned out to be one step a frame.** The cabinet's step is
+~57 ms up and down and ~60 across by arithmetic (a 6,400-byte `ldir` at 21
+T-states a byte on a 2.5 MHz Z80, plus the zeroing), so its transition is
+**~1.53 s and ~1.92 s**; ours wants 51 and 48 ms a step to match, and the frame
+period is **50**. So the slide ends each step on `sync` — the same call the
+frame loop ends on — and a doorway is **thirty or forty frames**: **1.50 s and
+2.00 s**, with the step travelling 160 pixels a second against the cabinet's
+138 and ~29 ms of margin inside each frame. **One departure**: the figures
+do not slide with the maze — in the cabinet they are ink in the bitmap being
+moved, here they are stamps over a canvas the slide redraws, and carrying the
+man alone while the crowd vanished would look like a defect. **And a frame that
+scrolled is not a frame**: it is a deliberate hold, so it is kept out of `WORST`
+and timed on its own into `SL` on the readout, where it should read ~1500 down
+and ~2000 across. One procedure (73 of the budget
+of 100), two globals, two parameters on the wall drawing, **three host tests**
+and `ctest` green at 84/84. **[§22 Q4](berzerk-design.md) is closed with it** —
+the question weighed a present cost against an irritation, and the cost lands
+between rooms where there is no frame budget to overrun; what is left for a
+board is whether 0.8 s is the right length, which was always a play test.
+
+**M4's ROBOTS WERE ABOUT TEN TIMES TOO FAST, and the fix is the finding
+of the milestone ([B72](bugs.md), 2026-08-31).** Reported from a recording of
+the cabinet — *"the robots move much faster in the port (twice as fast?)"* — and
+settled by the observation that followed: ***"at the start of the game, the
+robots move about once per second."*** The port was moving them **fifteen pixels
+a second**. **The cause is one instruction in the interrupt handler**, and no
+reading of the object model would have reached it:
+`BOTTOM_OF_SCREEN_INTERRUPT` ($26D9) runs once a video frame and moves **exactly
+two things** — the man through `MAN_PTR`, and **ONE** vector through `V.PTR` —
+and then walks `V.PTR` on to the next vector in the chain. So the man moves
+every interrupt and **a robot moves only when his turn comes round**; he is
+exempt because $1FD6 allocates his vector inline with a *null* link where $200E
+links a robot's into the circular chain. §8.1 read the `TIME`/`TPRIME` reload
+correctly and then assumed every object was offered it every tick. **A robot
+steps one pixel every `(vectors) × ROBOT_SPEED` interrupts** — the live robots,
+the ones still exploding (`SPLICE_VECTOR` unhooks a vector when the death
+animation *finishes*) and, from M5, Otto. Nine robots at `ROBOT_SPEED` 4 is a
+period of 36: **0.6 s a pixel**, and the game's own `init.game` now measures one
+pixel in one second. **Three things fall out of it and all three are the game
+people remember**: the crowd is slow *because* it is a crowd (1.5 px/s each
+against the man's 30, so a full room is a maze problem and not a footrace);
+**killing robots speeds up the survivors**, because they are the denominator,
+which is why the last robot in a room is quick; and **a robot is never faster
+than the man until he is the last one left**, where §8.1 and §9.1 had every
+robot at twice his speed from the fourth room on. The load-bearing test is the
+aggregate — the cabinet moves at most one robot an interrupt, so a room produces
+`60/ROBOT_SPEED` steps a second whatever the crowd size, and the port now
+produces exactly sixty in sixty frames at `ROBOT_SPEED` 3 for two, five and ten
+robots alike. **This is the third time a design sentence here was right about a
+mechanism and wrong about how often it runs** (B66, B70, B72), and the first
+that a host test could not have found: nothing in the workspace knows what the
+cabinet's interrupt did.
+
+**M4 READ AND PLAYED ON A BOARD 2026-08-30 — §22 Q2 IS ANSWERED AT 18 FPS WITH
+ELEVEN ROBOTS, and four more defects came back, all fixed with a host test under
+each.** 72 procedures, 110 host tests, `ctest` green at 84/84. **HUD 26,
+FRAME 56, WORST 114, ROOM 24 at `fast`.** An ordinary frame with eleven robots
+*and bolts in the air* is **56 ms — 17.9 fps**, against M3's 53 with nothing
+firing, so the whole bolt system costs about **three milliseconds** where the
+projection allowed five. And the verdict on 17.9 fps was *"very good"*, which is
+the half of Q2 no measurement can supply: [§15.3](berzerk-design.md) chose
+50 ms / 20 fps **"by argument rather than measurement"**, and the argument has
+now been tested by somebody playing it. **The gate is restated at 55 ms / 18 fps
+and the Vectrex manual's eleven robots stay** — the second of the four options
+that question priced, and the only one that costs nothing. **`WORST` 114 is left
+open**: that is two frame periods and a bit on every doorway and every death,
+ROOM 24 plus an ordinary body of 56 is 80, and the ~34 ms difference should be
+split on a board rather than guessed at here (a body carrying seven bolts is +10
+to +16 of it, and `show.room` writing fourteen characters *inside* the build
+frame — a breach of M2's own "one text job a frame" rule, since it is called
+straight from `go.room` rather than through `show.text` — is about 5).
+
+**AND THE SECOND PLAY SESSION SAID THE GAME GETS VERY HARD VERY QUICKLY, which
+was a missing game over rather than a difficulty curve.** The ramp was checked
+against the ROM before anything was changed and **it is faithful**: `$209D`
+advances the robot threshold and decrements `ROBOT_SPEED`, and **both** a
+doorway (`$2209` ends `jp $20D7`, falling into that block) and the per-life
+entry (`$1806` → `$181E`) reach it — so every room and every death costs a step,
+`ROBOT_SPEED` runs 4, 3, 2, 1 over the first four builds and **stays at the
+floor**, where a robot moves twice the player's speed. What the cabinet has and
+M4 did not is the **bound**: three lives, then the game ends and `$187F` puts
+the threshold, the speed, the bolts and the score back. Without it a session
+only ratcheted — every death made it harder and nothing ever made it easier.
+**So the lives, the game over and the reset came forward from M6**, leaving the
+bonus life, the attract screen and the cabinet's HUD there; it is M3's own
+precedent for pulling §15.5's clock precondition forward for the same kind of
+reason. **Reading `$1806` for that turned up [B71](bugs.md)**: "a death restarts
+the room" is not what the arcade does — `$1821` sets `ROOM_X`/`ROOM_Y` from
+`call RANDOM` after `$209D` returns, and `$209D` does not return until you die,
+so **every life starts in a different room** and a new game does not start at
+the origin either. Deterministic rather than arbitrary, since the maze is seeded
+*from* the coordinates, and it is the better answer to the problem M3 was
+solving anyway. A reversal was tried on a board's report that the cabinet
+rebuilds the room and withdrawn the same day after a second look at it — **the
+ROM and the cabinet agree**.
+
+**M4 first read 2026-08-30 — the frame rate is good with bolts in the air, and
+three defects came back.** **The three defects: [B69](bugs.md), [B70](bugs.md), [B68](bugs.md).**
+**B69 is this milestone's own decision coming back** — nine pixels a step makes
+wall-versus-actor an *order*, M4 chose actors first and wrote it up as a
+decision, and testing actors over the whole nine pixels reaches the far side of a
+wall the same step crosses: robots died through walls, and diagonally past the
+point of a wall the bolt itself visibly stopped on. **Neither order is the answer
+and clipping is**, since wall-first breaks the case actors-first was protecting:
+`bolt.crossed?` works out *where along the step* the wall is (the boundary is
+`48c − 118` or `142 − 68r` off the old cell's own index, and a diagonal crossing
+two edges keeps the nearer) and the swept segment is shortened to end there
+before the actor pass runs. **B70 is [B66](bugs.md) again one milestone later**:
+a *crossing* test cannot see something moving parallel to the edge it asks about,
+so a bolt fired **along** a wall ran down the line it is drawn on, crossing
+nothing, and the erase-in-place pass lifted the wall instead of the bolt. M4 had
+met half that case (a bolt *landing* on a line) and patched it with a probe
+offset, which is the near miss worth recording; the general answer is the
+cabinet's own question — *may this pixel be here* — which for something one pixel
+wide is exact and is **two `modulo`s**, because every wall pixel in a room is
+named exactly once by *my own left boundary* or *my own top boundary*. **B68 is
+one pixel and its test is the interesting half**: the explosion's strokes start
+inside the robot's box and step one pixel, so the start has to be inset on the
+side the step can leave from and was not — and
+`test_the_explosion_stays_inside_the_robots_own_box` asserted exactly the right
+bound and passed anyway, because `mock_random` returns a **constant 42** and the
+procedure has twenty-four shapes. The mock now takes `set_mock_random_walking`,
+which is the trap any future bound-over-a-draw test would have fallen into.
+
+**M4 BUILT 2026-08-30 — the bolts, both kinds, and the milestone's own gate came
+back corrected rather than confirmed.** The cabinet's one
+seven-slot bolt array (two the player's, five the robots'), the three firing
+windows of §10.3 at their boundaries, the room-wide `RWAIT` holdoff, the man's
+five shooting poses, and §13's below-10,000 difficulty table with §12's first
+row of scoring under it — because `RBOLTS` is read out of that table by *score*
+and "robots don't shoot in the first maze" **is** that lookup. **§19 asked for
+the alignment rule "confirmed against MAME" and MAME was not available here**;
+what it got instead is the rule read out of
+[`berzerk-source-arcade.asm`](berzerk-source-arcade.asm), which is in this tree
+and which the design's note was written without — **and the reading changes.**
+`HANDLE_PLAYER_BOLTS` processes the array **three times a tick, not twice**: the
+third pass is a fall-through (`ld b,7` with no `call` under it) covering all
+seven slots, so a slot gets `1 + (i <= 2) + (i <= (mod + 2) and 7)` passes and a
+player bolt is **three times a robot bolt's speed at the bottom of the table and
+1.5× at the top** — never equal, where §10.2 expected parity at `mod = 5`. The
+same file's `ROBOT_BOLTS` equate is four bytes out for the same reason `$289F`
+decrements HL four times, so what looked like two arrays is one. **The second
+finding is §7.4's and it is M2's lesson repeated exactly**: "the eight shoot
+sprites are four right-facing ones and their four mirrors" is the sentence the
+fifteen costume slots were balanced on, and reversed byte for byte **only one
+pair is exact and two of the four are not pairs at all** ($132B has one arm
+where $134D has the DOWN sprite's shoulders). The count still comes to five,
+because the pairs are different ones — right/left exact, down→down-left in two
+rows, up-right→up-left in three, down-right and up on their own slots — and the
+test now asserts the *miss* as well as the hits, so it cannot be lost again.
+**Two decisions, both forced by a bolt that moves nine pixels where the cabinet
+moves one**: collision is the **swept segment** and not the head (a player bolt
+would otherwise jump over an 8-wide robot), behind the cheap `abs` gate
+`hit.robots` already uses; and **a bolt does not hit whoever fired it**, which
+the cabinet never needed to say because it erases the player before it moves the
+bolts and stops a firing robot dead — neither survives a spawn point that is
+*on* the firer's own box. **And the wall test nearly shipped a [B64](bugs.md)**:
+`cell.at` puts a boundary pixel in the cell to its right and the one below, so a
+bolt travelling left or up that lands exactly *on* a wall line registers no
+crossing, would be drawn over the wall and would rub a hole in it on the next
+erase; one probe offset in those two directions fixes it and a test pins it.
+**§22 Q2 is what the next board session answers**, and it is now being answered
+against the whole game: a live bolt projects to ~2.3 ms a frame at eleven
+robots, so an ordinary frame is **~58 ms** and a late-game one with seven bolts
+**~69**, against M3's measured 53 and a 50 ms gate. Nothing after this scales
+with `n` — Otto is a constant and the HUD is text on its own schedule — so the
+four priced options (ten robots, 18 fps, an interpreter lever, or stop) are
+finally a choice about the finished frame.
+
+**M3 BUILT AND READ ON A BOARD 2026-08-30 — the gate fails by three
 milliseconds, and that is now §22 Q2's whole question.** At `fast`: HUD 24,
 FRAME 53, WORST 100, ROOM 23. At `normal`: unplayable. **An ordinary frame with
 eleven robots is 53 ms against a 50 ms gate — 18.9 fps.** `sync` pads a frame
@@ -1952,6 +2135,11 @@ the game is not started.
 
 | Date | Item | Change |
 |---|---|---|
+| 2026-08-31 | P15 | **The screen scroll between rooms, taken out of M7 because it was asked for — and [§17](berzerk-design.md)'s price for it was double.** The request says what it is for: *the cabinet slides the maze out of view between rooms, which gives the player a chance to breathe.* §17 cut it on "a full-screen present per step and **the room has to be drawn twice during it**", and the ROM does not do the second half. `SCROLL_UP`/`DOWN`/`LEFT`/`RIGHT` ($2175–$2419) step the bitmap **eight pixels** for one full screen (`$20` one-byte `ldir`s across, `$1B` of `$0100` up) and each step **zeroes the rows it vacated** — *"remove junk left after scroll"* — so **nothing scrolls in behind the maze**; it leaves to black and `$2209` does not seed the next room until the loop ends. A step therefore draws **one** room: a `clean`, sixteen strokes and a present, ~21 ms. The cabinet's *step* is what transfers and the count falls out of the canvas — **40 across, 30 down**. **The pause is the cabinet's as well, and it is one step a frame**: the cabinet's step is ~57 ms up/down and ~60 across by arithmetic (6,400-byte `ldir`s at 21 T-states a byte on a 2.5 MHz Z80 plus the zeroing), so its transition is ~**1.53 s** and ~**1.92 s**, and ours wants 51 and 48 ms a step against a frame period of **50**. Each step therefore ends on `sync` — the frame loop's own call — and a doorway is **thirty or forty frames**: **1.50 s and 2.00 s**, the step travelling 160 pixels a second against 138, with ~29 ms of margin inside each frame. `frame_sync_wait_ms` drops the slippage of a step that overran rather than chasing it. **One departure**: the figures do not slide — in the cabinet they are ink in the moved bitmap, here they are stamps over a canvas the slide redraws, and half of it (the man, not the crowd) would read as a defect. **A frame that scrolled is not a frame** — a deliberate hold of a second and a half, kept out of `WORST` and timed into `SL` on the readout beside `ROOM` and `HUD`, where it should read ~1500 down and ~2000 across and anything higher is a step that did not fit its frame. **A death does not scroll** ($1806 re-enters $209D directly; only the doorway at $21CF reaches it). 73 procedures, **113 host tests**, `ctest` green at 84/84. **[§22 Q4](berzerk-design.md) closed**: it weighed a present cost against an irritation, and the cost lands between rooms where there is no frame budget to overrun |
+| 2026-08-31 | P15 | **M4's robots were about ten times too fast, and the cause is one instruction in the cabinet's interrupt handler ([B72](bugs.md)).** Reported off a recording — *"the robots move much faster in the port (twice as fast?)"* — and settled by ***"at the start of the game, the robots move about once per second"***, against a port doing **fifteen pixels a second**. `BOTTOM_OF_SCREEN_INTERRUPT` ($26D9) runs once a video frame and moves **exactly two things**: the man through `MAN_PTR`, and **ONE** vector through `V.PTR` — then it walks `V.PTR` on to the next vector. So a robot moves **only when his turn comes round**, and the man is exempt because $1FD6 allocates his vector inline with a *null* link where $200E links a robot's into the chain. §8.1 read the `TIME`/`TPRIME` reload right and then assumed every object was offered it every tick. **A robot steps one pixel every `(vectors) × ROBOT_SPEED` interrupts**; nine robots at `ROBOT_SPEED` 4 is 36 — 0.6 s a pixel, and the game now measures one pixel in one second. **Three consequences, all of them the game people remember**: the crowd is slow *because* it is a crowd, **killing robots speeds up the survivors** (they are the denominator), and **a robot is never faster than the man until he is the last one left** — where §8.1 and §9.1 had every robot at twice his speed from the fourth room on. The load-bearing test is the aggregate: the cabinet moves at most one robot an interrupt, so a room produces `60/ROBOT_SPEED` steps a second whatever the crowd size, and the port now produces exactly sixty in sixty frames for two, five and ten robots alike. **Third time here that a design sentence was right about a mechanism and wrong about how often it runs** (B66, B70, B72), and the first a host test could not have found. 72 procedures, **110 host tests** |
+| 2026-08-30 | P15 | **M4's numbers and its play test: [§22 Q2](berzerk-design.md) is answered at 18 fps with eleven robots, and the difficulty complaint was a missing game over.** Read at `fast`: **HUD 26, FRAME 56, WORST 114, ROOM 24**. An ordinary frame with eleven robots *and bolts* is 56 ms — 17.9 fps — against M3's 53 with nothing firing, so the bolts cost ~3 ms where the projection allowed 5; and the verdict on 17.9 fps was *"very good"*, which is the half of Q2 no measurement supplies, since §15.3 chose 50/20 "by argument rather than measurement". **Gate restated at 55 ms / 18 fps, eleven robots stay.** **`WORST` 114 is left open** — two frame periods on a doorway or a death, of which ROOM 24 plus a 56 ms body is 80 and the rest is for a board to split, not this table. **"The game gets very hard very quickly" was checked against the ROM before anything changed and the ramp is faithful**: both the doorway path (`$2209` ends `jp $20D7`) and the per-life entry (`$1806`) fall into `$209D`'s counter block, so `ROBOT_SPEED` runs 4, 3, 2, 1 over the first four builds and stays at the floor at twice the player's speed. What was missing is the **bound** — three lives, then `$187F` puts the threshold, the speed, the bolts and the score back — so a session only ever ratcheted. **The lives, the game over and the reset came forward from M6**, leaving the bonus life, the attract screen and the HUD there. Reading `$1806` turned up **[B71](bugs.md)**: a death does not restart the room you died in — `$1821` sets the next life's `ROOM_X`/`ROOM_Y` from `call RANDOM`, so every life starts in a different (deterministic) room, and a new game does not start at the origin either. 72 procedures, **107 host tests** |
+| 2026-08-30 | P15 | **M4 read on a board: the frame rate is good and three defects came back, all fixed.** *"Frame rate is very good"* with bolts in the air, which is the news [§22 Q2](berzerk-design.md) was waiting for and is not yet the answer — the four on-screen numbers were not read this session and a number on that display cannot be copied anywhere else, so it establishes that the ~58 ms projection is an **upper** bound and leaves the next reading a confirmation rather than a decision. **[B69](bugs.md) is this milestone's own decision coming back**: nine pixels a step makes wall-versus-actor an *order*, M4 chose actors first and wrote it up, and testing actors over the whole nine pixels reaches the far side of a wall the same step crosses — robots died through walls, and diagonally past the point of a wall the bolt itself visibly stopped on. **Neither order is the answer and clipping is**, because wall-first breaks the case actors-first was protecting: find where along the step the wall is and shorten the swept segment to end there. **[B70](bugs.md) is [B66](bugs.md) again one milestone later** — a *crossing* test cannot see something moving parallel to the edge it asks about, so a bolt fired **along** a wall ran down the line crossing nothing and the erase lifted the wall instead. Answered with the cabinet's own question, *may this pixel be here*, which for one pixel is **two `modulo`s**: every wall pixel is named exactly once by *my own left boundary* or *my own top boundary*. **[B68](bugs.md) is one pixel and its test is the interesting half** — the explosion's strokes start inside the box and step one pixel, the start was not inset on the side the step leaves from, and the test that asserted exactly the right bound passed anyway because `mock_random` is a **constant 42** and the procedure has twenty-four shapes. The mock now takes `set_mock_random_walking`. 70 procedures, **104 host tests**, `ctest` green at 84/84 |
+| 2026-08-30 | P15 | **M4 built, not yet read on a board: the bolts, and the milestone's own gate came back corrected rather than confirmed.** Both kinds in the cabinet's one seven-slot array, the three firing windows at their boundaries, the room-wide `RWAIT` holdoff, the man's five shooting poses, §13's below-10,000 table and §12's first row of scoring under it — because `RBOLTS` is read out of that table by *score*, and "robots don't shoot in the first maze" **is** that lookup. §19 asked for §10.2's alignment rule "confirmed against MAME"; **MAME was not available and the rule is instead read out of [`berzerk-source-arcade.asm`](berzerk-source-arcade.asm), and it changes.** `HANDLE_PLAYER_BOLTS` processes the array **three times a tick, not twice** — the third pass is a fall-through, `ld b,7` with no `call` under it, covering all seven slots — so a slot gets `1 + (i <= 2) + (i <= (mod + 2) and 7)` passes and a player bolt is **three times** a robot bolt's speed at the bottom of the table and 1.5× at the top, never equal where §10.2 expected parity. The same file's `ROBOT_BOLTS` equate is four bytes out (`$289F` decrements HL four times), so what looked like two arrays is one. **Second finding, and it is M2's lesson repeated exactly**: §7.4's "four right-facing sprites and their four mirrors" is the sentence the fifteen costume slots were balanced on, and reversed byte for byte **only one pair is exact and two of the four are not pairs at all**. Five slots still hold eight poses because the pairs are different ones, and the test now asserts the *miss* as well as the hits. **Two decisions forced by a bolt that moves nine pixels where the cabinet moves one**: collision is the **swept segment** and not the head, and **a bolt does not hit whoever fired it** (§17) — the cabinet needs neither rule because it erases the player before it moves the bolts and stops a firing robot dead. **And the wall test nearly shipped a [B64](bugs.md)**: a bolt travelling left or up that lands exactly *on* a wall line registers no crossing, would be drawn over the wall and would rub a hole in it on the next erase; one probe offset fixes it. **§22 Q2 is what the next board session answers** — a live bolt projects to ~2.3 ms a frame at eleven robots, so an ordinary frame is ~58 ms and a late-game one ~69 against a 50 ms gate, and nothing after this scales with `n`. 68 procedures, **99 host tests**, `ctest` green at 84/84 |
 | 2026-08-30 | P15 | **M3's robot movement audited line by line against [`berzerk-source-arcade.asm`](berzerk-source-arcade.asm) — which is in this tree and which M0 never opened — and three things were wrong, all inherited from building on the Vectrex port's gloss of `$23A0` rather than on `$23A0`.** What transfers exactly: `SEEK`'s DURL bits and its `+2`, `IQ`'s four probes and pair rules, the `$1C92` shortcut, `VELOCITY_TABLE`'s ±1 deltas with **±1 in both axes on a diagonal** (so a diagonal really is √2 faster), the five facing groups of `ROBOT_ANIMATION_TABLES`, `MOVE_ANIMATE_VECTOR`'s `dec (hl)` / `ret nz` / reload — **one pixel per expiry**, which is what makes a whole-pixel accumulator the faithful port rather than a convenience — and the `random >= threshold` sampler. Thinking and moving are decoupled in the cabinet too (`SEEK` ends in `STOP_JOB` and loops while `TIME`/`TPRIME` drives the movement), so seeking once a frame is that structure and not an approximation of it. **What was wrong.** (1) **The spawn table is `(x, y)` and the jitter is UNSIGNED**: `$23B8` assigns the first byte to `P.X`, and `$2130`-`$213C` *adds* `random and 31`, so the entries are the top-left of a 32-step band four pixels into each cell rather than cell centres — this port started every robot half a cell out and read the table forwards where `$2117` reads it backwards, offset 22 down to 2, which decides which slot gets which draw from the room's stream. (2) **The first room is `$20` and ROBOT_SPEED 4, not `$60` and 5**: both counters advance at the TOP of `$209D` and the placement is at the bottom, so the opening room is the 87.5 % one — **9.6 robots** — and the floor of 1 arrives in the FOURTH room, where robots move at twice the player's rate for the rest of the game. That is a materially harder and more front-loaded game than §9.1's prose describes, and it means **eleven robots are guaranteed by room four**, which the frame budget has to survive. (3) **A death advances both counters, because it is a room build** — `$1806` is the per-life entry and calls the same `$209D` a doorway does, so the cabinet charges you for dying where this port had made it free. **And chasing the test fallout turned up something about the interpreter worth knowing: `nodes` and the word table are ONE ARENA.** `mem_free_nodes()` is `free_count + (node_bottom - atom_next) / 4` ([`core/memory.c`](../core/memory.c)), so a robot walking into a coordinate the workspace has not held **reads as a spent cell**, and `recycle` hands both back at once on the readout's cadence. Over nineteen frames neither counter means what its name says. M2's one-man test keeps its exact equality (his positions are a small set that closes fast); the full-room claim is now a **trend across peaks** over 6,000 frames against a 256 bound that one cell a frame would blow through twenty-three times over — 20,000 frames hold ~25,180 bytes and ~27,800 cells, flat. 74 host tests, `ctest` green at 84/84 |
 | 2026-08-30 | P15 | **M3 read on a board: the gate fails by three milliseconds, and the worst frame was a rule not drawn wide enough.** `fast`: HUD 24, FRAME 53, WORST 100, ROOM 23; `normal` **unplayable**. **An ordinary frame with eleven robots is 53 ms against 50 — 18.9 fps.** `sync` pads a frame that fits to exactly the period, so 50 reads as "inside budget" and anything over it is the body; and `show.timing` prints the *previous* frame's period, which is an ordinary one rather than the one carrying the readout — so 53 is the game. That beats §15.3's 55–59 ms projection and M0's 77.35 for the same eleven robots, **and it is still over**. **ROOM went 11 → 23**, which is `place.robots` inside the build where $2117 puts it. **WORST 100 was a defect, and it is M2's own rule not drawn wide enough**: text is not batched by `sync`, so M2 made it "one text job a frame" and serialised the masks against the timing rows — but a room build was 11 ms then and is 23 now, which makes it a **third job of the same size**, and `show.text` ran at the TOP of the frame where nothing yet knows a doorway is coming. A doorway therefore carried the ordinary body, the build and the once-a-second readout together: 53 + 23 + ~20. Fixed by having `draw.room` raise `room.built` and moving `show.text` to the END of the body, so a frame that built a room writes nothing else; **predicted worst ~76** and the next run is the check. **`normal` unplayable is §15.5 measured rather than argued** — 300 MHz is a precondition, and the game does not yet say so because §21 risk 6 puts that on M6's attract screen. **§22 Q2 is now priced rather than projected**: one robot is ~3 ms at the measured slope, so **a cap of ten closes the gate** and touches only the last position of the count cycle; or the gate is restated at 55 ms / 18 fps, which §15.3 chose as 50/20 "by argument rather than measurement"; an interpreter lever is not justified by three milliseconds and §16 already said Berzerk wants none; stopping is not serious. **Deferred to M4**, and that is the decision rather than a postponement of one — bolts spend whatever margin is bought here, so a cap chosen against 53 would have to be chosen again against whatever the bolts read; M4 is built against eleven robots and the 50 ms gate and the next session prices the whole thing at once. **And §15.5's clock precondition came forward from M6 with the same reading**, because "unplayable with no explanation" is the worst of the three outcomes: `clock` asks for `fast` and reads `hw.cpu` **back off the hardware** so a board that declined cannot report an overclock it did not get, the game does not start without it, and `restore.clock` gives back what it *found* so a session that was already fast stays fast ([B50](bugs.md)) — Battlezone's shipped pair rather than a new idea, with §21 risk 6's attract screen still M6's. 51 procedures, **74 host tests** |
 | 2026-08-30 | P15 | **M3 built: the robots seek, count on a five-room cycle, kill each other — and `IQ` turns out to be airtight, which is the finding.** With the cell masks standing in for the cabinet's pixel intercept, the arcade's probe offsets are the robot's collision box grown by **exactly one frame's travel** in every direction: (−4, +4) to (+12, −15) against a collision box of (−1, +1) to (+8, −12), and he moves at most three steps. So any cell the swept box can reach is a cell a probe already read, and the direction is cleared before the step that would land on ink. **A robot cannot walk onto a wall except through $1C92** — the ROM's shortcut that skips probing when the robot is in the player's own cell — and that shortcut *is* the corner suicide both manuals teach as strategy. The obvious tightening costs nothing and is very easy to write (ask whether the whole probe box is in the player's cell, since both corners are already in hand) and **deletes the mechanism silently, because nothing else about the game changes**. §9.3 now says so and a test pins it. **Three decisions.** §6.3's cell-crossing cache is taken and **its key is two corners rather than four** — exact, not approximate, because an axis-aligned probe box's four cells are named completely by its top-left and bottom-right — taking six `cell.at` calls a robot a frame down to **three**, with the other two paid only on the frame a corner crosses. **A robot moves in whole pixels off the arcade's reload counter** rather than at a fractional speed: the more faithful port (`TIME` counts down, the object steps one pixel at zero, and one of our frames is three of the cabinet's ticks) and the thing that keeps §18's fourth ceiling, since `.setitem` interns every number the workspace has not held ([B52](bugs.md)) and 0.6 of a pixel a frame is not a closed set where whole pixels in a 244 × 204 playfield are ~450 numbers. **The explosion costs no costume slot and stays inside the robot's own 8 × 12**, so his own three pen-3 strokes erase it and no wide pen spills onto a wall ([B64](bugs.md)) — §7.6's question closed on §18's arithmetic rather than on looks. **And a death now restarts the room**, which M2 did not need: the thing that killed him is standing where he comes back, and the arcade restarts the room anyway. That cost two of M2's storage tests their exact-equality assertions and the reason is worth recording — a death frame now spends what a doorway spends and hands it back through `recycle`, so the free word table *wobbles* a few dozen bytes depending on where a death lands against the once-a-second readout; both now check the bound they always claimed (4,000 frames against 256 bytes, where one word a frame is sixteen times that). **[B65](bugs.md) fixed with it**: `tests/logo/p15m0`'s eraser is the game's own now, so thirteen figures cost **39 strokes where the harness was doing 13**, and §3's in-place-versus-clear verdict is re-read on the same board session — its 7.7 ms margin is exactly what the missing two thirds of the erase pass was hiding. 48 procedures against a budget of 100, **70 host tests**, `ctest` green at 84/84. **What M3 owes is a board reading, and it is the one §22 Q2 has been waiting for**: the frame is `c + m·n` and this is the first build with a real `n` in it. Two of §15.3's three logic savings are in (gating `fires?` is M4's, since nothing fires yet) and M3 adds a quadratic of its own — `hit.robots` is 55 pairs at eleven robots against the 77 §15.4 was already worried about for the bolts |
