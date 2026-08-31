@@ -32,7 +32,7 @@
 
 // Rendered turtle raster sizing for the screen compositor. Shape 0 (the
 // line-drawn triangle) rasterizes into 24x24 to accommodate rotation;
-// shapes 1-15 render at their own size, up to the raster cap of 32x32.
+// shapes 1-23 render at their own size, up to the raster cap of 32x32.
 #define SHAPE0_RASTER_SIZE 24
 #define TURTLE_RASTER_MAX 32
 
@@ -51,7 +51,7 @@ typedef struct
     LogoPen pen_state;
     uint8_t pen_size;       // Pen width in pixels (setpensize)
     bool visible;
-    uint8_t shape;          // Current shape number (0-15)
+    uint8_t shape;          // Current shape number (0-23)
     uint8_t mag;            // Magnification 1 or 2 (setmag)
     LogoRotationStyle rot_style;  // How the costume follows the heading
     uint8_t raster[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
@@ -1107,10 +1107,10 @@ static void turtle_set_wrap(void)
     screen_gfx_set_boundary_mode(SCREEN_BOUNDARY_WRAP);
 }
 
-// Set the current turtle shape (0-15)
+// Set the current turtle shape (0-23)
 static void turtle_set_shape_num(uint8_t shape_num)
 {
-    if (shape_num > 15)
+    if (shape_num > LOGO_SHAPE_MAX_SLOT)
         return;
     
     if (shape_num == cur->shape)
@@ -1222,25 +1222,25 @@ static bool turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
     return true;
 }
 
-// Read back a shape (1-15) as the pixels it is made of, straight out of
+// Read back a shape (1-23) as the pixels it is made of, straight out of
 // the pool. NULL when the slot holds no shape; the pointer is good until
 // the next put or snap, which is all getsh needs to build its rows.
 static const uint8_t *turtle_get_shape_data(uint8_t shape_num, uint8_t *w, uint8_t *h)
 {
     const uint8_t *pixels;
-    if (shape_num == 0 || shape_num > 15 || !costume_get(shape_num, w, h, &pixels))
+    if (shape_num == 0 || shape_num > LOGO_SHAPE_MAX_SLOT || !costume_get(shape_num, w, h, &pixels))
     {
         return NULL;
     }
     return pixels;
 }
 
-// Define a shape (1-15) from w x h pixels, replacing whatever the slot
+// Define a shape (1-23) from w x h pixels, replacing whatever the slot
 // held. Same store as snapsh writes, so a hand-written shape and a
 // captured one are the same thing from here on.
 static bool turtle_put_shape_data(uint8_t shape_num, uint8_t w, uint8_t h, const uint8_t *data)
 {
-    if (shape_num == 0 || shape_num > 15 || !costume_put(shape_num, w, h, data))
+    if (shape_num == 0 || shape_num > LOGO_SHAPE_MAX_SLOT || !costume_put(shape_num, w, h, data))
     {
         return false;
     }

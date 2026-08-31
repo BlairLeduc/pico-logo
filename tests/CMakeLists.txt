@@ -120,6 +120,15 @@ add_logo_test(test_p13m0)
 target_compile_definitions(test_p13m0 PRIVATE
     P13M0_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p13m0")
 
+# Berzerk (P15), M0: the measurement harness that decides section 3's erase
+# strategy and reads section 15's frame budget off a board. What the host can
+# check is that the room generator reproduces, that `IQ` clears the right bits
+# and that the scene holds still -- the last of which the erase comparison
+# rests on and no board can see.
+add_logo_test(test_p15m0)
+target_compile_definitions(test_p15m0 PRIVATE
+    P15M0_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p15m0")
+
 # Battlezone (P13), M1: the world, the camera, the treads, the horizon and the
 # gunsight. The game is pure Logo -- what the host can check is that the
 # projection is RIGHT, which is the half of this milestone a board cannot see.
@@ -127,6 +136,15 @@ target_compile_definitions(test_p13m0 PRIVATE
 add_logo_test(test_battlezone)
 target_compile_definitions(test_battlezone PRIVATE
     BATTLEZONE_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/battlezone")
+
+# Berzerk (P15), M1: the room. The game is pure Logo -- what the host can check
+# is that the maze is a FUNCTION of the room coordinates, which is the half of
+# this milestone a board cannot see, and that the drawn walls and the wall masks
+# describe the same maze. What a room costs was measured by M0 on a board
+# (tests/logo/p15m0).
+add_logo_test(test_berzerk)
+target_compile_definitions(test_berzerk PRIVATE
+    BERZERK_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/berzerk")
 
 # P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
 # regression guard on relative numbers (interpreter-throughput-design.md §6).
@@ -207,6 +225,26 @@ target_include_directories(test_screen_refresh PRIVATE
 # screen.c rounds with floorf; glibc keeps that in libm (macOS does not).
 target_link_libraries(test_screen_refresh PRIVATE m)
 add_test(NAME test_screen_refresh COMMAND test_screen_refresh)
+
+# What shape a wide pen puts on the canvas (B53). Same shape as
+# test_screen_refresh: the real screen.c against fake_lcd.c, so the test reads
+# the pixels the rasteriser actually wrote rather than a model of them.
+add_executable(test_screen_pen
+    test_screen_pen.c
+    fake_lcd.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/screen.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/dirty_tiles.c
+    ${CMAKE_SOURCE_DIR}/devices/stream.c
+    unity.c
+)
+target_include_directories(test_screen_pen PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+target_link_libraries(test_screen_pen PRIVATE m)
+add_test(NAME test_screen_pen COMMAND test_screen_pen)
 
 # Where the text screen's lines are in split mode (B49). Same shape as
 # test_screen_refresh: the real screen.c against fake_lcd.c, which records the

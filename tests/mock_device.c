@@ -451,7 +451,7 @@ static void mock_turtle_restore_palette(void)
 
 static void mock_turtle_set_shape(uint8_t shape_num)
 {
-    if (shape_num > 15)
+    if (shape_num > LOGO_SHAPE_MAX_SLOT)
         return;
     mock_state.shape.current_shape = shape_num;
 }
@@ -464,7 +464,7 @@ static uint8_t mock_turtle_get_shape(void)
 static const uint8_t *mock_turtle_get_shape_data(uint8_t shape_num, uint8_t *w, uint8_t *h)
 {
     const uint8_t *pixels;
-    if (shape_num == 0 || shape_num > 15 || !costume_get(shape_num, w, h, &pixels))
+    if (shape_num == 0 || shape_num > LOGO_SHAPE_MAX_SLOT || !costume_get(shape_num, w, h, &pixels))
     {
         return NULL;
     }
@@ -473,11 +473,19 @@ static const uint8_t *mock_turtle_get_shape_data(uint8_t shape_num, uint8_t *w, 
 
 static bool mock_turtle_put_shape_data(uint8_t shape_num, uint8_t w, uint8_t h, const uint8_t *data)
 {
-    if (shape_num == 0 || shape_num > 15)
+    if (shape_num == 0 || shape_num > LOGO_SHAPE_MAX_SLOT)
     {
         return false;
     }
-    return costume_put(shape_num, w, h, data);
+    if (!costume_put(shape_num, w, h, data))
+    {
+        return false;
+    }
+    mock_state.costume.put_count++;
+    mock_state.costume.last_put_slot = shape_num;
+    mock_state.costume.last_put_w = w;
+    mock_state.costume.last_put_h = h;
+    return true;
 }
 
 static void mock_turtle_stamp(void)

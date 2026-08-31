@@ -1394,10 +1394,15 @@ void test_setsh_rejects_negative(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
-void test_setsh_rejects_above_15(void)
+void test_setsh_rejects_above_the_last_slot(void)
 {
-    Result r = run_string("setsh 16");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "setsh %d", LOGO_SHAPE_MAX_SLOT + 1);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string(cmd).status);
+
+    // and the last slot itself is legal
+    snprintf(cmd, sizeof(cmd), "setsh %d", LOGO_SHAPE_MAX_SLOT);
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string(cmd).status);
 }
 
 void test_setsh_requires_input(void)
@@ -1525,11 +1530,20 @@ void test_putsh_rejects_negative_shape(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, run_string(cmd).status);
 }
 
-void test_putsh_rejects_shape_above_15(void)
+void test_putsh_rejects_shape_above_the_last_slot(void)
 {
     char cmd[256];
-    snprintf(cmd, sizeof(cmd), "putsh 16 %s", shape_wedge_8x8("0c"));
+    snprintf(cmd, sizeof(cmd), "putsh %d %s", LOGO_SHAPE_MAX_SLOT + 1, shape_wedge_8x8("0c"));
     TEST_ASSERT_EQUAL(RESULT_ERROR, run_string(cmd).status);
+
+    // The last slot is a real slot: it takes a shape and gives it back.
+    snprintf(cmd, sizeof(cmd), "putsh %d %s", LOGO_SHAPE_MAX_SLOT, shape_wedge_8x8("0c"));
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string(cmd).status);
+
+    uint8_t w = 0, h = 0;
+    TEST_ASSERT_NOT_NULL(mock_device_get_shape(LOGO_SHAPE_MAX_SLOT, &w, &h));
+    TEST_ASSERT_EQUAL_UINT8(8, w);
+    TEST_ASSERT_EQUAL_UINT8(8, h);
 }
 
 void test_putsh_requires_list(void)
@@ -1769,10 +1783,11 @@ void test_getsh_rejects_negative(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
-void test_getsh_rejects_above_15(void)
+void test_getsh_rejects_above_the_last_slot(void)
 {
-    Result r = run_string("getsh 16");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "getsh %d", LOGO_SHAPE_MAX_SLOT + 1);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string(cmd).status);
 }
 
 void test_getsh_requires_input(void)
@@ -2300,7 +2315,9 @@ void test_snapsh_validates_inputs(void)
     // Slot out of range
     Result r = run_string("snapsh 0 16 16");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
-    r = run_string("snapsh 16 16 16");
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "snapsh %d 16 16", LOGO_SHAPE_MAX_SLOT + 1);
+    r = run_string(cmd);
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 
     // Dimensions out of range
@@ -2801,14 +2818,14 @@ int main(void)
     RUN_TEST(test_setsh_shape_0);
     RUN_TEST(test_setsh_shape_15);
     RUN_TEST(test_setsh_rejects_negative);
-    RUN_TEST(test_setsh_rejects_above_15);
+    RUN_TEST(test_setsh_rejects_above_the_last_slot);
     RUN_TEST(test_setsh_requires_input);
     RUN_TEST(test_putsh_sets_shape_data);
     RUN_TEST(test_putsh_shape_15);
     RUN_TEST(test_putsh_accepts_a_rectangle);
     RUN_TEST(test_putsh_rejects_shape_0);
     RUN_TEST(test_putsh_rejects_negative_shape);
-    RUN_TEST(test_putsh_rejects_shape_above_15);
+    RUN_TEST(test_putsh_rejects_shape_above_the_last_slot);
     RUN_TEST(test_putsh_requires_list);
     RUN_TEST(test_putsh_rejects_ragged_rows);
     RUN_TEST(test_putsh_rejects_odd_length_row);
@@ -2823,7 +2840,7 @@ int main(void)
     RUN_TEST(test_getsh_empty_slot_outputs_empty_list);
     RUN_TEST(test_getsh_rejects_shape_0);
     RUN_TEST(test_getsh_rejects_negative);
-    RUN_TEST(test_getsh_rejects_above_15);
+    RUN_TEST(test_getsh_rejects_above_the_last_slot);
     RUN_TEST(test_getsh_requires_input);
     RUN_TEST(test_putsh_getsh_roundtrip);
     RUN_TEST(test_getsh_matches_the_reference_example);

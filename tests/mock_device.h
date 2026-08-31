@@ -285,10 +285,14 @@ extern "C"
             uint8_t canvas[MOCK_SCREEN_WIDTH_PX * MOCK_SCREEN_HEIGHT_PX];
         } sensing;
 
-        // Costume capture tracking (snapsh)
+        // Costume tracking: captures (snapsh) and hand-written shapes (putsh)
         struct
         {
             int snap_count;
+            int put_count;
+            uint8_t last_put_slot;
+            uint8_t last_put_w;
+            uint8_t last_put_h;
             uint8_t last_snap_slot;
             uint8_t last_snap_w;
             uint8_t last_snap_h;
@@ -367,7 +371,7 @@ extern "C"
         // the board uses, not here -- read them with mock_device_get_shape.
         struct
         {
-            uint8_t current_shape;           // Current shape number (0-15)
+            uint8_t current_shape;           // Current shape number (0-23)
         } shape;
 
         // WiFi state tracking
@@ -518,7 +522,7 @@ extern "C"
     // Configure the result snap_costume returns (default true)
     void mock_device_set_snap_result(bool result);
 
-    // Read a shape (1-15) back out of the costume pool: w*h palette
+    // Read a shape (1-23) back out of the costume pool: w*h palette
     // indices, row-major, 255 transparent and 254 the wearer's pen
     // colour. NULL when no shape has been put in the slot.
     const uint8_t *mock_device_get_shape(uint8_t shape_num, uint8_t *w, uint8_t *h);

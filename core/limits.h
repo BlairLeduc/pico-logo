@@ -447,6 +447,16 @@ extern "C" {
 #define LOGO_SHAPE_MAX_DIM 32
 #define LOGO_SHAPE_MAX_PIXELS (LOGO_SHAPE_MAX_DIM * LOGO_SHAPE_MAX_DIM)
 
+// The highest shape slot. Slot 0 is the line-drawn turtle and cannot be
+// written, so 1..LOGO_SHAPE_MAX_SLOT are the ones a program fills.
+//
+// The count costs a slot table entry each (6 bytes) and nothing else --
+// pixels come from the costume pool, which is sized separately. 23 is
+// what a faithful arcade inventory needs: Berzerk's is 21 (nine of the
+// man, eight of the robot with both walk cycles, four of the explosion),
+// and the pool holds that in 3,008 of its 8,192 bytes.
+#define LOGO_SHAPE_MAX_SLOT 23
+
 // The two shape pixel values that are not literal colours.
 //
 // 255 is the graphics background colour number, so a shape pixel of 255
