@@ -46,7 +46,7 @@
 ; and two of the four the section names
 ; are not pairs at all. The count still
 ; comes to five, because the pairs are
-; different ones -- see `cache.shoot`,
+; different ones -- see `shapes.shoot`,
 ; which is where the arithmetic is
 ; redone.
 ;
@@ -278,7 +278,7 @@
 ; the robot as much as for the man --
 ; and the whole inventory then fits in
 ; fifteen with two to spare. The table
-; is beside `cache.man`.
+; is beside `shapes.man`.
 ;
 ; THE CONTACT BOX IS THE SPRITE, grown
 ; one step on every side, where design
@@ -768,7 +768,7 @@ end
 ;
 ; M2 BUILT FOUR OF THE FIFTEEN and M3
 ; builds four more (10-13, beside
-; `cache.robots`). The five shooting
+; `shapes.robots`). The five shooting
 ; poses arrive with the trigger in M4,
 ; because building them now would cost
 ; 5 x 18 ms of startup (section 18's
@@ -777,83 +777,124 @@ end
 ; What M2 owed section 7.4 was the
 ; arithmetic, and the table above is it.
 
-; SIXTEEN DECIMAL BYTES DO NOT FIT IN
-; FORTY COLUMNS, and the four lines
-; below are the only ones in this file
-; that do not: they are a transcription
-; and splitting them would put the ROM's
-; rows out of line with each other.
+; THE SPRITES ARE THE ROM'S BITMAPS,
+; WRITTEN STRAIGHT IN. Two hex digits a
+; pixel, `fe` the wearing turtle's pen
+; colour and `ff` transparent -- which
+; is byte for byte what the pen-and-
+; `snapsh` path stored, because this
+; game draws in colour 254 and 254 IS
+; the shape pool's PEN value. The
+; costumes do not change; only the way
+; they are built does.
 ;
-; $10BF, standing.
-make "mb1 (list 24 24 0 60 90 90 90 24 24 24 24 24 24 24 28 16)
-; $10AD, $109B, $1089: the walk, whose
-; cycle is A B C B ($104B).
-make "mb2 (list 24 24 0 60 92 92 90 24 24 24 24 24 24 24 28 16)
-make "mb3 (list 0 24 24 0 60 92 92 62 24 24 20 18 242 130 2 3)
-make "mb4 (list 24 24 0 60 90 153 88 24 24 36 34 65 65 129 129 0)
-
-make "man.bits (list :mb1 :mb2 :mb3 :mb4)
+; WHAT IT RETIRES is `render.sprite`,
+; `bit.mask` and the capture-offset
+; arithmetic at both sizes: ~400
+; statements and section 18's measured
+; ~18 ms a sprite at startup, against a
+; list the loader parses once.
+;
+; THE COMMENT THAT STOOD HERE SAID
+; `putsh` COULD NOT DRAW AN 8-WIDE MAN,
+; because it doubled every pixel
+; horizontally and would take the
+; playfield off section 5's 1:1. That
+; was the old monochrome `putsh`. The
+; one the colour-shape model brought
+; takes two hex digits a pixel and is
+; 1:1, so the objection is gone.
+;
+; ONE SHAPE, ANY COLOUR: `fe` defers to
+; the stamping turtle's pen, so the
+; cabinet's per-room robot colours cost
+; no slot when M5 wants them.
+;
+; THREE PROCEDURES AND NOT ONE. `load`
+; accumulates a `to ... end` into a
+; 4 KB buffer before defining it
+; (B69's family, found on main the same
+; week), and the man's nine shapes are
+; 2.9 KB of text on their own.
 make "man.cyc  (list 2 3 4 3)
 
-make "bit.mask (list 128 64 32 16 8 4 2 1)
-
-; Render an 8-wide bitmap with its top
-; left corner at (:x, :y), one row at a
-; time, the turtle walking east with the
-; pen following the bits. One `fd` a
-; pixel and no `dot`, because `dot`
-; takes a list and a list is a cons
-; (design section 18) -- and this runs
-; at startup, where ~400 statements a
-; sprite is 10 ms nobody sees, not in a
-; frame.
-to render.sprite :bits :x :y
-  local "s.r local "s.b local "s.k
-  repeat count :bits [
-    make "s.r repcount
-    make "s.b item :s.r :bits
-    pu  setx :x  sety :y - :s.r + 1  seth 90
-    repeat 8 [
-      make "s.k item repcount :bit.mask
-      ifelse 0 = bitand :s.b :s.k [pu] [pd]
-      fd 1
-    ]
+to shapes.man
+  ; $10BF, standing
+  putsh 1 [
+    fffffffefeffffff
+    fffffffefeffffff
+    ffffffffffffffff
+    fffffefefefeffff
+    fffefffefefffeff
+    fffefffefefffeff
+    fffefffefefffeff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefefeffff
+    fffffffeffffffff
   ]
-  pu
-end
-
-; `snapsh` AND NOT `putsh`. `putsh`
-; takes a 16-byte spec and DOUBLES every
-; pixel
-; horizontally on the way in, so the
-; cabinet's 8-wide man would render 16
-; wide -- twice his width in a 48-wide
-; cell, which changes what fits through
-; a doorway and takes the playfield off
-; section 5's 1:1. `snapsh` captures at
-; the size it is given.
-;
-; THE CAPTURE AND THE STAMP MUST USE THE
-; SAME OFFSET, and it is not the origin.
-; A costume is centred on the turtle at
-; both ends, while the man's stored
-; position is his sprite's TOP-LEFT
-; corner -- the arcade's, and what every
-; box in this file is cut against. An
-; 8 x 16 sprite drawn from (x, y)
-; downward has its centre at (x + 3.5,
-; y - 7.5).
-to cache.man
-  local "c.i
-  setpc :wall.pc
-  repeat 4 [
-    make "c.i repcount
-    clean
-    render.sprite (item :c.i :man.bits) 0 0
-    pu  setx 3.5  sety -7.5  seth 0
-    snapsh :c.i 8 16
+  ; $10AD, walk A
+  putsh 2 [
+    fffffffefeffffff
+    fffffffefeffffff
+    ffffffffffffffff
+    fffffefefefeffff
+    fffefffefefeffff
+    fffefffefefeffff
+    fffefffefefffeff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefefeffff
+    fffffffeffffffff
   ]
-  clean
+  ; $109B, walk B
+  putsh 3 [
+    ffffffffffffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    ffffffffffffffff
+    fffffefefefeffff
+    fffefffefefeffff
+    fffefffefefeffff
+    fffffefefefefeff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefffeffff
+    fffffffefffffeff
+    fefefefefffffeff
+    fefffffffffffeff
+    fffffffffffffeff
+    fffffffffffffefe
+  ]
+  ; $1089, walk C
+  putsh 4 [
+    fffffffefeffffff
+    fffffffefeffffff
+    ffffffffffffffff
+    fffffefefefeffff
+    fffefffefefffeff
+    fefffffefefffffe
+    fffefffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffefffffeffff
+    fffffefffffffeff
+    fffefffffffffffe
+    fffefffffffffffe
+    fefffffffffffffe
+    fefffffffffffffe
+    ffffffffffffffff
+  ]
 end
 
 ;=====================================
@@ -896,7 +937,7 @@ end
 ; and reads as the same gesture at 1:1.
 ; Down-right and up have no partner and
 ; wear their own slot. Five slots, eight
-; poses, and the table in `cache.man`
+; poses, and the table in `shapes.man`
 ; stands -- for a different reason than
 ; the one written under it.
 ;
@@ -910,30 +951,104 @@ end
 ; at the BOTTOM and his head stays where
 ; the walk cycle puts it.
 ;
-; $1309, $131A, $132B, $133C, $1380.
-make "sb1 (list 24 25 4 28 24 24 24 24 24 24 24 24 24 24 28 0)
-make "sb2 (list 24 24 0 31 24 24 24 24 24 24 24 24 24 24 28 0)
-make "sb3 (list 24 24 0 24 24 28 26 24 24 24 24 24 24 24 28 0)
-make "sb4 (list 24 24 0 60 60 58 58 58 24 24 24 24 24 24 28 0)
-make "sb5 (list 24 24 0 29 27 25 24 24 24 24 24 24 24 24 56 0)
-
-make "shoot.bits (list :sb1 :sb2 :sb3 :sb4 :sb5)
-
 ; Slots 5 to 9, which is section 18's
-; allocation spent. Thirteen of fifteen
-; are now built and the two spare are
-; M5's and M7's.
-to cache.shoot
-  local "c.i
-  setpc :wall.pc
-  repeat 5 [
-    make "c.i repcount
-    clean
-    render.sprite (item :c.i :shoot.bits) 0 0
-    pu  setx 3.5  sety -7.5  seth 0
-    snapsh (:c.i + 4) 8 16
+; allocation spent.
+to shapes.shoot
+  ; $1309, up-right
+  putsh 5 [
+    fffffffefeffffff
+    fffffffefefffffe
+    fffffffffffeffff
+    fffffffefefeffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefefeffff
+    ffffffffffffffff
   ]
-  clean
+  ; $131A, right
+  putsh 6 [
+    fffffffefeffffff
+    fffffffefeffffff
+    ffffffffffffffff
+    fffffffefefefefe
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefefeffff
+    ffffffffffffffff
+  ]
+  ; $132B, down-right
+  putsh 7 [
+    fffffffefeffffff
+    fffffffefeffffff
+    ffffffffffffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefefeffff
+    fffffffefefffeff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefefeffff
+    ffffffffffffffff
+  ]
+  ; $133C, down
+  putsh 8 [
+    fffffffefeffffff
+    fffffffefeffffff
+    ffffffffffffffff
+    fffffefefefeffff
+    fffffefefefeffff
+    fffffefefefffeff
+    fffffefefefffeff
+    fffffefefefffeff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefefeffff
+    ffffffffffffffff
+  ]
+  ; $1380, up
+  putsh 9 [
+    fffffffefeffffff
+    fffffffefeffffff
+    ffffffffffffffff
+    fffffffefefefffe
+    fffffffefefffefe
+    fffffffefefffffe
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffefefeffffff
+    ffffffffffffffff
+  ]
 end
 
 ;=====================================
@@ -1033,30 +1148,70 @@ make "s.dy (list 0 -6 -6 -6 -6 -6 -6 -6 -1)
 ; and the polish. The facing already
 ; moves the eyes, which is the half of
 ; the animation that carries meaning.
-make "rb1 (list 60 102 255 189 189 189 60 36 36 36 102 0)
-make "rb2 (list 60 126 255 189 189 189 60 36 36 36 102 0)
-make "rb3 (list 60 102 255 189 189 189 60 36 36 38 32 96)
-make "rb4 (list 60 120 255 189 189 189 60 36 36 36 54 0)
-
-make "rob.bits (list :rb1 :rb2 :rb3 :rb4)
-
-; The same capture offset arithmetic as
-; the man's and a different number: an
-; 8 x 12 sprite drawn from (x, y)
-; downward has its centre at (x + 3.5,
-; y - 5.5), where his 8 x 16 has it at
-; (x + 3.5, y - 7.5).
-to cache.robots
-  local "c.i
-  setpc :wall.pc
-  repeat 4 [
-    make "c.i repcount
-    clean
-    render.sprite (item :c.i :rob.bits) 0 0
-    pu  setx 3.5  sety -5.5  seth 0
-    snapsh (:c.i + 9) 8 12
+; Slots 10 to 13: standing, up, down and
+; right. `setrot "flip` walks the robot
+; west in the one it already has.
+to shapes.robots
+  ; $10D1, standing
+  putsh 10 [
+    fffffefefefeffff
+    fffefefffffefeff
+    fefefefefefefefe
+    fefffefefefefffe
+    fefffefefefefffe
+    fefffefefefefffe
+    fffffefefefeffff
+    fffffefffffeffff
+    fffffefffffeffff
+    fffffefffffeffff
+    fffefefffffefeff
+    ffffffffffffffff
   ]
-  clean
+  ; $116F, up
+  putsh 11 [
+    fffffefefefeffff
+    fffefefefefefeff
+    fefefefefefefefe
+    fefffefefefefffe
+    fefffefefefefffe
+    fefffefefefefffe
+    fffffefefefeffff
+    fffffefffffeffff
+    fffffefffffeffff
+    fffffefffffeffff
+    fffefefffffefeff
+    ffffffffffffffff
+  ]
+  ; $1139, down
+  putsh 12 [
+    fffffefefefeffff
+    fffefefffffefeff
+    fefefefefefefefe
+    fefffefefefefffe
+    fefffefefefefffe
+    fefffefefefefffe
+    fffffefefefeffff
+    fffffefffffeffff
+    fffffefffffeffff
+    fffffefffffefeff
+    fffffeffffffffff
+    fffefeffffffffff
+  ]
+  ; $112C, right
+  putsh 13 [
+    fffffefefefeffff
+    fffefefefeffffff
+    fefefefefefefefe
+    fefffefefefefffe
+    fefffefefefefffe
+    fefffefefefefffe
+    fffffefefefeffff
+    fffffefffffeffff
+    fffffefffffeffff
+    fffffefffffeffff
+    fffffefefffefeff
+    ffffffffffffffff
+  ]
 end
 
 ;=====================================
@@ -3767,9 +3922,9 @@ to init.game
   ct
   setrefresh "manual
   ht
-  cache.man
-  cache.robots
-  cache.shoot
+  shapes.man
+  shapes.robots
+  shapes.shoot
   setrot "flip
   make "leaving false
   make "paused false

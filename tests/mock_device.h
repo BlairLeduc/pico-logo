@@ -285,10 +285,14 @@ extern "C"
             uint8_t canvas[MOCK_SCREEN_WIDTH_PX * MOCK_SCREEN_HEIGHT_PX];
         } sensing;
 
-        // Costume capture tracking (snapsh)
+        // Costume tracking: captures (snapsh) and hand-written shapes (putsh)
         struct
         {
             int snap_count;
+            int put_count;
+            uint8_t last_put_slot;
+            uint8_t last_put_w;
+            uint8_t last_put_h;
             uint8_t last_snap_slot;
             uint8_t last_snap_w;
             uint8_t last_snap_h;

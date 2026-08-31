@@ -477,7 +477,15 @@ static bool mock_turtle_put_shape_data(uint8_t shape_num, uint8_t w, uint8_t h, 
     {
         return false;
     }
-    return costume_put(shape_num, w, h, data);
+    if (!costume_put(shape_num, w, h, data))
+    {
+        return false;
+    }
+    mock_state.costume.put_count++;
+    mock_state.costume.last_put_slot = shape_num;
+    mock_state.costume.last_put_w = w;
+    mock_state.costume.last_put_h = h;
+    return true;
 }
 
 static void mock_turtle_stamp(void)
