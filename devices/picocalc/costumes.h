@@ -7,7 +7,7 @@
 //  A costume is the one and only form a turtle shape takes: 8-bit
 //  palette indexed pixels, row-major, with LOGO_SHAPE_TRANSPARENT
 //  showing the background and LOGO_SHAPE_PEN the wearing turtle's pen
-//  colour. Sizes range from 8x8 to 32x32, any rectangle. Slots 1-15 hold
+//  colour. Sizes range from 8x8 to 32x32, any rectangle. Slots 1-23 hold
 //  one each, whether it was written by hand with putsh or captured off
 //  the canvas with snapsh -- there is no second store and no second
 //  format, so nothing shadows anything.
@@ -33,13 +33,13 @@ extern "C"
 {
 #endif
 
-#define COSTUME_SLOTS 16        // slots 1-15 usable; 0 is the vector turtle
+#define COSTUME_SLOTS (LOGO_SHAPE_MAX_SLOT + 1)  // slots 1-23 usable; 0 is the vector turtle
 #define COSTUME_POOL_SIZE 8192  // SRAM tier (design doc §10)
 
 // Reset the pool: all slots empty
 void costumes_clear(void);
 
-// Store a colour costume in a slot (1-15), replacing any previous one.
+// Store a colour costume in a slot (1-23), replacing any previous one.
 // Returns false if the slot or dimensions are out of range or the pool
 // cannot hold the pixels.
 bool costume_put(uint8_t slot, uint8_t w, uint8_t h, const uint8_t *pixels);

@@ -46,14 +46,14 @@ void test_put_get_roundtrip(void)
 void test_get_empty_slot_fails(void)
 {
     TEST_ASSERT_FALSE(costume_get(1, NULL, NULL, NULL));
-    TEST_ASSERT_FALSE(costume_get(15, NULL, NULL, NULL));
+    TEST_ASSERT_FALSE(costume_get(LOGO_SHAPE_MAX_SLOT, NULL, NULL, NULL));
 }
 
 void test_put_rejects_bad_slots(void)
 {
     uint8_t pixels[8 * 8] = {0};
     TEST_ASSERT_FALSE(costume_put(0, 8, 8, pixels));   // Slot 0 is the vector turtle
-    TEST_ASSERT_FALSE(costume_put(16, 8, 8, pixels));  // Out of range
+    TEST_ASSERT_FALSE(costume_put(COSTUME_SLOTS, 8, 8, pixels));  // Out of range
 }
 
 void test_put_rejects_bad_dimensions(void)
@@ -214,7 +214,7 @@ void test_clear_empties_all_slots(void)
     costumes_clear();
 
     TEST_ASSERT_FALSE(costume_get(1, NULL, NULL, NULL));
-    TEST_ASSERT_FALSE(costume_get(15, NULL, NULL, NULL));
+    TEST_ASSERT_FALSE(costume_get(LOGO_SHAPE_MAX_SLOT, NULL, NULL, NULL));
     TEST_ASSERT_EQUAL(COSTUME_POOL_SIZE, costume_pool_free());
 }
 

@@ -1290,8 +1290,8 @@ static Result prim_getsh(Evaluator *eval, int argc, Value *args)
     REQUIRE_ARGC(1);
     REQUIRE_NUMBER(args[0], shape_num);
 
-    // Shape must be 1-15 (shape 0 is the line-drawn turtle)
-    if (shape_num < 1 || shape_num > 15 || shape_num != (float)(int)shape_num)
+    // Shape must be 1-LOGO_SHAPE_MAX_SLOT (shape 0 is the line-drawn turtle)
+    if (shape_num < 1 || shape_num > LOGO_SHAPE_MAX_SLOT || shape_num != (float)(int)shape_num)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
@@ -1333,15 +1333,15 @@ static Result prim_getsh(Evaluator *eval, int argc, Value *args)
     return result_ok(value_list(list));
 }
 
-// putsh shapenumber shapespec - Define shapes 1-15 from rows of hex pixels
+// putsh shapenumber shapespec - Define shapes 1-23 from rows of hex pixels
 static Result prim_putsh(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
     REQUIRE_ARGC(2);
     REQUIRE_NUMBER(args[0], shape_num);
 
-    // Shape must be 1-15 (shape 0 cannot be changed)
-    if (shape_num < 1 || shape_num > 15 || shape_num != (float)(int)shape_num)
+    // Shape must be 1-LOGO_SHAPE_MAX_SLOT (shape 0 cannot be changed)
+    if (shape_num < 1 || shape_num > LOGO_SHAPE_MAX_SLOT || shape_num != (float)(int)shape_num)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
@@ -1412,14 +1412,14 @@ static Result prim_putsh(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
-// setsh shapenumber - Set the current turtle shape (0-15)
+// setsh shapenumber - Set the current turtle shape (0-23)
 static Result prim_setsh(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
     REQUIRE_ARGC(1);
     REQUIRE_NUMBER(args[0], shape_num);
 
-    if (shape_num < 0 || shape_num > 15)
+    if (shape_num < 0 || shape_num > LOGO_SHAPE_MAX_SLOT)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
@@ -1587,7 +1587,7 @@ static Result prim_snapsh(Evaluator *eval, int argc, Value *args)
     REQUIRE_NUMBER(args[1], width);
     REQUIRE_NUMBER(args[2], height);
 
-    if (shape_num < 1 || shape_num > 15 || shape_num != (float)(int)shape_num)
+    if (shape_num < 1 || shape_num > LOGO_SHAPE_MAX_SLOT || shape_num != (float)(int)shape_num)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }

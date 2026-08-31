@@ -1086,7 +1086,7 @@ getsh _shapenumber_
 
 `operation`
 
-Outputs the turtle shape _shapenumber_ (an integer between 1 and 15) as a list of words, one word for each row of the shape from the top row down. Note that shape number cannot be 0.
+Outputs the turtle shape _shapenumber_ (an integer between 1 and 23) as a list of words, one word for each row of the shape from the top row down. Note that shape number cannot be 0.
 
 Each word describes that row's pixels from left to right, **two hexadecimal digits for each pixel**, and each pair is a [colour number](#setpc-setpencolor) written in hexadecimal - `00` is colour 0, `0c` is colour 12, and `a0` is colour 160.
 
@@ -1161,7 +1161,7 @@ putsh _shapenumber_ _shapespec_
 
 `command`
 
-Gives _shapenumber_ the picture described by _shapespec_ as its shape. _shapenumber_ is in the range of 1 to 15. Shape 0 cannot be changed.
+Gives _shapenumber_ the picture described by _shapespec_ as its shape. _shapenumber_ is in the range of 1 to 23. Shape 0 cannot be changed.
 
 _shapespec_ is a list of words, one for each row of the shape from the top down, two hexadecimal digits for each pixel: `ff` is transparent, `fe` is the wearing turtle's pen colour, and every other pair is the [colour number](#setpc-setpencolor) it looks like. See [`getsh`](#getsh), whose output is exactly what `putsh` takes.
 
@@ -1243,7 +1243,7 @@ setsh _shapenumber_
 
 `command`
 
-Stands for `set sh`ape. Sets the shape of each turtle you are talking to. _shapenumber_ 0 is the line-drawn turtle; slots 1 to 15 hold shapes you define, written with [`putsh`](#putsh) or captured with [`snapsh`](#snapsh) - the same kind of shape either way. Shapes 1 through 15 are empty when Logo starts, and a turtle wearing an empty shape shows nothing.
+Stands for `set sh`ape. Sets the shape of each turtle you are talking to. _shapenumber_ 0 is the line-drawn turtle; slots 1 to 23 hold shapes you define, written with [`putsh`](#putsh) or captured with [`snapsh`](#snapsh) - the same kind of shape either way. Shapes 1 through 23 are empty when Logo starts, and a turtle wearing an empty shape shows nothing.
 
 Whatever the slot holds, the shape is centred on the turtle's position, and [`setrot`](#setrot) does not change that. Two turtles at the same position line up whichever rotation styles they wear.
 
@@ -1888,7 +1888,7 @@ setmag _magnification_
 
 `command`
 
-Stands for `set mag`nification. `setmag 2` draws the turtle you are talking to at double size; `setmag 1` returns it to normal. Magnification applies to the turtle's appearance on screen - the line-drawn turtle and the shapes in slots 1 to 15 alike - and to [`stamp`](#stamp). It does not change how far the turtle moves. The drawn turtle is limited to 32 by 32 pixels, so shapes larger than 16 by 16 always appear at normal size.
+Stands for `set mag`nification. `setmag 2` draws the turtle you are talking to at double size; `setmag 1` returns it to normal. Magnification applies to the turtle's appearance on screen - the line-drawn turtle and the shapes in slots 1 to 23 alike - and to [`stamp`](#stamp). It does not change how far the turtle moves. The drawn turtle is limited to 32 by 32 pixels, so shapes larger than 16 by 16 always appear at normal size.
 
 **Example**:
 
@@ -1909,7 +1909,7 @@ Stands for `set rot`ation style. Chooses how the turtle's shape follows its head
 - `"full` - the shape rotates smoothly to point along the heading.
 - `"flip` - the shape mirrors left or right depending on which way the turtle faces; most game characters are drawn side-on, and this makes them walk both directions with one picture.
 
-The rotation style applies to the shapes in slots 1 to 15; shape 0, the line-drawn turtle, always rotates. Shapes larger than about 22 pixels may lose their corners at diagonal headings with `"full`, since the drawn turtle is limited to 32 by 32 pixels.
+The rotation style applies to the shapes in slots 1 to 23; shape 0, the line-drawn turtle, always rotates. Shapes larger than about 22 pixels may lose their corners at diagonal headings with `"full`, since the drawn turtle is limited to 32 by 32 pixels.
 
 **Example**:
 
@@ -1926,7 +1926,7 @@ snapsh _shapenumber_ _width_ _height_
 
 `command`
 
-Stands for `snap sh`ape. `snapsh` captures the rectangle of the graphics screen centred on the turtle - _width_ by _height_ pixels, each from 8 to 32 - and stores it as the shape in slot _shapenumber_ (1 to 15). Background pixels become transparent, so the captured image keeps its outline when worn as a shape or placed with [`stamp`](#stamp). Draw a picture with the pen you already know, pick it up with `snapsh`, and wear it with [`setsh`](#setsh).
+Stands for `snap sh`ape. `snapsh` captures the rectangle of the graphics screen centred on the turtle - _width_ by _height_ pixels, each from 8 to 32 - and stores it as the shape in slot _shapenumber_ (1 to 23). Background pixels become transparent, so the captured image keeps its outline when worn as a shape or placed with [`stamp`](#stamp). Draw a picture with the pen you already know, pick it up with `snapsh`, and wear it with [`setsh`](#setsh).
 
 What `snapsh` captures is an ordinary shape: [`getsh`](#getsh) reads it back as rows of pixels, and [`putsh`](#putsh) can write one like it by hand. A shape slot holds one shape, so a capture replaces whatever the slot held. When you are talking to several turtles, `snapsh` captures around the lowest-numbered one. Shapes are stored in a fixed memory pool; if the pool is full, Logo says it is out of space.
 
@@ -2163,7 +2163,7 @@ setanim _first_ _last_ _interval_
 
 `command`
 
-`setanim` animates each turtle you are talking to by cycling its shape from _first_ through _last_ (shape numbers 0 to 15), advancing to the next frame every _interval_ milliseconds and looping back to _first_ after _last_. The frames flip on their own during a program and at the prompt, just like autonomous motion. An _interval_ of 0 stops the animation and leaves the current shape in place. Animation is paused by [`freeze`](#freeze) and cleared by [`clearscreen`](#clearscreen-cs).
+`setanim` animates each turtle you are talking to by cycling its shape from _first_ through _last_ (shape numbers 0 to 23), advancing to the next frame every _interval_ milliseconds and looping back to _first_ after _last_. The frames flip on their own during a program and at the prompt, just like autonomous motion. An _interval_ of 0 stops the animation and leaves the current shape in place. Animation is paused by [`freeze`](#freeze) and cleared by [`clearscreen`](#clearscreen-cs).
 
 **Example**:
 
