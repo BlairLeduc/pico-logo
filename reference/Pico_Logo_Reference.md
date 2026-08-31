@@ -1086,13 +1086,24 @@ getsh _shapenumber_
 
 `operation`
 
-Outputs a list of 16 numbers representing the turtle shape _shapenumber_ (an integer between 1 and 15). Note that shape number cannot be 0. Each shape consists of 8 columns by 16 rows. Each element in the list is the sum of the bit values for a row in the shape.
+Outputs the turtle shape _shapenumber_ (an integer between 1 and 15) as a list of words, one word for each row of the shape from the top row down. Note that shape number cannot be 0.
 
-The first element of the list is the first row of the shape. If the whole row is filled in, the number is 255. If the row is empty, the number is 0. If only the right-most position is filled, the number is 1. If only the fifth position is filled, the number is 16.
+Each word describes that row's pixels from left to right, **two hexadecimal digits for each pixel**, and each pair is a [colour number](#setpc-setpencolor) written in hexadecimal - `00` is colour 0, `0c` is colour 12, and `a0` is colour 160.
+
+Two of the 256 colour numbers do not name a fixed colour, and they are the two a shape needs most:
+
+| Digits | Colour number | Meaning |
+|---|---|---|
+| `ff` | 255 | The background: the pixel is transparent, and whatever is behind the turtle shows through. |
+| `fe` | 254 | The pen: the pixel is drawn in the wearing turtle's own pen colour. One shape can be worn by several turtles in several colours, and [`setpc`](#setpc-setpencolor) tints each of them. |
+
+Every row is the same length. A shape is 8 to 32 pixels wide and 8 to 32 rows tall. A shape slot you have not put a shape in outputs the empty list.
+
+A shape is one thing however it was made, so `getsh` reads back a picture captured with [`snapsh`](#snapsh) exactly as it reads back one written with [`putsh`](#putsh).
 
 ```logo
->getsh 3
-24 60 126 90 90 90 126 231 189 189 165 36 36 36 102 0
+>show getsh 3
+[fffffffefeffffff fffffefefefeffff fffefefefefefeff fefefefefefefefe fefefefefefefefe fffefefefefefeff fffffefefefeffff fffffffefeffffff]
 ```
 
 
@@ -1150,14 +1161,26 @@ putsh _shapenumber_ _shapespec_
 
 `command`
 
-Gives _shapenumber_ the specified _shapespec_ as its shape. The output of [`getsh`](#getsh) can be the input of `putsh`. _shapenumber_ is in the range of 1 to 15. Shape 0 cannot be changed. `putsh` defines the slot's bitmap shape, and removes any full-colour picture captured into the slot with [`snapsh`](#snapsh).
+Gives _shapenumber_ the picture described by _shapespec_ as its shape. _shapenumber_ is in the range of 1 to 15. Shape 0 cannot be changed.
+
+_shapespec_ is a list of words, one for each row of the shape from the top down, two hexadecimal digits for each pixel: `ff` is transparent, `fe` is the wearing turtle's pen colour, and every other pair is the [colour number](#setpc-setpencolor) it looks like. See [`getsh`](#getsh), whose output is exactly what `putsh` takes.
+
+Every row must be the same length. A shape is 8 to 32 pixels wide and 8 to 32 rows tall; Logo does not like a _shapespec_ outside that, one whose rows are not all the same length, or one with a character that is not a hexadecimal digit.
+
+A shape slot holds one shape, so `putsh` replaces whatever the slot held, including a picture captured there with [`snapsh`](#snapsh). Shapes are stored in a fixed memory pool; if the pool is full, Logo says it is out of space.
 
 ```logo
->putsh 1 [8 28 28 8 93 127 62 127 127 127 127 127 62 62 93 65]
->setsh 1
+; A diamond in the pen colour, 8 pixels by 8
+>putsh 1 [fffffffefeffffff
+          fffffefefefeffff
+          fffefefefefefeff
+          fefefefefefefefe
+          fefefefefefefefe
+          fffefefefefefeff
+          fffffefefefeffff
+          fffffffefeffffff]
+>setsh 1 setpc 4
 ```
-
-See [`getsh`](#getsh) to learn about _shapespec_.
 
 
 ## right (rt)
@@ -1220,7 +1243,7 @@ setsh _shapenumber_
 
 `command`
 
-Stands for `set sh`ape. Sets the shape of each turtle you are talking to. _shapenumber_ 0 is the line-drawn turtle; slots 1 to 15 hold shapes you define - either a bitmap from [`putsh`](#putsh) or a full-colour picture captured with [`snapsh`](#snapsh); `setsh` wears whichever the slot holds. Shapes 1 through 15 are blank when Logo starts.
+Stands for `set sh`ape. Sets the shape of each turtle you are talking to. _shapenumber_ 0 is the line-drawn turtle; slots 1 to 15 hold shapes you define, written with [`putsh`](#putsh) or captured with [`snapsh`](#snapsh) - the same kind of shape either way. Shapes 1 through 15 are empty when Logo starts, and a turtle wearing an empty shape shows nothing.
 
 Whatever the slot holds, the shape is centred on the turtle's position, and [`setrot`](#setrot) does not change that. Two turtles at the same position line up whichever rotation styles they wear.
 
@@ -1865,7 +1888,7 @@ setmag _magnification_
 
 `command`
 
-Stands for `set mag`nification. `setmag 2` draws the turtle you are talking to at double size; `setmag 1` returns it to normal. Magnification applies to the turtle's appearance on screen - the line-drawn turtle, bitmap shapes, and captured colour shapes alike - and to [`stamp`](#stamp). It does not change how far the turtle moves. The drawn turtle is limited to 32 by 32 pixels, so shapes larger than 16 by 16 always appear at normal size.
+Stands for `set mag`nification. `setmag 2` draws the turtle you are talking to at double size; `setmag 1` returns it to normal. Magnification applies to the turtle's appearance on screen - the line-drawn turtle and the shapes in slots 1 to 15 alike - and to [`stamp`](#stamp). It does not change how far the turtle moves. The drawn turtle is limited to 32 by 32 pixels, so shapes larger than 16 by 16 always appear at normal size.
 
 **Example**:
 
@@ -1886,7 +1909,7 @@ Stands for `set rot`ation style. Chooses how the turtle's shape follows its head
 - `"full` - the shape rotates smoothly to point along the heading.
 - `"flip` - the shape mirrors left or right depending on which way the turtle faces; most game characters are drawn side-on, and this makes them walk both directions with one picture.
 
-The rotation style applies to bitmap and captured colour shapes; shape 0, the line-drawn turtle, always rotates. Shapes larger than about 22 pixels may lose their corners at diagonal headings with `"full`, since the drawn turtle is limited to 32 by 32 pixels.
+The rotation style applies to the shapes in slots 1 to 15; shape 0, the line-drawn turtle, always rotates. Shapes larger than about 22 pixels may lose their corners at diagonal headings with `"full`, since the drawn turtle is limited to 32 by 32 pixels.
 
 **Example**:
 
@@ -1903,9 +1926,9 @@ snapsh _shapenumber_ _width_ _height_
 
 `command`
 
-Stands for `snap sh`ape. `snapsh` captures the rectangle of the graphics screen centred on the turtle - _width_ by _height_ pixels, each from 8 to 32 - and stores it as a full-colour shape in slot _shapenumber_ (1 to 15). Background pixels become transparent, so the captured image keeps its outline when worn as a shape or placed with [`stamp`](#stamp). Draw a picture with the pen you already know, pick it up with `snapsh`, and wear it with [`setsh`](#setsh).
+Stands for `snap sh`ape. `snapsh` captures the rectangle of the graphics screen centred on the turtle - _width_ by _height_ pixels, each from 8 to 32 - and stores it as the shape in slot _shapenumber_ (1 to 15). Background pixels become transparent, so the captured image keeps its outline when worn as a shape or placed with [`stamp`](#stamp). Draw a picture with the pen you already know, pick it up with `snapsh`, and wear it with [`setsh`](#setsh).
 
-A full-colour shape replaces the slot's [`putsh`](#putsh) bitmap on screen until you define a new bitmap with `putsh`, which removes the captured image. When you are talking to several turtles, `snapsh` captures around the lowest-numbered one. Colour shapes are stored in a fixed memory pool; if the pool is full, Logo says it is out of space.
+What `snapsh` captures is an ordinary shape: [`getsh`](#getsh) reads it back as rows of pixels, and [`putsh`](#putsh) can write one like it by hand. A shape slot holds one shape, so a capture replaces whatever the slot held. When you are talking to several turtles, `snapsh` captures around the lowest-numbered one. Shapes are stored in a fixed memory pool; if the pool is full, Logo says it is out of space.
 
 **Example**:
 
@@ -8869,7 +8892,9 @@ Colour numbers 176 through 247 are unallocated and can be used for your own purp
 
 Colour numbers 248 through 253 hold the primary and secondary colours. Changing this range of colour numbers should be avoided.
 
-Colour number 254 is used as the default pen colour. Colour number 255 contains the current background colour used on the graphics screen and is set using [`setbg`](#setbg-setbackground). 
+Colour number 254 is used as the default pen colour. Colour number 255 contains the current background colour used on the graphics screen and is set using [`setbg`](#setbg-setbackground).
+
+These last two colour numbers mean something extra inside a turtle shape, where 255 is a transparent pixel and 254 is one drawn in the wearing turtle's own pen colour. See [`getsh`](#getsh). 
 
 
 ![Colour Palette for Pico Logo](./Colours.svg)

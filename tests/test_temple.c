@@ -20,6 +20,7 @@
 //     run long enough to prove `tidy.up` really gives its list cells back.
 //
 
+#include "core/limits.h"
 #include "test_mock_fs.h"
 #include "mock_device.h"
 #include "core/repl.h"
@@ -39,7 +40,7 @@ static void load_file(const char *path)
     TEST_ASSERT_NOT_NULL_MESSAGE(f, path);
 
     char line[512];
-    char proc[8192];
+    char proc[LOGO_LOAD_PROC_BUFFER_SIZE];  // what `load` gives a definition
     size_t proc_len = 0;
     bool in_def = false;
 

@@ -99,6 +99,7 @@ make "split.boost 1.25     ; a child drifts this much faster than its parent
 make "rock.colour  254     ; white, as the arcade rocks are
 make "ship.colour  254
 make "hud.colour   254
+make "shot.colour  254
 
 ; The ship.  Rotation is degrees a FRAME, thrust is an impulse added to the
 ; velocity, and there is no drag -- the arcade's is very slight and leaving it
@@ -1457,15 +1458,22 @@ to clear.rocks
 end
 
 ; The default turtle shape is the line-drawn arrow and would read as a second
-; spaceship, so slot 1 gets a 2-by-2 dot -- ONE bit, on two middle rows.  One
-; bit is not one pixel: a `putsh` shape is 8 columns by 16 rows painted into a
-; 16-by-16 raster, so every bit is DOUBLED horizontally and the smallest mark
-; the primitive can make is 2 wide by 1 tall.  A square dot therefore costs a
-; second ROW and no second column, which is why the two bytes are equal.  A true
-; single pixel would have to come from `snapsh`, which costs a colour-costume
-; slot and a canvas round trip to set up, and a shot is a tracer.  Bit 8 is
-; column 4 of 8, so the block's top-left corner is the turtle's own pixel and it
-; sits where the collision code says the shot is.
+; spaceship, so slot 1 gets a 2-by-2 dot.  A shape is a rectangle of pixels --
+; `ff` transparent, `fe` the wearing turtle's pen colour -- so the dot is the
+; four pixels it looks like, written where they go.  It is 16 by 16 because
+; that is the size this shape was when a row was eight doubled bits, and the
+; block's top-left pixel is the turtle's own, so it sits where the collision
+; code says the shot is.
+;
+; The dot is drawn in `fe`, so its colour is the SHOT TURTLE'S pen and not
+; something baked into the shape, and `shot.colour` is therefore set here
+; alongside the shape.  This game is black and white and every shot is white,
+; but the four turtles had been taking that from the device's default pen
+; rather than from a name -- the same 254 the rocks, the ship and the HUD each
+; say out loud.  254 is the only white the palette guarantees (3 is the text
+; foreground, which the user is invited to recolour), and a shape pixel of 254
+; means "the pen", so naming the pen is how a shape is made a fixed colour.
+; `clear.shots` runs after every `cs`, which is what makes here the right place.
 ; Turtle numbers are fixed by the design's object table (section 5) and are
 ; spelled out because `ask` wants a list.
 ;
@@ -1480,8 +1488,25 @@ to clear.shots
   make "s3x 9999
   make "sau.shot.in 0
   make "sau.shot.x 9999
-  putsh 1 [0 0 0 0 0 0 0 0 8 8 0 0 0 0 0 0]
-  ask [1 2 3 4] [ht setspeed 0 setsh 1]
+  putsh 1 [
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    fffffffffffffffffefeffffffffffff
+    fffffffffffffffffefeffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+  ]
+  ask [1 2 3 4] [ht setspeed 0 setsh 1 setpc :shot.colour]
 end
 
 to reset.ship

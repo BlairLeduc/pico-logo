@@ -153,19 +153,24 @@ extern "C"
 
         // Shape management (shapes 0-15)
         // Shape 0 is the default line-drawn turtle that rotates with heading
-        // Shapes 1-15 are 8x16 bitmaps that do not rotate
+        // Shapes 1-15 are rectangles of palette indices, 8 to 32 pixels on
+        // a side, however they were made: written by hand with putsh or
+        // captured off the canvas with snapsh, they are the same thing in
+        // the same store, and a slot holds at most one of them.
         void (*set_shape)(uint8_t shape_num);
         uint8_t (*get_shape)(void);
 
-        // Get shape data for shapes 1-15 (8 columns x 16 rows as 16 uint8_t values)
-        // Each byte represents one row, MSB = leftmost column
-        // Returns false if shape_num is 0 or > 15
-        bool (*get_shape_data)(uint8_t shape_num, uint8_t *data);
+        // Fetch a shape (1-15): its pixels, row-major, one palette index
+        // each, with LOGO_SHAPE_TRANSPARENT showing the background and
+        // LOGO_SHAPE_PEN the wearing turtle's pen colour. Returns NULL
+        // when the slot is empty (no shape has been defined for it); the
+        // pointer stays valid until the next shape change.
+        const uint8_t *(*get_shape_data)(uint8_t shape_num, uint8_t *w, uint8_t *h);
 
-        // Put shape data for shapes 1-15 (8 columns x 16 rows as 16 uint8_t values)
-        // Each byte represents one row, MSB = leftmost column
-        // Returns false if shape_num is 0 or > 15
-        bool (*put_shape_data)(uint8_t shape_num, const uint8_t *data);
+        // Define a shape (1-15) from w x h pixels in that same layout,
+        // replacing whatever the slot held. Returns false if the slot or
+        // the dimensions are out of range, or there is no room for it.
+        bool (*put_shape_data)(uint8_t shape_num, uint8_t w, uint8_t h, const uint8_t *data);
 
         // Rotation style for the turtle's costume (setrot). Optional.
         void (*set_rotation_style)(LogoRotationStyle style);

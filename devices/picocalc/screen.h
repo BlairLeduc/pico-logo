@@ -139,17 +139,20 @@ bool screen_gfx_get_refresh_auto(void);
 // mask memory belongs to the caller and must stay valid while the sprite
 // is visible (w*h bytes, row-major). Two kinds: mono (indexed false;
 // nonzero bytes painted in the sprite's colour) and indexed colour
-// (indexed true; bytes are palette slots, 255 = transparent).
+// (indexed true; bytes are palette slots, 255 = transparent and 254 =
+// the sprite's own colour, which is how one shape is worn by several
+// turtles in several colours).
 //
 #define SCREEN_MAX_SPRITES 8
 #define SCREEN_SPRITE_TRANSPARENT 255
+#define SCREEN_SPRITE_PEN 254
 
 typedef struct {
     bool visible;
-    bool indexed;          // Mask bytes are palette slots (255 transparent)
+    bool indexed;          // Mask bytes are palette slots (255 transparent, 254 pen)
     int16_t x, y;          // Top-left corner in screen coordinates
     uint8_t w, h;          // Mask dimensions in pixels
-    uint8_t colour;        // Palette slot painted where a mono mask is set
+    uint8_t colour;        // Palette slot for a mono mask, and for 254 in an indexed one
     const uint8_t *mask;
 } ScreenSprite;
 

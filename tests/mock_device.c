@@ -6,6 +6,7 @@
 //
 
 #include "mock_device.h"
+#include "costumes.h"
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
@@ -460,22 +461,23 @@ static uint8_t mock_turtle_get_shape(void)
     return mock_state.shape.current_shape;
 }
 
-static bool mock_turtle_get_shape_data(uint8_t shape_num, uint8_t *data)
+static const uint8_t *mock_turtle_get_shape_data(uint8_t shape_num, uint8_t *w, uint8_t *h)
 {
-    if (shape_num == 0 || shape_num > 15 || data == NULL)
-        return false;
-    
-    memcpy(data, mock_state.shape.shapes[shape_num - 1], 16);
-    return true;
+    const uint8_t *pixels;
+    if (shape_num == 0 || shape_num > 15 || !costume_get(shape_num, w, h, &pixels))
+    {
+        return NULL;
+    }
+    return pixels;
 }
 
-static bool mock_turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
+static bool mock_turtle_put_shape_data(uint8_t shape_num, uint8_t w, uint8_t h, const uint8_t *data)
 {
-    if (shape_num == 0 || shape_num > 15 || data == NULL)
+    if (shape_num == 0 || shape_num > 15)
+    {
         return false;
-    
-    memcpy(mock_state.shape.shapes[shape_num - 1], data, 16);
-    return true;
+    }
+    return costume_put(shape_num, w, h, data);
 }
 
 static void mock_turtle_stamp(void)
@@ -521,6 +523,13 @@ static void mock_turtle_set_scale(uint8_t mag)
     record_command_float(MOCK_CMD_SET_MAG, (float)mag);
 }
 
+// snapsh: capture the canvas region centred on the turtle into the same
+// pool putsh writes, so a captured shape reads back through getsh like
+// any other. The staged canvas is in screen-pixel space and unpainted
+// canvas is 0, which stands in for the board's background and captures
+// as transparent.
+static uint8_t mock_turtle_canvas_point(int x, int y);
+
 static bool mock_turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
 {
     mock_state.costume.snap_count++;
@@ -528,7 +537,26 @@ static bool mock_turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
     mock_state.costume.last_snap_w = w;
     mock_state.costume.last_snap_h = h;
     mock_state.costume.last_snap_turtle = mock_state.current_turtle;
-    return mock_state.costume.snap_result;
+
+    if (!mock_state.costume.snap_result)
+    {
+        return false;
+    }
+
+    uint8_t pixels[LOGO_SHAPE_MAX_PIXELS];
+    int x0 = (int)(mock_state.turtle.x + SCREEN_HALF_WIDTH) - w / 2;
+    int y0 = (int)(-mock_state.turtle.y + SCREEN_HALF_HEIGHT) - h / 2;
+
+    for (int r = 0; r < h; r++)
+    {
+        for (int c = 0; c < w; c++)
+        {
+            uint8_t v = mock_turtle_canvas_point(x0 + c, y0 + r);
+            pixels[r * w + c] = (v == 0) ? LOGO_SHAPE_TRANSPARENT : v;
+        }
+    }
+
+    return costume_put(slot, w, h, pixels);
 }
 
 //
@@ -1139,6 +1167,7 @@ void mock_device_reset(void)
     mock_state.turtle.boundary_mode = MOCK_BOUNDARY_WRAP;  // Default is wrap
 
     mock_state.costume.snap_result = true;  // snap_costume succeeds by default
+    costumes_clear();                       // Every shape slot starts empty
 
     // Multi-turtle slots: all boot at home, pen down; only turtle 0 visible
     mock_state.current_turtle = 0;
@@ -1465,6 +1494,16 @@ const MockTurtleState *mock_device_get_turtle(uint8_t n)
 void mock_device_set_snap_result(bool result)
 {
     mock_state.costume.snap_result = result;
+}
+
+const uint8_t *mock_device_get_shape(uint8_t shape_num, uint8_t *w, uint8_t *h)
+{
+    const uint8_t *pixels;
+    if (!costume_get(shape_num, w, h, &pixels))
+    {
+        return NULL;
+    }
+    return pixels;
 }
 
 void mock_device_set_raster(uint8_t n, const LogoTurtleRaster *raster)
