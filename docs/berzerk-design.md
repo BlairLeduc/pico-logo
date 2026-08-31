@@ -482,7 +482,7 @@ are legible as a drawing:
 
 ```
 3C  ..####..     head
-66  .##..##.     eyes            <- this row is the only one that animates
+66  .##..##.     eyes            <- the only row that animates WHILE STANDING
 FF  ########     shoulders
 BD  #.####.#     body
 BD  #.####.#
@@ -495,21 +495,38 @@ BD  #.####.#
 ```
 
 The **five pattern tables at $1000–$1030 are exactly the five facing groups**
-the `run` dispatch already keyed on, and they are what the five costumes are
-built from:
+the `run` dispatch already keyed on. **They are tables of FRAMES, not sprites**,
+and reading them as sprites is [B77](bugs.md) — the port took the first pointer
+of each and the robots translated across the floor with their legs locked, for
+four milestones and a board session:
 
-| table | facing | first frame | eye row |
+| table | facing | frames | what moves |
 |---|---|---|---|
-| $1000 | standing | $10D1 | `66` centred |
-| $1013 | right / up-right / down-right | $112C | `78` |
-| $101C | down | $1139 (12 rows) | `66`, feet differ |
-| $1027 | left / up-left / down-left | $1155 | `1E` |
-| $1030 | up | $116F | `7E` |
+| $1000 | standing | $10D1 $10DE $10EB $10F8 ×3 $1105 $1112 | the eye row only |
+| $1013 | right / up-right / down-right | $112C $111F $111F | feet, `24 24 24`/`36` → `18 18 18`/`1C` |
+| $101C | down | $10D1 $1139 $10D1 $1147 | feet, right then left |
+| $1027 | left / up-left / down-left | $1155 $1162 $1162 | the mirror of $1013 |
+| $1030 | up | $116F $117C $116F $118A | as down, eye row `7E` |
 
-The eight standing frames at $1000 differ in **the eye row alone** — `66 4E 1E
-7E 78 71` — which is two eyes tracking left to right and back. As costumes that
-is six more slots if M3 wants the animation, or `setanim` cycling them for
-nothing; as sprites it is what the cabinet does.
+The eight **standing** frames at $1000 differ in **the eye row alone** — `66 4E
+1E 7E 78 71`, two eyes tracking left to right and back. That is the one this
+game does not build: six more slots for an idle animation. **The four walking
+tables are a different claim and this section used to conflate them with it.**
+
+Eight distinct patterns cover all five facings, because $1155 is $112C mirrored
+and $1162 is $111F mirrored — so `setrot "flip` still walks the robot west in
+the eastern pair. Up and down differ from each other in the eye row alone
+($117C is $1139 with `7E` for `66`), and they take separate slots rather than a
+shared set with two pixels drawn over each frame, which the ceiling at 23 pays
+for.
+
+**And the animation rate is not the step rate here.** `MOVE_ANIMATE_VECTOR`
+($27A9) advances the pattern pointer on the same countdown that moves the
+vector, so the cabinet shows one frame per pixel at 60 Hz. Our frame is three of
+its ticks, so a fast robot takes three steps between two things the player can
+see — and three steps through a three-frame table lands on the same frame every
+time. The walk advances **once per rendered frame the robot moved in**: it costs
+the gait's rate at high speed and buys legs that move at every speed.
 
 `$103B` is the four-frame explosion and `$1198`–`$1208` its pixel data. M3's.
 
@@ -1763,10 +1780,14 @@ names are minted the first time a procedure runs. Berzerk's budget is **220
 peak, 16 free**, enforced by a test that **plays a game** rather than reading
 the source.
 
-**And a third the bitmap decision introduced (§7): `COSTUME_SLOTS` is 15, and
+**And a third the bitmap decision introduced (§7): `COSTUME_SLOTS` was 15, and
 the cabinet has far more sprites than that.** Five robot facings, six eye-row
 animation frames, nine of the man's shooting directions, four explosion frames
-and Otto's bounce are well over fifteen before anything else. A vector model
+and Otto's bounce are well over fifteen before anything else. **The ceiling is
+now 23** (`LOGO_SHAPE_MAX_SLOT`), raised under [B77](bugs.md) once the robots'
+walk cycles turned out to need four frames the port had never built: a slot is
+six bytes of table and nothing else, measured at 48 bytes across all three
+boards, and the pixels come from the same 8 KB pool. A vector model
 was a *procedure* and cost flash, so this document could carry as many as it
 liked; a costume is one of fifteen slots. The pool itself is not the
 constraint — 8,192 bytes against about 1,300 for fifteen 8 × 12 sprites — the

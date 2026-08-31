@@ -741,18 +741,32 @@ end
 ; the cabinet's inventory does not fit
 ; in fifteen without it.
 ;
-; THE FIFTEEN, ALLOCATED, so no later
-; milestone discovers the ceiling the
-; way Battlezone discovered the
-; procedure one:
+; THE TWENTY-THREE, ALLOCATED, so no
+; later milestone discovers the ceiling
+; the way Battlezone discovered the
+; procedure one. It was fifteen until
+; B77: the robots needed four more
+; frames than the port had given them
+; and there were two spare, so the
+; ceiling moved to 23 -- a slot is six
+; bytes of table and the pixels come
+; from a pool that is 8 KB and holds
+; these seventeen in 1,920:
 ;
 ;   1     the man, standing     $10BF
 ;   2-4   the man, walking      $10AD
 ;                               $109B
 ;                               $1089
 ;   5-9   the man, shooting     M4
-;   10-13 the robot, four ways  M3
-;   14-15 spare                 M5/M7
+;   10-13 the robot, standing,  M3
+;         up, down and right
+;   14-17 the robot, the rest   B77
+;         of both walk cycles
+;         $1147 $117C $118A
+;         $111F
+;   18-23 spare: Otto (M5), the
+;         explosion's four ROM
+;         frames, and polish
 ;
 ; Eight shooting directions become five
 ; slots and five robot facings become
@@ -1148,9 +1162,37 @@ make "s.dy (list 0 -6 -6 -6 -6 -6 -6 -6 -1)
 ; and the polish. The facing already
 ; moves the eyes, which is the half of
 ; the animation that carries meaning.
-; Slots 10 to 13: standing, up, down and
-; right. `setrot "flip` walks the robot
-; west in the one it already has.
+; Slots 10 to 17, and EIGHT AND NOT FOUR
+; because the ROM's five tables at
+; $1000-$1030 are tables of FRAMES and
+; the first port took frame #1 of each
+; (B77). Only $1000, the standing table,
+; is the eye row alone -- 66 4E 1E 7E 78
+; 71, two eyes tracking -- and that is
+; the one this game does not animate.
+; The four WALKING tables move the legs:
+;
+;   $1013 right  112C 111F 111F
+;   $1027 left   1155 1162 1162
+;   $101C down   10D1 1139 10D1 1147
+;   $1030 up     116F 117C 116F 118A
+;
+; LEFT IS STILL FREE. $1155 is $112C
+; mirrored and $1162 is $111F mirrored
+; (78 <-> 1E, 36 <-> 6C, 1C <-> 38, the
+; rest palindromes), so `setrot "flip`
+; walks west in the eastern pair exactly
+; as it did with one frame.
+;
+; UP AND DOWN DIFFER IN THE EYE ROW
+; ALONE -- $117C is $1139 with 7E for 66
+; and $118A is $1147 with the same swap
+; -- so they are separate slots and not
+; one shared set with two pixels drawn
+; over it. Four spare slots is the
+; cheaper answer than two `setpixel`
+; calls a robot a frame, now that the
+; ceiling is 23 rather than 15.
 to shapes.robots
   ; $10D1, standing
   putsh 10 [
@@ -1212,6 +1254,67 @@ to shapes.robots
     fffffefefffefeff
     ffffffffffffffff
   ]
+  ; $1147, down step B
+  putsh 14 [
+    fffffefefefeffff
+    fffefefffffefeff
+    fefefefefefefefe
+    fefffefefefefffe
+    fefffefefefefffe
+    fefffefefefefffe
+    fffffefefefeffff
+    fffffefffffeffff
+    fffffefffffeffff
+    fffefefffffeffff
+    fffffffffffeffff
+    fffffffffffefeff
+  ]
+  ; $117C, up step A
+  putsh 15 [
+    fffffefefefeffff
+    fffefefefefefeff
+    fefefefefefefefe
+    fefffefefefefffe
+    fefffefefefefffe
+    fefffefefefefffe
+    fffffefefefeffff
+    fffffefffffeffff
+    fffffefffffeffff
+    fffffefffffefeff
+    fffffeffffffffff
+    fffefeffffffffff
+  ]
+  ; $118A, up step B
+  putsh 16 [
+    fffffefefefeffff
+    fffefefefefefeff
+    fefefefefefefefe
+    fefffefefefefffe
+    fefffefefefefffe
+    fefffefefefefffe
+    fffffefefefeffff
+    fffffefffffeffff
+    fffffefffffeffff
+    fffefefffffeffff
+    fffffffffffeffff
+    fffffffffffefeff
+  ]
+  ; $111F, right stride
+  putsh 17 [
+    fffffefefefeffff
+    fffefefefeffffff
+    fefefefefefefefe
+    fefffefefefefffe
+    fefffefefefefffe
+    fefffefefefefffe
+    fffffefefefeffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefeffffff
+    fffffffefefeffff
+    ffffffffffffffff
+  ]
+
 end
 
 ;=====================================
@@ -2009,6 +2112,20 @@ make "r.y     (list 0 0 0 0 0 0 0 0 0 0 0)
 make "r.dir   (list 0 0 0 0 0 0 0 0 0 0 0)
 make "r.state (list 0 0 0 0 0 0 0 0 0 0 0)
 make "r.time  (list 0 0 0 0 0 0 0 0 0 0 0)
+
+; WHERE EACH ROBOT IS IN HIS WALK CYCLE,
+; and it WRAPS AT TWELVE, which is B52
+; written into a list: `.setitem` of a
+; number the workspace has not held
+; before interns a word, so a counter
+; that climbs spends word table for as
+; long as the game runs. Twelve is the
+; common multiple of the two cycle
+; lengths (three for east and west, four
+; for north and south), so every phase
+; is reachable and only twelve numbers
+; are ever stored.
+make "r.step  (list 0 0 0 0 0 0 0 0 0 0 0)
 make "r.tl    (list 0 0 0 0 0 0 0 0 0 0 0)
 make "r.br    (list 0 0 0 0 0 0 0 0 0 0 0)
 make "r.blk   (list 0 0 0 0 0 0 0 0 0 0 0)
@@ -2254,6 +2371,10 @@ to place.robots
       ; closed set (B52) and any spread
       ; does the job.
       .setitem :i :r.time modulo :i 5
+      ; And the same spread on the foot he
+      ; starts on, so a fresh room is not
+      ; eleven robots marching in step.
+      .setitem :i :r.step modulo :i 4
       .setitem :i :r.tl 0
       .setitem :i :r.br 0
       .setitem :i :r.blk 15
@@ -2468,6 +2589,32 @@ to step.robot :i
     make "s.y :s.y + (:s.n * item (:s.d + 1) :d.dy)
     .setitem :i :r.x :s.x
     .setitem :i :r.y :s.y
+    ; ONE PHASE A RENDERED FRAME, AND NOT
+    ; `s.n` OF THEM. The cabinet advances
+    ; the pattern pointer once per MOVE
+    ; ($27A9 does both on one countdown),
+    ; and a move there is one pixel at 60
+    ; Hz. Our frame is three of its ticks,
+    ; so a fast robot takes `s.n` = 3
+    ; steps between two things the player
+    ; can see -- and three steps through a
+    ; THREE-frame table ($1013 east, $1027
+    ; west) lands on the same frame every
+    ; time. Advancing by `s.n` is the
+    ; cabinet's own phase and it renders as
+    ; a robot sliding with his legs locked,
+    ; which is the bug this milestone is
+    ; fixing, one speed further in.
+    ;
+    ; So the walk advances once per frame
+    ; the robot moved in. What that costs
+    ; is the gait's RATE at high speed --
+    ; the cabinet would have run the cycle
+    ; three times where we run it once --
+    ; and what it buys is that the legs
+    ; move at every speed rather than at
+    ; all but the fastest.
+    .setitem :i :r.step modulo (1 + item :i :r.step) 12
     if on.wall? :s.x :s.y 12 [rob.dies :i stop]]]
   if 8 > abs (:p.x - :s.x) [
     if :p.y > (:s.y - 12) [
@@ -2681,7 +2828,33 @@ end
 ; the only one facing west, and it wears
 ; group 5's costume mirrored.
 make "d.grp (list 1 4 5 1 2 4 5 2 3 4 5 3 1 4 5 1)
-make "g.slot (list 10 11 12 13 13)
+; THE WALK CYCLE, four slots a group so
+; the group's base is arithmetic and not
+; a search: group g starts at 4g - 3.
+; `g.len` is how many of the four the
+; ROM's table actually uses, so east and
+; west take the first three and the
+; fourth entry is never read.
+;
+; The standing group is four copies of
+; one slot rather than a special case,
+; because a `modulo` by 1 is cheaper
+; than the `if` that would avoid it.
+; A BRACKET LITERAL ON ONE LONG LINE,
+; and both halves of that are forced.
+; `(list ...)` takes at most SIXTEEN
+; arguments -- which is why `d.ml` above
+; has exactly sixteen -- and a
+; seventeenth is "I don't know what to
+; do with 17", a parse error and not a
+; wrong answer. Brackets have no such
+; limit. And it cannot be wrapped to fit
+; forty columns either, because `load`
+; and the test harness both run one line
+; at a time outside a `to ... end`, so
+; only a procedure body may span a break.
+make "g.cyc [10 10 10 10 11 15 11 16 10 12 10 14 13 17 17 13 13 17 17 13]
+make "g.len (list 1 4 4 3 3)
 make "g.face (list 90 90 90 270 90)
 
 make "g.i 0
@@ -2693,7 +2866,9 @@ to draw.robots
     make "g.i repcount
     if 1 = item :g.i :r.state [
       make "g.g item (1 + item :g.i :r.dir) :d.grp
-      setsh item :g.g :g.slot
+      setsh item ((4 * :g.g) - 3 +
+                  modulo (item :g.i :r.step)
+                         (item :g.g :g.len)) :g.cyc
       seth item :g.g :g.face
       setx (item :g.i :r.x) + 3.5
       sety (item :g.i :r.y) - 5.5

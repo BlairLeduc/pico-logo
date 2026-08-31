@@ -760,8 +760,8 @@ void test_the_worst_transition_is_kept(void)
 // The man is four costumes and not sixteen (design section 7.4)
 //==========================================================================
 
-// THE CEILING THE BITMAP DECISION INTRODUCED.  `COSTUME_SLOTS` is 15 and the
-// cabinet's man alone is sixteen sprites -- standing, two walk cycles of three
+// THE CEILING THE BITMAP DECISION INTRODUCED.  `COSTUME_SLOTS` is 23 (it was
+// 15 until B77) and the cabinet's man alone is sixteen sprites -- standing, two walk cycles of three
 // and eight shooting poses -- before a robot, an explosion or Otto.  M2's
 // answer is `setrot "flip`: the ROM's own left-facing frames ($1391, $13A3,
 // $13B5) are hand-mirrored copies of its right-facing ones, so the engine can
@@ -1650,11 +1650,11 @@ void test_berzerk_puts_the_screen_back(void)
 
     // IT HAS TO HAVE PLAYED.  From M3 a board that will not take the fast
     // clock is refused (§15.5), and a refusal skips `play.game` — which leaves
-    // every assertion below true for the wrong reason.  Thirteen costumes is
-    // `init.game` having run: four of the man walking, four of the robot, and
-    // M4's five shooting poses (§7.4's allocation, now spent but for two).
+    // every assertion below true for the wrong reason.  Seventeen costumes is
+    // `init.game` having run: four of the man walking, five shooting poses, and
+    // eight of the robot once both walk cycles are real frames (B77).
     const MockDeviceState *st = mock_device_get_state();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(13, st->costume.put_count,
+    TEST_ASSERT_EQUAL_INT_MESSAGE(17, st->costume.put_count,
         "the game never started, so this proved nothing about putting it back");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("auto", word_of("refreshmode"),
         "the game left the display in sync refresh");
@@ -2449,27 +2449,48 @@ void test_the_explosion_stays_inside_the_robots_own_box(void)
 // The robots' two marks
 //==========================================================================
 
-// Four costumes and not five, at the cabinet's own 8 x 12.  Slots 10 to 13 are
-// what the table beside `shapes.man` reserved for them, and the fifth facing is
-// the flip.
-void test_the_robot_is_four_costumes_at_the_cabinets_size(void)
+// EIGHT COSTUMES AND NOT FOUR, at the cabinet's own 8 x 12 (B77).  The five
+// pattern tables at $1000-$1030 are tables of FRAMES, and the first port took
+// frame #1 of each -- so the robots translated across the floor without ever
+// moving their legs.  Only $1000, the standing table, animates in the eye row
+// alone; the four walking tables move the feet.  Slots 10 to 17, and the
+// western pair is still the eastern one flipped.
+void test_the_robot_is_eight_costumes_at_the_cabinets_size(void)
 {
-    static const int stand[12] = {60,102,255,189,189,189,60,36,36,36,102,0};
-    static const int up[12]    = {60,126,255,189,189,189,60,36,36,36,102,0};
-    static const int down[12]  = {60,102,255,189,189,189,60,36,36,38,32,96};
-    static const int right[12] = {60,120,255,189,189,189,60,36,36,36,54,0};
+    static const int stand[12]  = {60,102,255,189,189,189,60,36,36,36,102,0};
+    static const int up[12]     = {60,126,255,189,189,189,60,36,36,36,102,0};
+    static const int downA[12]  = {60,102,255,189,189,189,60,36,36,38,32,96};
+    static const int right[12]  = {60,120,255,189,189,189,60,36,36,36,54,0};
+    static const int downB[12]  = {60,102,255,189,189,189,60,36,36,100,4,6};
+    static const int upA[12]    = {60,126,255,189,189,189,60,36,36,38,32,96};
+    static const int upB[12]    = {60,126,255,189,189,189,60,36,36,100,4,6};
+    static const int stride[12] = {60,120,255,189,189,189,60,24,24,24,28,0};
 
     int before = mock_device_get_state()->costume.put_count;
     run("setrefresh \"manual  shapes.robots");
     const MockDeviceState *st = mock_device_get_state();
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(4, st->costume.put_count - before,
-        "the robot is not four costumes");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(8, st->costume.put_count - before,
+        "the robot is not eight costumes");
 
-    assert_slot_is_rom(10, 8, 12, stand, "$10D1 standing");
-    assert_slot_is_rom(11, 8, 12, up,    "$116F up");
-    assert_slot_is_rom(12, 8, 12, down,  "$1139 down");
-    assert_slot_is_rom(13, 8, 12, right, "$112C right");
+    assert_slot_is_rom(10, 8, 12, stand,  "$10D1 standing");
+    assert_slot_is_rom(11, 8, 12, up,     "$116F up");
+    assert_slot_is_rom(12, 8, 12, downA,  "$1139 down step A");
+    assert_slot_is_rom(13, 8, 12, right,  "$112C right");
+    assert_slot_is_rom(14, 8, 12, downB,  "$1147 down step B");
+    assert_slot_is_rom(15, 8, 12, upA,    "$117C up step A");
+    assert_slot_is_rom(16, 8, 12, upB,    "$118A up step B");
+    assert_slot_is_rom(17, 8, 12, stride, "$111F right stride");
+
+    // $117C is $1139 with the eye row swapped and $118A is $1147 with the
+    // same swap: 7E against 66, the two middle pixels.  They are separate
+    // slots rather than one shared set with two pixels drawn over it, which
+    // is what the ceiling at 23 buys.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(126, upA[1], "$117C's eye row is not 7E");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(102, downA[1], "$1139's eye row is not 66");
+    for (int r = 2; r < 12; r++)
+        TEST_ASSERT_EQUAL_INT_MESSAGE(downA[r], upA[r],
+            "$117C and $1139 differ below the eye row");
 }
 
 // $1155 (walking left) IS $112C (walking right) MIRRORED, which is the claim
@@ -2531,31 +2552,126 @@ void test_both_sides_of_a_robot_are_one_costume(void)
 // groups do.
 void test_every_direction_wears_the_roms_own_facing(void)
 {
-    static const struct { int dir, slot; float face; } way[] = {
-        {  0, 10,  90.0f },  // standing
-        {  4, 11,  90.0f },  // up
-        {  8, 12,  90.0f },  // down
-        {  2, 13,  90.0f },  // right
-        {  1, 13, 270.0f },  // left
-        {  6, 13,  90.0f },  // up and right
-        {  5, 13, 270.0f },  // up and left
-        { 10, 13,  90.0f },  // down and right
-        {  9, 13, 270.0f },  // down and left
-        {  3, 10,  90.0f },  // left and right at once: the arcade's standing default
-        { 12, 10,  90.0f },  // up and down at once
+    // Each row is a ROM pattern table read straight off $1000-$1030: the
+    // frames in order, how many of them the table actually cycles through,
+    // and the heading the slot is worn at.  Walking east and west share
+    // their frames and differ only in the flip.
+    static const struct { int dir, cyc[4], len; float face; } way[] = {
+        {  0, { 10, 10, 10, 10 }, 1,  90.0f },  // $1000 standing
+        {  4, { 11, 15, 11, 16 }, 4,  90.0f },  // $1030 up
+        {  8, { 10, 12, 10, 14 }, 4,  90.0f },  // $101C down
+        {  2, { 13, 17, 17, 13 }, 3,  90.0f },  // $1013 right
+        {  1, { 13, 17, 17, 13 }, 3, 270.0f },  // $1027 left
+        {  6, { 13, 17, 17, 13 }, 3,  90.0f },  // up and right
+        {  5, { 13, 17, 17, 13 }, 3, 270.0f },  // up and left
+        { 10, { 13, 17, 17, 13 }, 3,  90.0f },  // down and right
+        {  9, { 13, 17, 17, 13 }, 3, 270.0f },  // down and left
+        {  3, { 10, 10, 10, 10 }, 1,  90.0f },  // both sideways: standing
+        { 12, { 10, 10, 10, 10 }, 1,  90.0f },  // both vertically
     };
     no_robots();
     run("setrot \"flip");
     for (size_t k = 0; k < sizeof(way) / sizeof(way[0]); k++)
+        for (int phase = 0; phase < 12; phase++)   // r.step wraps at twelve
+        {
+            robot_at(1, 0, 40, way[k].dir, 1);
+            char set[64];
+            snprintf(set, sizeof(set), ".setitem 1 :r.step %d", phase);
+            run(set);
+            mock_device_clear_graphics();
+            run("draw.robots");
+
+            int want = way[k].cyc[phase % way[k].len];
+            char msg[160];
+            snprintf(msg, sizeof(msg),
+                     "direction %d at phase %d wore slot %d at heading %g, "
+                     "and the ROM's table has slot %d",
+                     way[k].dir, phase, mock_device_get_stamp(0)->shape,
+                     (double)num("heading"), want);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(want, mock_device_get_stamp(0)->shape, msg);
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(way[k].face, num("heading"), msg);
+        }
+}
+
+// AND THE LEGS ACTUALLY MOVE, which is the test the first port did not have
+// and the reason B77 survived four milestones and a board session.  Every
+// costume test counted captures and measured the box; none of them ran the
+// game and watched a robot walk.  A robot that wears one frame for ever
+// passes all of those and is still wrong on the screen.
+//
+// So: one robot, walking, over frames enough to cover the cycle -- and the
+// claim is that he wears MORE THAN ONE slot while he does it, and that the
+// slots he wears are his own facing's table and nobody else's.
+void test_a_walking_robot_moves_his_legs(void)
+{
+    no_robots();
+    no_bolts();
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    run("setrot \"flip");
+
+    // He walks east: the man is far to his right, so `seek` points him there
+    // and keeps him there.  An empty room and no bolts, so nothing but the
+    // walk decides what he wears.
+    run("make \"p.x 110  make \"p.y 40  make \"p.dying 0  "
+        "make \"rob.bolts 0  make \"rob.wait 9999  "
+        "make \"rob.tp 1  make \"rob.vecs 1  make \"rob.live 1");
+    robot_at(1, -60, 40, 2, 1);
+
+    int seen[24] = {0};
+    int distinct = 0;
+    for (int i = 0; i < 60; i++)
     {
-        robot_at(1, 0, 40, way[k].dir, 1);
         mock_device_clear_graphics();
-        run("draw.robots");
-        char msg[128];
-        snprintf(msg, sizeof(msg), "direction %d wore slot %d at heading %g",
-                 way[k].dir, mock_device_get_stamp(0)->shape, (double)num("heading"));
-        TEST_ASSERT_EQUAL_INT_MESSAGE(way[k].slot, mock_device_get_stamp(0)->shape, msg);
-        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(way[k].face, num("heading"), msg);
+        run("logic.robots  draw.robots");
+        if (mock_device_stamp_count() == 0)
+            continue;
+        int sh = mock_device_get_stamp(0)->shape;
+        TEST_ASSERT_TRUE_MESSAGE(sh >= 0 && sh < 24, "robot wore an impossible slot");
+        if (!seen[sh]) { seen[sh] = 1; distinct++; }
+    }
+
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "a robot walking east wore %d distinct costume%s over sixty frames",
+             distinct, distinct == 1 ? "" : "s");
+    TEST_ASSERT_TRUE_MESSAGE(distinct > 1, msg);
+
+    // $1013 is 112C 111F 111F, so the only slots he may wear are 13 and 17.
+    for (int sh = 0; sh < 24; sh++)
+        if (seen[sh])
+        {
+            snprintf(msg, sizeof(msg),
+                     "walking east he wore slot %d, which is not in $1013", sh);
+            TEST_ASSERT_TRUE_MESSAGE(sh == 13 || sh == 17, msg);
+        }
+}
+
+// AND THE PHASE STAYS BOUNDED, which is B52 in the one list that counts up.
+// `r.step` wraps at twelve, so the crowd can walk for as long as the game
+// runs and only twelve numbers are ever interned.
+void test_the_walk_phase_wraps_and_costs_no_word_table(void)
+{
+    in_room(9, 9);
+    man_at(-5, 45);
+    for (int i = 0; i < 200; i++)   // warm every phase and every slot
+        frame();
+
+    float atoms0 = num("atoms");
+    for (int i = 0; i < 600; i++)
+        frame();
+
+    char msg[128];
+    snprintf(msg, sizeof(msg), "six hundred frames of walking spent %g bytes of word table",
+             (double)(atoms0 - num("atoms")));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(atoms0, num("atoms"), msg);
+
+    for (int i = 1; i <= 11; i++)
+    {
+        char e[48];
+        snprintf(e, sizeof(e), "item %d :r.step", i);
+        float v = num(e);
+        snprintf(msg, sizeof(msg), "robot %d's walk phase is %g, outside 0..11", i, (double)v);
+        TEST_ASSERT_TRUE_MESSAGE(v >= 0.0f && v <= 11.0f, msg);
     }
 }
 
@@ -4265,10 +4381,12 @@ int main(void)
     RUN_TEST(test_a_robot_that_reaches_the_man_kills_him);
     RUN_TEST(test_the_explosion_is_four_frames_and_then_the_slot_is_empty);
     RUN_TEST(test_the_explosion_stays_inside_the_robots_own_box);
-    RUN_TEST(test_the_robot_is_four_costumes_at_the_cabinets_size);
+    RUN_TEST(test_the_robot_is_eight_costumes_at_the_cabinets_size);
     RUN_TEST(test_the_roms_left_facing_robot_is_its_right_one_mirrored);
     RUN_TEST(test_both_sides_of_a_robot_are_one_costume);
     RUN_TEST(test_every_direction_wears_the_roms_own_facing);
+    RUN_TEST(test_a_walking_robot_moves_his_legs);
+    RUN_TEST(test_the_walk_phase_wraps_and_costs_no_word_table);
     RUN_TEST(test_a_robot_stamps_half_a_sprite_from_his_stored_corner);
     RUN_TEST(test_the_erase_covers_every_pixel_a_robot_stamped);
     RUN_TEST(test_a_dying_robot_is_still_erased);
