@@ -534,7 +534,7 @@ void test_a_room_is_eight_border_runs_and_eight_interior_ones(void)
 
     // And each interior run is a cell dimension, drawn from an intersection:
     // 48 steps across, 68 down, or the 52 that the leftmost column is wide
-    // (B67 -- the playfield is 244 as 52 + 4 x 48, and a run west out of the
+    // (B70 -- the playfield is 244 as 52 + 4 x 48, and a run west out of the
     // first intersection has to reach the wall).  Never anything between.
     for (int i = 8; i < mock_device_line_count(); i++)
     {
@@ -548,7 +548,7 @@ void test_a_room_is_eight_border_runs_and_eight_interior_ones(void)
 }
 
 // A WALL RUNS FROM ONE GRID LINE TO THE NEXT, and nothing was checking it
-// (B67).  `test_the_drawn_walls_agree_with_the_wall_masks` stands ten steps off
+// (B70).  `test_the_drawn_walls_agree_with_the_wall_masks` stands ten steps off
 // each segment's MIDDLE, so a run that is the right shape in the right place
 // and simply stops short passes it -- and one of them does.  The leftmost
 // column is **52** steps wide, not 48: the playfield is 244 across as
@@ -1025,7 +1025,7 @@ static int mask_of(int row, int col)
     return mask_at((float)(-94 + 48 * col), (float)(108 - 68 * row));
 }
 
-// THE END OF A WALL IS STILL A WALL, and a crossing test cannot see it (B66).
+// THE END OF A WALL IS STILL A WALL, and a crossing test cannot see it (B69).
 // A wall test asked as "which cell am I in, is the edge I am crossing walled"
 // only fires when the man crosses the boundary the wall LIES ON -- so walking
 // PARALLEL to a wall and stepping into the cell at its end crosses nothing,
@@ -1197,7 +1197,7 @@ void test_the_mans_outline_never_touches_a_wall(void)
     }
 }
 
-// THE ERASE HAS TO COVER THE PIXELS THE STAMP ACTUALLY WROTE, and B64 is what
+// THE ERASE HAS TO COVER THE PIXELS THE STAMP ACTUALLY WROTE, and B67 is what
 // happens when it nearly does.  The game shipped one pen-8 stroke down the
 // man's spine, inset by what section 7.1 calls the cap radius -- and a wide
 // pen in this interpreter is a filled DISC, so the cap is a semicircle that
@@ -1232,7 +1232,7 @@ static void erase_coverage(bool out[240][320])
     {
         const MockLine *l = mock_device_get_line(i);
         TEST_ASSERT_EQUAL_INT_MESSAGE(3, l->pen_size,
-            "the eraser is not pen 3, so it is not a square brush (B64)");
+            "the eraser is not pen 3, so it is not a square brush (B67)");
         int x1 = SCR_X(l->x1), x2 = SCR_X(l->x2);
         int y1 = SCR_Y(l->y1), y2 = SCR_Y(l->y2);
         TEST_ASSERT_TRUE_MESSAGE(x1 == x2 || y1 == y2, "the erase stroke is not axis-aligned");
@@ -1278,7 +1278,7 @@ void test_the_erase_covers_every_pixel_the_stamp_wrote(void)
                 char msg[160];
                 snprintf(msg, sizeof(msg),
                          "at %g,%g the man's pixel %d,%d survives the erase -- "
-                         "he leaves a trail (B64)",
+                         "he leaves a trail (B67)",
                          (double)where[w][0], (double)where[w][1], x, y);
                 TEST_ASSERT_TRUE_MESSAGE(covered[sy0 + y][sx0 + x], msg);
             }
@@ -2133,7 +2133,7 @@ static int crowd_travel(int n, int tp, int frames)
     return (int)(robot_x(1) + 120.0f);
 }
 
-// ROBOT_SPEED IS NOT THE WHOLE PERIOD: THE CROWD TAKES TURNS.  B72, and the
+// ROBOT_SPEED IS NOT THE WHOLE PERIOD: THE CROWD TAKES TURNS.  B75, and the
 // number that found it came off a recording of the cabinet -- "at the start of
 // the game, the robots move about once per second" -- against a port that was
 // moving them fifteen pixels a second.
@@ -2385,9 +2385,9 @@ void test_the_explosion_is_four_frames_and_then_the_slot_is_empty(void)
 // AND IT STAYS INSIDE HIS OWN 8 x 12, which is the other half of the same
 // decision.  A cloud that spreads needs an eraser that spreads with it, and
 // the only wide pen that does not spill is pen 3 -- a wider one is a filled
-// disc whose round caps would eat the wall he died against (B64).  Inside his
+// disc whose round caps would eat the wall he died against (B67).  Inside his
 // own box, his own eraser is the only one it ever needs.
-// SIXTY EXPLOSIONS AND NOT ONE, which is B68 and is the whole of why this test
+// SIXTY EXPLOSIONS AND NOT ONE, which is B71 and is the whole of why this test
 // passed while a board watched robots leave a pixel behind.  The assertion was
 // right; the sample was four frames of six strokes, against a corner that needs
 // `random 6` and `random 4` to come up together -- one stroke in twenty-four.
@@ -2562,7 +2562,7 @@ void test_a_robot_stamps_half_a_sprite_from_his_stored_corner(void)
 // one wide pen that is a square, so three strokes at x + 1, x + 4 and x + 6
 // running from y - 1 down nine cover the 8 x 12 exactly.  A pen 8 stroke down
 // the spine would leave the corners behind and the robot would drag a trail in
-// every direction, which is what a board said about the man (B64).
+// every direction, which is what a board said about the man (B67).
 void test_the_erase_covers_every_pixel_a_robot_stamped(void)
 {
     static bool covered[240][320];
@@ -3367,7 +3367,7 @@ void test_a_diagonal_bolt_is_drawn_its_full_length(void)
 }
 
 // A bolt hits the cell edge the wall is drawn on, and the test is a CROSSING
-// rather than the occupancy the man needs (section 8.3, B66): he has extent
+// rather than the occupancy the man needs (section 8.3, B69): he has extent
 // and can stand beside a wall he never crossed, a bolt is one pixel and cannot.
 // One `cell.at` a bolt a frame, cached the way `iq` caches its probe, with the
 // crossed edge coming out of the index arithmetic.
@@ -3759,7 +3759,7 @@ void test_every_shot_direction_wears_the_roms_own_pose(void)
         "the man fired with the stick in a direction the table calls neutral");
 }
 
-// A WALL STOPS A BOLT WHERE IT IS, NOT AT THE END OF THE STEP -- B69, reported
+// A WALL STOPS A BOLT WHERE IT IS, NOT AT THE END OF THE STEP -- B72, reported
 // from a board in two shapes: "if a robot is standing on the other side of a
 // wall, I can kill it", and "I shot diagonally at the point of the wall, the
 // wall stopped it but I killed the robots diagonally on the other side".
@@ -3785,7 +3785,7 @@ void test_a_bolt_does_not_kill_through_a_wall(void)
     run("step.bolts");
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, robot_state(1),
-        "the bolt killed a robot on the far side of a wall (B69)");
+        "the bolt killed a robot on the far side of a wall (B72)");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1), "the bolt went through the wall");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-70.0f, bolt_x(1),
         "the bolt did not stop on the wall pixel");
@@ -3808,7 +3808,7 @@ void test_a_bolt_stopped_by_a_wall_still_kills_what_is_in_front_of_it(void)
         "the wall swallowed a shot the player could see connecting");
 }
 
-// The diagonal shape of B69, and it is the one that says the clip is a
+// The diagonal shape of B72, and it is the one that says the clip is a
 // DISTANCE and not a coordinate: the bolt crosses the wall's column part way
 // through its step, so everything past that point on the line has to go with
 // it -- including a robot the unclipped segment reaches two pixels later.
@@ -3829,13 +3829,13 @@ void test_a_diagonal_bolt_stopped_by_a_wall_kills_nothing_past_it(void)
     run("step.bolts");
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, robot_state(1),
-        "a diagonal bolt killed past the point of the wall that stopped it (B69)");
+        "a diagonal bolt killed past the point of the wall that stopped it (B72)");
     TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(2),
         "the clip took the robot in front of the wall with it");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1), "the bolt lived through the wall");
 }
 
-// A BOLT FIRED ALONG A WALL RUNS DOWN THE LINE IT IS DRAWN ON -- B70, reported
+// A BOLT FIRED ALONG A WALL RUNS DOWN THE LINE IT IS DRAWN ON -- B73, reported
 // from a board as "if I shoot edge on a wall the shot will erase the wall (does
 // not stop)".  A crossing test asks whether the head went THROUGH a wall line,
 // which is everything a bolt fired across the room can do and nothing a bolt
@@ -3857,7 +3857,7 @@ void test_a_bolt_fired_along_a_wall_dies_on_it(void)
     bolt_at(1, 2, -100.0f, 74.0f, 8, 0);
     run("step.bolts");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1),
-        "a bolt ran along a horizontal wall, erasing it as it went (B70)");
+        "a bolt ran along a horizontal wall, erasing it as it went (B73)");
 
     // Vertical: the wall on the boundary at x = -70, which is cell 7's LEFT.
     set_cells((const int[15]){ 0,0,0,0,0,  0, 1, 0,0,0,  0,0,0,0,0 });
@@ -3865,7 +3865,7 @@ void test_a_bolt_fired_along_a_wall_dies_on_it(void)
     bolt_at(1, 8, -70.0f, 60.0f, 8, 0);
     run("step.bolts");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, bolt_dir(1),
-        "a bolt ran down a vertical wall, erasing it as it went (B70)");
+        "a bolt ran down a vertical wall, erasing it as it went (B73)");
 }
 
 // AND NOT ONE PIXEL EAGER, which is the other half of an occupancy test.  A
@@ -3897,7 +3897,7 @@ void test_a_bolt_beside_a_wall_and_at_the_grids_edge_lives(void)
 
 // A bolt is a one-pixel stroke and its erase is the same stroke in the
 // background colour, so it puts back exactly what it took -- no cap arithmetic
-// and no B64.  What has to hold is that it retraces the stroke it DREW: the
+// and no B67.  What has to hold is that it retraces the stroke it DREW: the
 // frame erases before it steps, so a bolt that has moved must not be erased at
 // its new head.
 void test_the_erase_retraces_the_stroke_the_bolt_drew(void)
@@ -4094,7 +4094,7 @@ void test_the_slide_shows_the_room_it_is_leaving_and_not_the_one_ahead(void)
 // ONLY A DOORWAY SCROLLS.  $21CF -- the doorway -- reaches the scroll and then
 // falls into the room build; the per-life entry at $1806 calls $209D directly,
 // so a death gets the build and none of the travel.  It changes the room
-// ([B71](bugs.md)) without ever being a journey.
+// ([B74](bugs.md)) without ever being a journey.
 //
 // Every step ends on `sync` and so does the frame, and `sync` presents in any
 // refresh mode -- so an ordinary frame reads 1 present and a frame that walked
@@ -4135,7 +4135,7 @@ void test_a_doorway_scrolls_and_a_death_does_not(void)
 
     // A death rebuilds without scrolling: fifteen frames of electrocution and
     // the build at the end of them, and not one present beyond their own.  It
-    // still lands in a NEW room -- that is B71 -- and the point here is that it
+    // still lands in a NEW room -- that is B74 -- and the point here is that it
     // gets there without the forty presents a doorway costs.
     run("make \"room.x 3  make \"room.y 4  draw.room  man.dies");
     before = refreshes();

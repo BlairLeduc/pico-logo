@@ -173,7 +173,7 @@ void set_mock_ticks(uint32_t ms);
 // BOUND over a random draw -- `random 6` is then always 0 and `random 4` always
 // 2, so a claim like "the explosion stays inside the robot's box" can only ever
 // exercise one of its twenty-four shapes, and it will pass while a board sees
-// the other twenty-three (B68).
+// the other twenty-three (B71).
 //
 // Turn this on to make the source walk a deterministic LCG instead.  Reset by
 // `test_scaffold_setUp`, so a test that wants it says so.

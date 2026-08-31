@@ -16,7 +16,7 @@
 //  whose ends pinch to a single pixel.  Prose was never going to settle it;
 //  pixels do.
 //
-//  That cost a board session (B64).  Berzerk erased its man with one pen-8
+//  That cost a board session (B67).  Berzerk erased its man with one pen-8
 //  stroke inset by what the design called the cap radius, and the four corners
 //  of his 8 x 16 were never erased at all -- 17 of 128 pixels, every frame, so
 //  he dragged a trail in every direction.
@@ -75,7 +75,7 @@ static int cap_width_above(int cx, int top, int k)
 // 8-wide pen puts nine pixels across the stroke itself, seven one row past the
 // end, five three rows past, and exactly one at four rows past.  A caller that
 // insets a stroke by "the cap radius" and expects a rectangle gets the corners
-// wrong, which is B64.
+// wrong, which is B67.
 void test_a_wide_pens_cap_is_round_and_does_not_square_off_the_stroke(void)
 {
     const int cx = 100, top = 100, bottom = 120;
@@ -91,9 +91,9 @@ void test_a_wide_pens_cap_is_round_and_does_not_square_off_the_stroke(void)
     // The claim that matters: the stroke plus its caps is NOT a rectangle.
     // Stand at the corner the design assumed was covered and it is empty.
     TEST_ASSERT_FALSE_MESSAGE(inked(cx - 4, top - 4),
-        "the cap filled the corner, so B64's reasoning would have been right");
+        "the cap filled the corner, so B67's reasoning would have been right");
     TEST_ASSERT_FALSE_MESSAGE(inked(cx + 4, bottom + 4),
-        "the cap filled the corner, so B64's reasoning would have been right");
+        "the cap filled the corner, so B67's reasoning would have been right");
 }
 
 // PEN 3 IS THE EXCEPTION AND THE WHOLE OF IT.  Radius 1.5, extent 1, and the

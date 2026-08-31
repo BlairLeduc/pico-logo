@@ -96,7 +96,7 @@
 ; three are fixed, each beside the code
 ; that had them.
 ;
-; B69, AND IT IS THE DECISION ABOVE
+; B72, AND IT IS THE DECISION ABOVE
 ; COMING BACK: a bolt killed robots
 ; through a wall, and diagonally past the
 ; point of a wall it had visibly stopped
@@ -109,7 +109,7 @@
 ; there, then look for actors. See
 ; `bolt.crossed?`.
 ;
-; B70, WHICH IS B66 ONE MILESTONE LATER:
+; B73, WHICH IS B69 ONE MILESTONE LATER:
 ; a shot fired ALONG a wall ran down the
 ; line it is drawn on, crossing nothing,
 ; and the erase took the wall away with
@@ -120,11 +120,11 @@
 ; question -- may this pixel be here --
 ; in two `modulo`s.
 ;
-; B68, THE EXPLOSION'S WESTMOST PIXEL,
+; B71, THE EXPLOSION'S WESTMOST PIXEL,
 ; which is small; its test is not. See
 ; `boom`.
 ;
-; AND B72, WHICH IS THE FINDING OF THE
+; AND B75, WHICH IS THE FINDING OF THE
 ; MILESTONE AND IS NOT A BOLT AT ALL. A
 ; recording of the cabinet said the
 ; robots move about once a second at the
@@ -157,12 +157,12 @@
 ; ROBOT_SPEED reaches its floor of 1 in
 ; four room builds and stays there --
 ; which is the step rate the whole crowd
-; SHARES (B72), not one robot's. What the
+; SHARES (B75), not one robot's. What the
 ; cabinet has and this did not is the
 ; BOUND: three lives, then the game ends
 ; and $187F puts the threshold, the
 ; speed, the bolts and the score back.
-; The lives are beside `score`; B71, a
+; The lives are beside `score`; B74, a
 ; death sending you to a NEW room, is
 ; beside `step.death`.
 ;
@@ -228,7 +228,7 @@
 ; -- and they stay INSIDE the robot's
 ; own 8 x 12, so his own eraser reaches
 ; them and no wide pen spills onto a
-; wall (B64).
+; wall (B67).
 ;
 ; THE COUNT IS A FIVE-ROOM CYCLE and the
 ; robots are the one thing in a room
@@ -530,7 +530,7 @@ end
 ; WEST OUT OF THE FIRST INTERSECTION,
 ; and it is the one number in this
 ; procedure that is not the ROM's
-; (B67). The leftmost column is 52 steps
+; (B70). The leftmost column is 52 steps
 ; wide and the other four are 48 -- the
 ; playfield is 244 across as
 ; 52 + 4 x 48, which `draw.border`
@@ -1294,7 +1294,7 @@ make "paused false
 ; round ends". So a stroke is a stadium
 ; whose caps PINCH to a single pixel
 ; rather than squaring the end off
-; (B64). One pen-8 stroke down the
+; (B67). One pen-8 stroke down the
 ; spine therefore leaves the sprite's
 ; four CORNERS behind -- 17 of its 128
 ; pixels, its top four rows and its
@@ -1433,7 +1433,7 @@ end
 ; the only cells it can be in.
 ; THE QUESTION IS OCCUPANCY, NOT
 ; CROSSING, and getting that wrong is
-; B66. This file used to ask design
+; B69. This file used to ask design
 ; section 6.3's own phrasing -- "which
 ; cell am I in, is the edge I am
 ; crossing walled" -- and a crossing
@@ -1656,8 +1656,8 @@ end
 ;
 ; AND IT IS WATCHED, NOT JUST READ. This
 ; file has had it both ways -- M3 read
-; the room restarting, B71 read $1806, a
-; board's report reversed B71 and a
+; the room restarting, B74 read $1806, a
+; board's report reversed B74 and a
 ; second look at the cabinet (2026-08-31)
 ; put it back. The ROM and the cabinet
 ; agree: a death moves you.
@@ -1910,7 +1910,7 @@ make "rob.ti 1
 ; you" -- but ROBOT_SPEED is the period
 ; the whole crowd SHARES and not one
 ; robot's, so read it beside `rob.vecs`
-; (B72): eleven robots at the floor are
+; (B75): eleven robots at the floor are
 ; each slower than the man, and the last
 ; one left is twice his speed.
 make "rob.tp 5
@@ -1918,7 +1918,7 @@ make "rob.live 0
 
 ;=====================================
 ; AND ROBOT_SPEED IS NOT THE WHOLE
-; PERIOD: THE CROWD TAKES TURNS (B72)
+; PERIOD: THE CROWD TAKES TURNS (B75)
 ;
 ; This is the number a board found by
 ; watching a recording of the cabinet --
@@ -2489,7 +2489,7 @@ end
 ; three wide and its length plus two.
 ; x + 1, x + 4 and x + 6 run from y - 1
 ; down nine steps and cover x..x+7 and
-; y..y-11 with nothing outside it (B64).
+; y..y-11 with nothing outside it (B67).
 ;
 ; A DYING ROBOT IS ERASED TOO, which is
 ; what `0 <` rather than `1 =` says here:
@@ -2559,10 +2559,10 @@ end
 ; that does not spill is pen 3 at three
 ; pixels -- a wider one is a filled disc
 ; whose round caps would eat the wall he
-; died against (B64).
+; died against (B67).
 ;
 ; ONE PLUS `random 6`, AND THE ONE IS THE
-; WHOLE OF B68. A stroke starts somewhere
+; WHOLE OF B71. A stroke starts somewhere
 ; in the box and steps ONE PIXEL in one
 ; of four directions, so the start has to
 ; be inset by one on the side the step
@@ -2931,7 +2931,7 @@ end
 ; The bolt's turn
 ;
 ; THE WALL COMES FIRST AND IT CLIPS THE
-; SWEEP, which is B69 and B70 and was
+; SWEEP, which is B72 and B73 and was
 ; the other way round when a board first
 ; played it. The cabinet plots one pixel
 ; a pass and the intercept bit answers
@@ -3038,7 +3038,7 @@ to bolt.out?
 end
 
 ; TWO QUESTIONS AND NOT ONE, and the
-; second is B70. A crossing test asks
+; second is B73. A crossing test asks
 ; whether the head went THROUGH a wall
 ; line, which is everything a bolt fired
 ; across the room can do -- and nothing
@@ -3405,7 +3405,7 @@ end
 ; per-life entry at $1806 calls $209D
 ; straight, so a death gets the build
 ; and none of the travel -- it changes
-; the room (B71) without ever being a
+; the room (B74) without ever being a
 ; journey. So this is called from
 ; `go.room` and nowhere else.
 make "slide.ms 0     ; the last slide

@@ -545,14 +545,14 @@ end
 ; an eraser either -- background pixels become transparent by design.  So the
 ; erase is a background stroke over the sprite's own box.
 ;
-; THREE STROKES OF PEN 3 AND NOT ONE OF PEN 8 (B65, fixed at M3 on 2026-08-30).
+; THREE STROKES OF PEN 3 AND NOT ONE OF PEN 8 (B68, fixed at M3 on 2026-08-30).
 ; This file used to lay one pen-8 stroke down each figure's spine and call it
 ; covered, and a wide pen in this interpreter is a filled DISC whose caps pinch
 ; to a single pixel rather than squaring the end off -- so seventeen of the
 ; man's 128 pixels and the same corners of every robot were never erased.  The
 ; harness could not show it, because the scene is deliberately held still and
 ; residue lands exactly where the next figure is drawn (section 19); a BOARD
-; showed it on the shipped game instead (B64).
+; showed it on the shipped game instead (B67).
 ;
 ; Pen 3 is the one wide pen that is an exact square -- radius 1.5, extent 1,
 ; corner (1, 1) at 2 against 2.25 -- so a stroke of it is a rectangle three

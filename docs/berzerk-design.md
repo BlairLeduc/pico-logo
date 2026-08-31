@@ -181,7 +181,7 @@ wall for the eraser to reach. Erase-in-place on a static maze is cheap
 **because** the maze is never redrawn, which is the same sentence as "nothing
 repairs it".
 
-**And the first board run said the eraser did not erase** ([B64](bugs.md)).
+**And the first board run said the eraser did not erase** ([B67](bugs.md)).
 The fix above was inset by what this section called the cap radius, on the
 reading that a round cap *extends* a stroke into a rectangle four pixels past
 each end. It does the opposite: `screen_gfx_line` stamps a **filled disc** at
@@ -202,7 +202,7 @@ above — the eraser cannot reach a wall even standing against one — so §8.3'
 extra step is now a belt rather than the braces.
 
 **The same eraser was in `tests/logo/p15m0`, which is where §3's numbers come
-from** ([B65](bugs.md), **fixed at M3 on 2026-08-30**). The in-place body of
+from** ([B68](bugs.md), **fixed at M3 on 2026-08-30**). The in-place body of
 69.90 ms at eleven robots was measured with one pen-8 stroke a figure where a
 correct eraser is three pen-3 strokes, so the erase pass was understated and
 in-place's 7.7 ms margin over clear-and-redraw is the thing at risk. The
@@ -453,7 +453,7 @@ that spill outside the stroke, which is the artefact that once made a
 present-cost harness measure every frame as a full screen
 ([hardware-notes §9.1](hardware-notes.md)).
 
-**Read "round" literally, because it cost a board session** ([B64](bugs.md)).
+**Read "round" literally, because it cost a board session** ([B67](bugs.md)).
 A wide pen is a **filled disc** stamped at every point of the line — the
 reference's [`setpensize`](../reference/Pico_Logo_Reference.md) says so — so a
 stroke is a stadium and its cap **pinches to a single pixel** rather than
@@ -625,7 +625,7 @@ and costs no slot at all. M3 decides against the slot budget rather than on
 looks.
 
 **AND A STROKE STARTS INSIDE THE BOX AND THEN STEPS OUT OF IT, which is
-[B68](bugs.md), found on a board at M4.** Six one-pixel strokes a frame, each
+[B71](bugs.md), found on a board at M4.** Six one-pixel strokes a frame, each
 *starting* somewhere in the box and then *stepping one pixel* in one of four
 directions — so the start has to be inset by one on the side the step can leave
 from, and it was not: from x + 0 a westward stroke reached x − 1, one column
@@ -638,7 +638,7 @@ walking source when a test asks for one.
 **DECIDED 2026-08-30 at M3: the strokes, and they stay inside the robot's own
 8 × 12.** The slot half was arithmetic — §7.4's table spends thirteen of
 fifteen and the two spare are M5's Otto and M7's polish, so four explosion
-frames were never available. The second half was not, and it is B64's lesson
+frames were never available. The second half was not, and it is B67's lesson
 applied before a board could teach it again: **a cloud that spreads needs an
 eraser that spreads with it**, pen 3 is the only wide pen that does not spill,
 and five or seven pen-3 strokes to erase six is a bad trade against a wall the
@@ -706,7 +706,7 @@ moves one pixel every other tick — 30 pixels a second, crossing the 244-wide
 room in 8.1 seconds.
 
 **AND THAT LAST SENTENCE IS TRUE OF THE MAN AND OF NOTHING ELSE**
-([B72](bugs.md), found 2026-08-31 off a recording of the cabinet). This section
+([B75](bugs.md), found 2026-08-31 off a recording of the cabinet). This section
 read the reload counter correctly and then assumed every object is *offered* it
 every tick. Only the man is. `BOTTOM_OF_SCREEN_INTERRUPT` ($26D9) runs once a
 video frame and moves **exactly two things** — the man through `MAN_PTR`
@@ -785,7 +785,7 @@ puts back until the next doorway. The extra step on each side is the eraser's
 margin: he stops with his outline one step clear of the ink.
 
 **AND THE TEST IS OCCUPANCY, NOT CROSSING** — corrected 2026-08-30 after a
-board found the hole ([B66](bugs.md)). §6.3's own phrasing, "which cell am I
+board found the hole ([B69](bugs.md)). §6.3's own phrasing, "which cell am I
 in, is the edge I am crossing walled", describes a **crossing** test, and a
 crossing test only fires when the man crosses the boundary the wall lies on.
 Walk *parallel* to a wall and step into the cell at its end and you cross
@@ -831,7 +831,7 @@ starts at `x = 30, y = 100` — just inside the left doorway — from
 `DEFAULT_PLAYER_STATE` ($187F), which is also where the three lives come from.
 
 **AND EVERY LIFE STARTS IN A DIFFERENT ROOM, which M3 got wrong and M4 read out
-of $1806** ([B71](bugs.md)). The per-life entry sets `MAN_X`/`MAN_Y` to the
+of $1806** ([B74](bugs.md)). The per-life entry sets `MAN_X`/`MAN_Y` to the
 start pair and calls `$209D`, which builds a room from the *current* coordinates
 and does not return until you die — so what `$1821` does immediately after is
 for the **next** life: `call RANDOM`, then `ld ($4345),hl`, which puts `ROOM_X`
@@ -846,7 +846,7 @@ just proved it can kill him.
 **AND IT HAS NOW BEEN WATCHED AS WELL AS READ** (2026-08-31). A board reported
 the cabinet rebuilding the room a death happened in, this file was reversed to
 match, and a second look at the cabinet showed the death moving the player after
-all — so the reversal was withdrawn the same day and B71 stands. **The ROM and
+all — so the reversal was withdrawn the same day and B74 stands. **The ROM and
 the cabinet agree.** One thing is worth keeping from the detour: the death loop
 M3 was avoiding is *not* what a new room buys, since the eleven spawn cells are
 the fifteen less the four doorway cells and he comes back in a doorway cell, so
@@ -1124,7 +1124,7 @@ two axes are satisfied independently where the line ties them together), which
 is what the interval is there to clean up.
 
 **And the wall clips that segment, which M4 got wrong first and a board found
-twice** ([B69](bugs.md)). Nine pixels in one step makes wall-versus-actor an
+twice** ([B72](bugs.md)). Nine pixels in one step makes wall-versus-actor an
 *order*, and the first build chose actors first, on the stated grounds that a
 robot standing against a wall is the case that matters. It is — and testing
 actors over the whole nine pixels also reaches everything on the **far** side of
@@ -1147,12 +1147,12 @@ box — SR.TAB starts the man's bolt at his x + 7 of 8 — so the exclusion is
 explicit, and it is paid only where a hit is otherwise confirmed.
 
 **The wall test is a crossing AND an occupancy, and the second half is
-[B70](bugs.md).** A crossing test — cache the head's cell, and when it changes
+[B73](bugs.md).** A crossing test — cache the head's cell, and when it changes
 ask whether the edge between them is walled — is everything a bolt fired *across*
 the room can do, and **nothing a bolt fired along one does**: shoot level with a
 horizontal wall and the head runs down the very line the wall is drawn on, cell
 after cell, crossing nothing, and because a bolt is erased in place the next
-frame's erase lifts the wall instead. That is [B66](bugs.md)'s shape one
+frame's erase lifts the wall instead. That is [B69](bugs.md)'s shape one
 milestone later, and M4 had already met half of it (a bolt travelling left or up
 that *lands* on a wall line, patched with a probe offset) without seeing the
 general case.
@@ -1221,7 +1221,7 @@ TOO.** `$209D` advances the robot threshold (`$20D8`) and decrements
 it) and the per-life entry (`$1806` → `$181E`). So every room and every death
 costs a step of the ramp, `ROBOT_SPEED` runs 4, 3, 2, 1 over the first four
 builds and **stays at 1** — which is the *shared* step rate the room's whole
-crowd divides between them (§8.1, [B72](bugs.md)), so it is twice the player's
+crowd divides between them (§8.1, [B75](bugs.md)), so it is twice the player's
 speed only for the last robot left standing. That is the cabinet, and what stops it running away is that
 the *game* ends: three lives, then `DEFAULT_PLAYER_STATE` ($187F — twelve bytes,
 `01 00 00 1E 64 03 60 00 05 5A 00 00`, which is the start pair, three deaths,
@@ -1828,9 +1828,9 @@ Each leaves `ctest --preset=tests` green, and each ends with a board reading.
 |---|---|---|
 | **M0** | The measurement harness | **DONE 2026-08-29 — all six questions answered on a Pico 2 W, gate FAILED at 77.35 ms against 50** (106.30 before §7's figures changed). Erase strategy decided: **erase-in-place**, once the figures are stamps. §15.3, and the decision it leaves is §22 Q2 |
 | M1 | The room | **DONE 2026-08-30.** The maze is a function of `(room.x, room.y)`; walk out and back and it is the same room. Read on a board at both clocks: a room change is **30 ms at `fast`** (worst 33) and 44 at `normal`, which is M0's parts to 3 %. §19's M1 note |
-| M2 | The man | **DONE 2026-08-30.** Walls kill, doors work, and the eight directions read right on the keyboard. 35 procedures, 40 host tests, `ctest` green at 84/84, and read on a board four times: the frame fits at both clocks, and [B64](bugs.md) (the eraser) and [B66](bugs.md) (the end of a wall) came back from it. The milestone's own decision was §7.4's: `setrot "flip`, which takes the cabinet's inventory from twenty-one costumes to thirteen of fifteen. §19's M2 note |
-| M3 | The robots | **DONE 2026-08-30, read on a board, and the gate fails by three milliseconds — deferred to M4 with §22 Q2.** `fast`: HUD 24, FRAME 53, WORST 100 (a defect, fixed, ~76 predicted), ROOM 23; `normal` unplayable. An ordinary frame at eleven robots is **53 ms against 50 — 18.9 fps**, better than §15.3's 55–59 projection and still over. §15.5's clock precondition came forward from M6 with the reading. 51 procedures, 74 host tests. §19's M3 note Seek, `IQ` with §6.3's cell-crossing cache, the five-room count cycle, ROBOT_SPEED as the arcade's reload counter, robots killing robots and killing the man, and the explosion. 48 procedures, 70 host tests, `ctest` green at 84/84. Three decisions and one finding, all in §19's M3 note; [B65](bugs.md) fixed with it |
-| M4 | The bolts | **READ ON A BOARD 2026-08-30 — the frame rate is good and three defects came back, all fixed.** Both bolt kinds in the cabinet's one seven-slot array, the three firing windows at their boundaries, the shared `RWAIT` holdoff, the man's five shooting poses, §13's below-10,000 table and §12's first row. 72 procedures, 110 host tests, `ctest` green at 84/84. **HUD 26, FRAME 56, WORST 114, ROOM 24 at `fast`** — 17.9 fps with bolts in the air, called "very good", which **answers §22 Q2 at 18 fps with eleven robots**; `WORST` 114 is the one left open. **The alignment rule is corrected rather than confirmed** — the array is processed three times a tick, not twice (§10.2). Five defects: [B69](bugs.md), [B70](bugs.md), [B68](bugs.md), [B71](bugs.md) and **[B72](bugs.md), the robots running ten times too fast because `ROBOT_SPEED` is the period the whole crowd shares**. **And the lives came forward from M6**, because the ramp is the cabinet's and the bound on it was missing. §19's M4 note |
+| M2 | The man | **DONE 2026-08-30.** Walls kill, doors work, and the eight directions read right on the keyboard. 35 procedures, 40 host tests, `ctest` green at 84/84, and read on a board four times: the frame fits at both clocks, and [B67](bugs.md) (the eraser) and [B69](bugs.md) (the end of a wall) came back from it. The milestone's own decision was §7.4's: `setrot "flip`, which takes the cabinet's inventory from twenty-one costumes to thirteen of fifteen. §19's M2 note |
+| M3 | The robots | **DONE 2026-08-30, read on a board, and the gate fails by three milliseconds — deferred to M4 with §22 Q2.** `fast`: HUD 24, FRAME 53, WORST 100 (a defect, fixed, ~76 predicted), ROOM 23; `normal` unplayable. An ordinary frame at eleven robots is **53 ms against 50 — 18.9 fps**, better than §15.3's 55–59 projection and still over. §15.5's clock precondition came forward from M6 with the reading. 51 procedures, 74 host tests. §19's M3 note Seek, `IQ` with §6.3's cell-crossing cache, the five-room count cycle, ROBOT_SPEED as the arcade's reload counter, robots killing robots and killing the man, and the explosion. 48 procedures, 70 host tests, `ctest` green at 84/84. Three decisions and one finding, all in §19's M3 note; [B68](bugs.md) fixed with it |
+| M4 | The bolts | **READ ON A BOARD 2026-08-30 — the frame rate is good and three defects came back, all fixed.** Both bolt kinds in the cabinet's one seven-slot array, the three firing windows at their boundaries, the shared `RWAIT` holdoff, the man's five shooting poses, §13's below-10,000 table and §12's first row. 72 procedures, 110 host tests, `ctest` green at 84/84. **HUD 26, FRAME 56, WORST 114, ROOM 24 at `fast`** — 17.9 fps with bolts in the air, called "very good", which **answers §22 Q2 at 18 fps with eleven robots**; `WORST` 114 is the one left open. **The alignment rule is corrected rather than confirmed** — the array is processed three times a tick, not twice (§10.2). Five defects: [B72](bugs.md), [B73](bugs.md), [B71](bugs.md), [B74](bugs.md) and **[B75](bugs.md), the robots running ten times too fast because `ROBOT_SPEED` is the period the whole crowd shares**. **And the lives came forward from M6**, because the ramp is the cabinet's and the bound on it was missing. §19's M4 note |
 | M5 | Evil Otto | The timer arithmetic, walls ignored, robots eaten |
 | M6 | The campaign, the sound and the voice | Both difficulty tables, lives, bonus, the attract screen, the effects off the ROM, and §14.2's four fixed sentences spoken with `say` and captioned |
 | M7 | Polish | The taunts (spoken, over two `pick`s), the deaths and the play test. **The scroll came out of this row on 2026-08-31** — asked for, transcribed and built, and its note is below |
@@ -1989,7 +1989,7 @@ right. Verified to fail on a mutation in **each** path — the bits swapped, and
 the segment's `y` negated.
 
 **It checks each segment's MIDDLE, and that is not the whole property**
-([B67](bugs.md), found on a board 2026-08-30). A run of the right shape in the
+([B70](bugs.md), found on a board 2026-08-30). A run of the right shape in the
 right place that simply *stops short* agrees with the table at its midpoint and
 still leaves a gap at its end — which is what the leftmost column's horizontal
 runs did, because that column is 52 steps wide and the ROM's run is 48.
@@ -2123,7 +2123,7 @@ is whether M1's gate instrument survives into M3 — which is a real question,
 because §19's M1 note is right that a room whose picture and table disagree is
 a robot walking through a wall you can see.
 
-**And the man left a trail in every direction**, which is [B64](bugs.md) and is
+**And the man left a trail in every direction**, which is [B67](bugs.md) and is
 fixed above: the eraser was one pen-8 stroke and a wide pen is a disc, so
 seventeen of his 128 pixels survived every frame.
 
@@ -2227,7 +2227,7 @@ prediction for the doorway is unverifiable through it. `WORST` is now the worst
 **body**, taken before `sync`, which is Battlezone's own `body.ms`/`frame.ms`
 split: the margin becomes visible and an overrun still reads above 50.
 
-**And the board found the collision hole that matters** ([B66](bugs.md)):
+**And the board found the collision hole that matters** ([B69](bugs.md)):
 *"man does not collide with end of wall."* §8.3 above carries the correction —
 the test was **crossing** and had to be **occupancy** — and it is the more
 interesting of the two findings, because the sentence it came from is §6.3's
@@ -2236,8 +2236,8 @@ and has been in this document since it was drafted.
 #### CLOSED on a board, 2026-08-30
 
 All three defects the play sessions found are **confirmed fixed on hardware**:
-the man's trail ([B64](bugs.md)), the end of a wall ([B66](bugs.md)) and the
-leftmost column's short runs ([B67](bugs.md)). M2 is done.
+the man's trail ([B67](bugs.md)), the end of a wall ([B69](bugs.md)) and the
+leftmost column's short runs ([B70](bugs.md)). M2 is done.
 
 **What the milestone cost, and it is worth stating plainly: three defects, and
 a host test could have caught every one of them.** The eraser assumed a wide
@@ -2403,7 +2403,7 @@ building M0 on the Vectrex port's gloss of `$23A0` rather than on `$23A0`:**
    450 numbers; 0.6 of a pixel a frame is not a set at all.
 3. **The explosion costs no costume slot and stays inside the robot's own
    8 × 12** (§7.6), so his own eraser is the only one it needs and no wide pen
-   spills onto a wall ([B64](bugs.md)).
+   spills onto a wall ([B67](bugs.md)).
 
 **And one thing M2 did not need: a death restarts the room.** M2 could respawn
 the man in place because there was nothing in the room to respawn into; with
@@ -2468,19 +2468,19 @@ about 5 ms, and a breach of M2's own "one text job a frame" rule, because
 through `show.text`. The next session should split the transition the way M1
 split the room build from its present, rather than reason about it from here.
 
-**THE THREE DEFECTS, AND TWO OF THEM ARE AN OLD SHAPE.** [B69](bugs.md) — *a
+**THE THREE DEFECTS, AND TWO OF THEM ARE AN OLD SHAPE.** [B72](bugs.md) — *a
 bolt killed through a wall, and past the point of one it had itself stopped on*
 — is this milestone's own decision coming back: nine pixels a step makes
 wall-versus-actor an **order**, M4 chose actors first and said so, and testing
 actors over the whole nine pixels reaches the far side of a wall the same step
 crosses. **Neither order is the answer and clipping is**, because wall-first
-breaks the case actors-first was protecting. [B70](bugs.md) — *a bolt fired
+breaks the case actors-first was protecting. [B73](bugs.md) — *a bolt fired
 along a wall ran down the line and the erase took the wall with it* — is
-[B66](bugs.md) again one milestone later: a **crossing** test cannot see
+[B69](bugs.md) again one milestone later: a **crossing** test cannot see
 something moving parallel to the edge it is asking about. M4 had already met half
 of that case and patched it with a probe offset, which is the near miss worth
 recording; the general answer is the cabinet's own question, *may this pixel be
-here*, and for something one pixel wide it is two `modulo`s. [B68](bugs.md) — the
+here*, and for something one pixel wide it is two `modulo`s. [B71](bugs.md) — the
 explosion's westmost pixel — is small and **its test is not**: the assertion was
 right and `mock_random` returns a constant 42, so the test could only ever draw
 one of the procedure's twenty-four strokes. The mock now takes a walking source
@@ -2540,7 +2540,7 @@ moves one.**
 boundary pixel in the cell to its right and the one below it, so a bolt
 travelling **left or up** that lands exactly *on* a wall line never registers a
 crossing — it would be drawn over the wall and rub a hole in it on the next
-frame's erase, which is [B64](bugs.md)'s family and would have shipped invisibly
+frame's erase, which is [B67](bugs.md)'s family and would have shipped invisibly
 until a board session. One probe offset in those two directions makes the landing
 a crossing, and `test_a_bolt_that_lands_on_the_wall_line_dies_on_it` pins it.
 
@@ -2560,7 +2560,7 @@ end of the game and the reset**, and leaves the bonus life, the attract screen
 and the cabinet's HUD in M6. §21 risk 6's pattern, and M3's own precedent for
 pulling §15.5's clock precondition forward for the same kind of reason.
 
-**Reading $1806 for that turned up [B71](bugs.md), which is M3's decision
+**Reading $1806 for that turned up [B74](bugs.md), which is M3's decision
 resting on a gloss.** "A death restarts the room" is not what the arcade does:
 `$1821` sets `ROOM_X`/`ROOM_Y` from `call RANDOM` *after* `$209D` returns — and
 `$209D` does not return until you die — so **every life starts in a different
@@ -2572,7 +2572,7 @@ tried on a board's report and withdrawn the same day after a second look at the
 cabinet; §8.3 carries it.
 
 **AND A RECORDING OF THE CABINET SAID THE ROBOTS WERE ABOUT TEN TIMES TOO
-FAST** ([B72](bugs.md), 2026-08-31), which is the finding of the whole
+FAST** ([B75](bugs.md), 2026-08-31), which is the finding of the whole
 milestone and is not a bolt at all. The report arrived as *"the robots move much
 faster in the port (twice as fast?)"* and was settled by the observation that
 followed it: ***"at the start of the game, the robots move about once per
@@ -2585,7 +2585,7 @@ correction and what falls out of it: the crowd is slow *because* it is a crowd,
 killing robots speeds up the survivors, and a robot is never faster than the man
 until he is the last one left. **This is the third time in this port that a
 design sentence was right about a mechanism and wrong about how often it runs**
-(B66's crossing test, B70's, and now this), and it is the first one a host test
+(B69's crossing test, B73's, and now this), and it is the first one a host test
 could not have found — nothing in the workspace knows what the cabinet's
 interrupt did.
 
@@ -2676,7 +2676,7 @@ leaves; the crowd is already gone.
 **A DEATH DOES NOT SCROLL.** `$21CF` — the doorway — reaches the scroll and then
 falls into the build; the per-life entry at `$1806` calls `$209D` directly, so a
 death gets the build and none of the travel. It changes the room
-([B71](bugs.md)) without ever being a journey, which is the sharper version of
+([B74](bugs.md)) without ever being a journey, which is the sharper version of
 the same rule: what the scroll marks is a room you *walked* to. So `slide.room`
 is called from `go.room` and nowhere else, and a death still costs a build and a
 step of the ramp and no travel.
@@ -2738,7 +2738,7 @@ repeating them.
   **The below-10,000 one is done at M4**, all four columns including the reset
   at 7,500 and `RWAIT`'s −10 per room; the second table is M6's with the score
   that indexes it.
-- **The robots' speed** (M4, [B72](bugs.md)): the period is
+- **The robots' speed** (M4, [B75](bugs.md)): the period is
   `(vectors) × ROBOT_SPEED` and not `ROBOT_SPEED`, so the tests are about the
   *room* and not one robot — a crowd of ten at `ROBOT_SPEED` 4 takes about a
   second a pixel each (which is what a recording of the cabinet shows), thinning
