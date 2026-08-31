@@ -14,6 +14,7 @@
 #include "eval.h"
 #include "format.h"
 #include "lexer.h"
+#include "limits.h"
 #include "repl.h"
 #include "devices/io.h"
 #include <string.h>
@@ -34,12 +35,10 @@ static bool loading_in_progress = false;
 // Maximum line length for load
 #define LOAD_MAX_LINE 256
 
-// Maximum procedure buffer for load
-#define LOAD_MAX_PROC 4096
-
 // Static buffer for assembling procedure definitions during load.
 // Safe as static because loading_in_progress prevents reentrancy.
-static char load_proc_buffer[LOAD_MAX_PROC];
+// See LOGO_LOAD_PROC_BUFFER_SIZE in core/limits.h for the size.
+static char load_proc_buffer[LOGO_LOAD_PROC_BUFFER_SIZE];
 
 // load pathname - loads and executes file contents
 static Result prim_load(Evaluator *eval, int argc, Value *args)
@@ -118,7 +117,7 @@ static Result prim_load(Evaluator *eval, int argc, Value *args)
 
         if (in_procedure_def)
         {
-            ProcDefStatus status = repl_proc_def_append(proc_buffer, LOAD_MAX_PROC, &proc_len, line);
+            ProcDefStatus status = repl_proc_def_append(proc_buffer, LOGO_LOAD_PROC_BUFFER_SIZE, &proc_len, line);
             if (status == PROC_DEF_OVERFLOW)
             {
                 // The definition is larger than the in-memory buffer.

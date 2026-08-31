@@ -363,11 +363,11 @@ extern "C"
             bool restore_palette_called;     // Was restore_palette called?
         } palette;
 
-        // Shape tracking
+        // Shape tracking. The shapes themselves live in the costume pool
+        // the board uses, not here -- read them with mock_device_get_shape.
         struct
         {
             uint8_t current_shape;           // Current shape number (0-15)
-            uint8_t shapes[15][16];          // Shape data for shapes 1-15 (8 columns x 16 rows)
         } shape;
 
         // WiFi state tracking
@@ -517,6 +517,11 @@ extern "C"
 
     // Configure the result snap_costume returns (default true)
     void mock_device_set_snap_result(bool result);
+
+    // Read a shape (1-15) back out of the costume pool: w*h palette
+    // indices, row-major, 255 transparent and 254 the wearer's pen
+    // colour. NULL when no shape has been put in the slot.
+    const uint8_t *mock_device_get_shape(uint8_t shape_num, uint8_t *w, uint8_t *h);
 
     // Sensing fixtures. Stage turtle n's rendered raster (mask copied from
     // raster->mask, w*h bytes); pass NULL to clear it. Then paint the

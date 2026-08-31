@@ -8,8 +8,9 @@
 ; Every scene is also useful on its own:
 ;   gfxsprites   gfxmotion   gfxtiles   gfxcollision
 ;
-; Pico Logo has eight live turtles. Each can wear a bitmap or full-colour
-; costume, move and animate autonomously, rotate, scale, stamp into the
+; Pico Logo has eight live turtles. Each can wear a costume -- written by
+; hand or captured off the canvas, there is only the one kind -- and can
+; move and animate autonomously, rotate, scale, stamp into the
 ; canvas, and take part in pixel-accurate collision tests. The canvas is a
 ; separate permanent layer for scenery, tilemaps, trails and graphics text.
 ;
@@ -41,24 +42,227 @@ to gfx.palette
 end
 
 to gfx.shapes
+  ; A shape is ~610 characters of source, and a procedure that holds
+  ; more than about six of them is larger than `load` will assemble
+  ; or the editor will open. So the shapes come in four groups.
+  gfx.shapes.runner
+  gfx.shapes.world
+  gfx.shapes.shots
+  gfx.shapes.impact
+end
+
+to gfx.shapes.runner
   ; 1-2: a two-frame running character
-  putsh 1 [24 24 60 126 90 24 60 90 24 36 66 66 66 36 0 0]
-  putsh 2 [24 24 60 126 90 24 60 90 24 36 24 24 36 66 0 0]
+  putsh 1 [
+    fffffffffffffefefefeffffffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffefefefefefefefefefefefeffff
+    fffffefefffffefefefefffffefeffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffefefffffefefefefffffefeffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefffffffffefeffffffff
+    fffffefefffffffffffffffffefeffff
+    fffffefefffffffffffffffffefeffff
+    fffffefefffffffffffffffffefeffff
+    fffffffffefefffffffffefeffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+  ]
+  putsh 2 [
+    fffffffffffffefefefeffffffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffefefefefefefefefefefefeffff
+    fffffefefffffefefefefffffefeffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffefefffffefefefefffffefeffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefffffffffefeffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefffffffffefeffffffff
+    fffffefefffffffffffffffffefeffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+  ]
+end
 
+to gfx.shapes.world
   ; 3: ship, 4: asteroid, 5-6: spinning pickup
-  putsh 3 [24 60 126 255 90 90 24 24 60 126 219 24 24 0 0 0]
-  putsh 4 [0 24 126 255 231 219 255 126 60 126 219 126 60 0 0 0]
-  putsh 5 [0 24 60 102 195 195 195 195 195 195 102 60 24 0 0 0]
-  putsh 6 [0 0 24 24 60 60 60 60 60 60 24 24 0 0 0 0]
+  putsh 3 [
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffefefefefefefefefefefefeffff
+    fefefefefefefefefefefefefefefefe
+    fffffefefffffefefefefffffefeffff
+    fffffefefffffefefefefffffefeffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffefefefefefefefefefefefeffff
+    fefefefefffffefefefefffffefefefe
+    fffffffffffffefefefeffffffffffff
+    fffffffffffffefefefeffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+  ]
+  putsh 4 [
+    ffffffffffffffffffffffffffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffefefefefefefefefefefefeffff
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefffffffffefefefefefe
+    fefefefefffffefefefefffffefefefe
+    fefefefefefefefefefefefefefefefe
+    fffffefefefefefefefefefefefeffff
+    fffffffffefefefefefefefeffffffff
+    fffffefefefefefefefefefefefeffff
+    fefefefefffffefefefefffffefefefe
+    fffffefefefefefefefefefefefeffff
+    fffffffffefefefefefefefeffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+  ]
+  putsh 5 [
+    ffffffffffffffffffffffffffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffefefefefffffffffefefefeffff
+    fefefefefffffffffffffffffefefefe
+    fefefefefffffffffffffffffefefefe
+    fefefefefffffffffffffffffefefefe
+    fefefefefffffffffffffffffefefefe
+    fefefefefffffffffffffffffefefefe
+    fefefefefffffffffffffffffefefefe
+    fffffefefefefffffffffefefefeffff
+    fffffffffefefefefefefefeffffffff
+    fffffffffffffefefefeffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+  ]
+  putsh 6 [
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffffffefefefeffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+  ]
+end
 
+to gfx.shapes.shots
   ; 7: projectile, 8: solid tile
-  putsh 7 [0 0 0 24 24 60 126 255 126 60 24 24 0 0 0 0]
-  putsh 8 [255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255]
+  putsh 7 [
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffefefefefefefefefefefefeffff
+    fefefefefefefefefefefefefefefefe
+    fffffefefefefefefefefefefefeffff
+    fffffffffefefefefefefefeffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffffffffffefefefeffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+  ]
+  putsh 8 [
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+    fefefefefefefefefefefefefefefefe
+  ]
+end
 
+to gfx.shapes.impact
   ; 9-11: three-frame impact animation
-  putsh 9  [0 0 0 0 24 0 60 24 126 60 24 0 0 0 0 0]
-  putsh 10 [0 0 66 24 165 90 60 255 60 90 165 24 66 0 0 0]
-  putsh 11 [129 36 66 24 0 129 36 0 66 0 36 129 0 66 36 129]
+  putsh 9 [
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    fffffffffffffefefefeffffffffffff
+    ffffffffffffffffffffffffffffffff
+    fffffffffefefefefefefefeffffffff
+    fffffffffffffefefefeffffffffffff
+    fffffefefefefefefefefefefefeffff
+    fffffffffefefefefefefefeffffffff
+    fffffffffffffefefefeffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+  ]
+  putsh 10 [
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    fffffefefffffffffffffffffefeffff
+    fffffffffffffefefefeffffffffffff
+    fefefffffefefffffffffefefffffefe
+    fffffefefffffefefefefffffefeffff
+    fffffffffefefefefefefefeffffffff
+    fefefefefefefefefefefefefefefefe
+    fffffffffefefefefefefefeffffffff
+    fffffefefffffefefefefffffefeffff
+    fefefffffefefffffffffefefffffefe
+    fffffffffffffefefefeffffffffffff
+    fffffefefffffffffffffffffefeffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+    ffffffffffffffffffffffffffffffff
+  ]
+  putsh 11 [
+    fefefffffffffffffffffffffffffefe
+    fffffffffefefffffffffefeffffffff
+    fffffefefffffffffffffffffefeffff
+    fffffffffffffefefefeffffffffffff
+    ffffffffffffffffffffffffffffffff
+    fefefffffffffffffffffffffffffefe
+    fffffffffefefffffffffefeffffffff
+    ffffffffffffffffffffffffffffffff
+    fffffefefffffffffffffffffefeffff
+    ffffffffffffffffffffffffffffffff
+    fffffffffefefffffffffefeffffffff
+    fefefffffffffffffffffffffffffefe
+    ffffffffffffffffffffffffffffffff
+    fffffefefffffffffffffffffefeffff
+    fffffffffefefffffffffefeffffffff
+    fefefffffffffffffffffffffffffefe
+  ]
 end
 
 to gfx.setup
@@ -94,13 +298,13 @@ to gfx.title :text
 end
 
 ;--------------------------------------------------------------------------
-; Scene 1: bitmap costumes are cheap, tintable actors.
+; Scene 1: pen-colour costumes are cheap, tintable actors.
 ;--------------------------------------------------------------------------
 
 to gfxsprites
   gfx.setup
   gfx.reset
-  gfx.title [BITMAP SPRITES  ROTATION  SCALE]
+  gfx.title [PEN COLOUR SPRITES  ROTATION  SCALE]
   gfx.label -142 112 :gfx.tile [FIXED]
   gfx.label -48 112 :gfx.tile [FLIP]
   gfx.label 48 112 :gfx.tile [FULL]
@@ -114,7 +318,7 @@ to gfxsprites
     setpos [126 -76] stamp
   ]
 
-  ; The same monochrome costume can be tinted per actor.
+  ; A costume drawn in fe -- the pen -- is tinted per actor by setpc.
   ask 0 [pu setsh 1 setpc :gfx.player setrot "fixed setpos [-108 65] st]
   ask 1 [pu setsh 1 setpc :gfx.sun setrot "flip seth 270 setpos [-12 65] st]
   ask 2 [pu setsh 3 setpc :gfx.enemy setrot "full seth 45 setpos [84 65] st]

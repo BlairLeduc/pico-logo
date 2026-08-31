@@ -385,6 +385,26 @@ extern "C" {
 // where there is nothing to be won by bounding it tighter.
 #define LOGO_EDITOR_PROC_BUFFER_SIZE 4096
 
+// Longest procedure definition `load` will assemble, in bytes of source.
+//
+// `load` reads a file a line at a time and accumulates a `to ... end` into
+// one static buffer before handing it to `proc_define_from_text`, so this
+// bounds the source text of a single procedure, not the workspace it turns
+// into (the graphics demo's eleven shapes cost 2,952 nodes and 5,504 atom
+// bytes however they are grouped).
+//
+// 4 KB is generous for procedures of code and tight for procedures of
+// picture: a 16x16 turtle shape is ~610 bytes of `putsh` rows, so about six
+// of them fill this. Shape definitions want splitting across procedures,
+// which is what `logo/demos/graphics` does -- and they want it anyway,
+// because LOGO_EDITOR_PROC_BUFFER_SIZE is the same size and a procedure
+// that loads but cannot be edited is the worse failure.
+//
+// OVERFLOW: `load` abandons the definition and reports ERR_OUT_OF_SPACE
+// naming the file, rather than truncating it into a procedure that would
+// silently do the wrong thing.
+#define LOGO_LOAD_PROC_BUFFER_SIZE 4096
+
 // The two clocks `hw.setcpu` selects, in kHz.
 //
 // `fast` is an overclock outside the RP2350's datasheet -- 150 MHz is its rated
@@ -410,6 +430,32 @@ extern "C" {
 // damaged directory tree from running the stack out on a board. The internal
 // filesystem is a flat root plus the odd subdirectory, so four is generous.
 #define LOGO_FSCK_MAX_DEPTH 4
+
+// Turtle shape geometry, in pixels. A shape in slots 1-15 is one thing
+// however it was made: a rectangle of palette indices, written by hand
+// with `putsh` or captured off the canvas with `snapsh`, and the device
+// keeps both in the same costume pool.
+//
+// The bounds are the device's. The compositor's raster is 32x32, so a
+// larger shape could not be drawn; below 8 a shape is smaller than the
+// turtle it stands in for.
+//
+// OVERFLOW: `putsh` and `snapsh` reject a shape outside these bounds
+// with ERR_DOESNT_LIKE_INPUT, and one the costume pool has no room for
+// with ERR_OUT_OF_SPACE.
+#define LOGO_SHAPE_MIN_DIM 8
+#define LOGO_SHAPE_MAX_DIM 32
+#define LOGO_SHAPE_MAX_PIXELS (LOGO_SHAPE_MAX_DIM * LOGO_SHAPE_MAX_DIM)
+
+// The two shape pixel values that are not literal colours.
+//
+// 255 is the graphics background colour number, so a shape pixel of 255
+// shows whatever is behind the turtle. 254 is the pen colour number, so
+// a shape pixel of 254 is drawn in the wearing turtle's own pen colour --
+// which is how one shape is worn by six turtles in six colours, and how
+// the bitmap shapes that predate colour still behave as they did.
+#define LOGO_SHAPE_TRANSPARENT 255
+#define LOGO_SHAPE_PEN 254
 
 #ifdef __cplusplus
 }

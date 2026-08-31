@@ -1266,7 +1266,24 @@ static Result prim_restorepalette(Evaluator *eval, int argc, Value *args)
 // Shape primitives
 //==========================================================================
 
-// getsh shapenumber - Output list of 16 numbers representing shape (1-15)
+// A shape is one thing however it was made -- a rectangle of palette
+// indices 8 to 32 pixels a side, written here or captured by `snapsh`.
+// Logo sees it as one word a row, two hex digits a pixel: `ff` is
+// transparent, `fe` is the wearing turtle's pen colour, and every other
+// value is the colour number it looks like.
+static const char shape_hex[] = "0123456789abcdef";
+
+// Value of one hex digit, or -1
+static int hex_value(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+// getsh shapenumber - Output the shape's rows, the same list putsh takes.
+// A slot no shape has been put in outputs the empty list.
 static Result prim_getsh(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
@@ -1274,37 +1291,49 @@ static Result prim_getsh(Evaluator *eval, int argc, Value *args)
     REQUIRE_NUMBER(args[0], shape_num);
 
     // Shape must be 1-15 (shape 0 is the line-drawn turtle)
-    if (shape_num < 1 || shape_num > 15)
+    if (shape_num < 1 || shape_num > 15 || shape_num != (float)(int)shape_num)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
 
     const LogoConsoleTurtle *turtle = get_turtle_ops();
-    if (!turtle || !turtle->get_shape_data)
+    uint8_t w = 0, h = 0;
+    const uint8_t *pixels = NULL;
+    if (turtle && turtle->get_shape_data)
     {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+        pixels = turtle->get_shape_data((uint8_t)shape_num, &w, &h);
+    }
+    if (!pixels)
+    {
+        return result_ok(value_list(NODE_NIL));
     }
 
-    uint8_t shape_data[16];
-    if (!turtle->get_shape_data((uint8_t)shape_num, shape_data))
-    {
-        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
-    }
-
-    // Build a list of 16 numbers
+    // Built bottom row first, so consing puts the rows back in order
     Node list = NODE_NIL;
-    for (int i = 15; i >= 0; i--)
+    for (int row = h - 1; row >= 0; row--)
     {
-        char buf[8];
-        snprintf(buf, sizeof(buf), "%d", shape_data[i]);
-        Node atom = mem_atom(buf, strlen(buf));
+        char text[LOGO_SHAPE_MAX_DIM * 2];
+        for (int col = 0; col < w; col++)
+        {
+            uint8_t px = pixels[row * w + col];
+            text[col * 2] = shape_hex[px >> 4];
+            text[col * 2 + 1] = shape_hex[px & 0x0f];
+        }
+        // A row is 16 to 64 characters, so a full atom region is a real
+        // possibility here; a nil atom would go into the list as a word
+        // with no characters behind it (B26)
+        Node atom = mem_atom(text, (size_t)w * 2);
+        if (mem_is_nil(atom))
+        {
+            return result_error(ERR_OUT_OF_SPACE);
+        }
         list = mem_cons(atom, list);
     }
 
     return result_ok(value_list(list));
 }
 
-// putsh shapenumber shapespec - Set shape data for shapes 1-15
+// putsh shapenumber shapespec - Define shapes 1-15 from rows of hex pixels
 static Result prim_putsh(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
@@ -1312,7 +1341,7 @@ static Result prim_putsh(Evaluator *eval, int argc, Value *args)
     REQUIRE_NUMBER(args[0], shape_num);
 
     // Shape must be 1-15 (shape 0 cannot be changed)
-    if (shape_num < 1 || shape_num > 15)
+    if (shape_num < 1 || shape_num > 15 || shape_num != (float)(int)shape_num)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
@@ -1322,43 +1351,64 @@ static Result prim_putsh(Evaluator *eval, int argc, Value *args)
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
 
-    // Extract 16 numbers from the list
-    uint8_t shape_data[16];
-    Node list = mem_first_cell(args[1].as.node);
-    int count = 0;
+    // Static because a 32x32 shape is a kilobyte, too big a frame for the
+    // primitive call path; putsh is never re-entered
+    static uint8_t pixels[LOGO_SHAPE_MAX_PIXELS];
 
-    while (!mem_is_nil(list) && count < 16)
+    int w = 0, h = 0;
+    for (Node rows = mem_first_cell(args[1].as.node); !mem_is_nil(rows);
+         rows = mem_next_cell(rows))
     {
-        Node item = mem_car(list);
-        Value item_val = mem_is_word(item) ? value_word(item) : value_list(item);
-        
-        float num;
-        if (!value_to_number(item_val, &num))
+        Node item = mem_car(rows);
+        const char *text = mem_is_word(item) ? mem_word_ptr(item) : NULL;
+        size_t len = text ? mem_word_len(item) : 0;
+
+        // Every row is the same width, and that width is the shape's
+        if (!text || (len & 1) || (h > 0 && (int)len != w * 2))
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+        }
+        if (h == 0)
+        {
+            w = (int)len / 2;
+            if (w < LOGO_SHAPE_MIN_DIM || w > LOGO_SHAPE_MAX_DIM)
+            {
+                return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+            }
+        }
+        if (h >= LOGO_SHAPE_MAX_DIM)
         {
             return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
         }
 
-        if (num < 0 || num > 255)
+        for (int col = 0; col < w; col++)
         {
-            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+            int hi = hex_value(text[col * 2]);
+            int lo = hex_value(text[col * 2 + 1]);
+            if (hi < 0 || lo < 0)
+            {
+                return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+            }
+            pixels[h * w + col] = (uint8_t)((hi << 4) | lo);
         }
-
-        shape_data[count] = (uint8_t)num;
-        count++;
-        list = mem_next_cell(list);
+        h++;
     }
 
-    if (count != 16 || !mem_is_nil(list))
+    if (h < LOGO_SHAPE_MIN_DIM)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
+
     const LogoConsoleTurtle *turtle = get_turtle_ops();
     if (!turtle || !turtle->put_shape_data)
     {
         return result_none();
     }
 
-    turtle->put_shape_data((uint8_t)shape_num, shape_data);
+    if (!turtle->put_shape_data((uint8_t)shape_num, (uint8_t)w, (uint8_t)h, pixels))
+    {
+        return result_error(ERR_OUT_OF_SPACE);
+    }
     return result_none();
 }
 
@@ -1528,7 +1578,7 @@ static Result prim_write(Evaluator *eval, int argc, Value *args)
 }
 
 // snapsh shapenumber width height - Capture the canvas region centred on
-// the (first active) turtle into a colour costume
+// the (first active) turtle into a shape, the same store putsh writes
 static Result prim_snapsh(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
@@ -1541,11 +1591,13 @@ static Result prim_snapsh(Evaluator *eval, int argc, Value *args)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
     }
-    if (width < 8 || width > 32 || width != (float)(int)width)
+    if (width < LOGO_SHAPE_MIN_DIM || width > LOGO_SHAPE_MAX_DIM ||
+        width != (float)(int)width)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
     }
-    if (height < 8 || height > 32 || height != (float)(int)height)
+    if (height < LOGO_SHAPE_MIN_DIM || height > LOGO_SHAPE_MAX_DIM ||
+        height != (float)(int)height)
     {
         return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[2]));
     }

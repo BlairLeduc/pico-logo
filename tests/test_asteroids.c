@@ -22,6 +22,7 @@
 //  both files define `place` and `draw.rock`.
 //
 
+#include "core/limits.h"
 #include "test_mock_fs.h"
 #include "mock_device.h"
 #include "core/repl.h"
@@ -81,7 +82,7 @@ static void load_file(const char *path)
     TEST_ASSERT_NOT_NULL_MESSAGE(f, path);
 
     char line[512];
-    char proc[8192];
+    char proc[LOGO_LOAD_PROC_BUFFER_SIZE];  // what `load` gives a definition
     size_t proc_len = 0;
     bool in_def = false;
 
@@ -1178,6 +1179,26 @@ void test_shot_on_finds_the_shot_inside_the_square(void)
     TEST_ASSERT_EQUAL_FLOAT(2, num("shot.on 109.9 -59.9 10"));
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("shot.on 110.5 -50 10"), "x outside still hit");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("shot.on 100 -60.5 10"), "y outside still hit");
+}
+
+// The cabinet is black and white and every shot is white. The dot in slot 1
+// is drawn in `fe`, the wearing turtle's pen colour, so what makes a shot
+// white is the pen on turtles 1-4 -- which used to be the device's default
+// rather than anything this file said. `clear.shots` runs after every `cs`,
+// so setting it there is what holds.
+void test_every_shot_turtle_is_white(void)
+{
+    // Paint them anything else first: white by default proves nothing, and
+    // the default is what this used to be relying on
+    run("ask [1 2 3 4] [setpc 9]");
+    run("clear.shots");
+
+    for (uint8_t n = 1; n <= 4; n++)
+    {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "shot turtle %u is not white", n);
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(254, mock_device_get_turtle(n)->pen_colour, msg);
+    }
 }
 
 // An idle shot is parked off the field rather than guarded by an `if`, which
@@ -3834,6 +3855,7 @@ int main(void)
     RUN_TEST(test_a_shot_expires_and_stops_its_turtle);
     RUN_TEST(test_a_shot_flies_on_its_own_and_its_position_is_read_back);
     RUN_TEST(test_shot_on_finds_the_shot_inside_the_square);
+    RUN_TEST(test_every_shot_turtle_is_white);
     RUN_TEST(test_a_parked_shot_hits_nothing_anywhere_on_the_field);
     RUN_TEST(test_the_split_table);
     RUN_TEST(test_a_split_fills_the_slots_it_finds_and_no_more);

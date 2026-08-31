@@ -441,15 +441,16 @@ static void compose_row(int y, int x0, int x1)
             }
             if (sx < x0 || sx > x1)
                 continue;
-            compose_buf[sx - x0] = s->indexed ? px : s->colour;
+            compose_buf[sx - x0] =
+                (s->indexed && px != SCREEN_SPRITE_PEN) ? px : s->colour;
         }
     }
 }
 
 // Write a sprite's pixels into the canvas at its position (the stamp
 // primitive): mono masks paint the sprite's colour, indexed masks copy
-// palette slots with 255 transparent. Wrap mode wraps; otherwise pixels
-// off the canvas are clipped.
+// palette slots with 255 transparent and 254 the sprite's colour. Wrap
+// mode wraps; otherwise pixels off the canvas are clipped.
 void screen_gfx_stamp(const ScreenSprite *s)
 {
     bool wrap = (screen_boundary_mode == SCREEN_BOUNDARY_WRAP);
@@ -484,7 +485,8 @@ void screen_gfx_stamp(const ScreenSprite *s)
             {
                 continue;
             }
-            gfx_buffer[py * SCREEN_WIDTH + sx] = s->indexed ? px : s->colour;
+            gfx_buffer[py * SCREEN_WIDTH + sx] =
+                (s->indexed && px != SCREEN_SPRITE_PEN) ? px : s->colour;
         }
     }
 

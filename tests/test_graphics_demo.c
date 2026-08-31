@@ -11,6 +11,7 @@
 
 #include "test_scaffold.h"
 #include "mock_device.h"
+#include "core/limits.h"
 #include "core/repl.h"
 #include <stdio.h>
 #include <string.h>
@@ -24,8 +25,11 @@ static void load_graphics_demo(void)
     FILE *f = fopen(GRAPHICS_DEMO_SOURCE, "rb");
     TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot open " GRAPHICS_DEMO_SOURCE);
 
+    // The same buffer `load` gives a definition, so a procedure this test
+    // accepts is one the real loader accepts too. It used to be 8 KB, which
+    // let the demo grow past what `load` would take and still pass here.
     char line[512];
-    char proc[8192];
+    char proc[LOGO_LOAD_PROC_BUFFER_SIZE];
     size_t proc_len = 0;
     bool in_def = false;
 
@@ -92,7 +96,7 @@ void tearDown(void)
     test_scaffold_tearDown();
 }
 
-void test_setup_defines_palette_and_bitmap_costumes(void)
+void test_setup_defines_palette_and_costumes(void)
 {
     run_ok("gfx.setup");
 
@@ -100,9 +104,26 @@ void test_setup_defines_palette_and_bitmap_costumes(void)
     TEST_ASSERT_EQUAL_UINT8(5, state->palette.r[240]);
     TEST_ASSERT_EQUAL_UINT8(8, state->palette.g[240]);
     TEST_ASSERT_EQUAL_UINT8(24, state->palette.b[240]);
-    TEST_ASSERT_EQUAL_UINT8(24, state->shape.shapes[0][0]);
-    TEST_ASSERT_EQUAL_UINT8(255, state->shape.shapes[7][0]);
-    TEST_ASSERT_EQUAL_UINT8(129, state->shape.shapes[10][15]);
+
+    // Every shape is 16x16 pixels of pen (254) and transparent (255).
+    // Shape 1's top row is blank until its fifth pixel; shape 8 is the
+    // solid block; shape 11's bottom row starts and ends painted.
+    uint8_t w = 0, h = 0;
+    const uint8_t *shape1 = mock_device_get_shape(1, &w, &h);
+    TEST_ASSERT_NOT_NULL(shape1);
+    TEST_ASSERT_EQUAL_UINT8(16, w);
+    TEST_ASSERT_EQUAL_UINT8(16, h);
+    TEST_ASSERT_EQUAL_UINT8(LOGO_SHAPE_TRANSPARENT, shape1[0]);
+    TEST_ASSERT_EQUAL_UINT8(LOGO_SHAPE_PEN, shape1[6]);
+
+    const uint8_t *shape8 = mock_device_get_shape(8, &w, &h);
+    TEST_ASSERT_NOT_NULL(shape8);
+    TEST_ASSERT_EQUAL_UINT8(LOGO_SHAPE_PEN, shape8[0]);
+
+    const uint8_t *shape11 = mock_device_get_shape(11, &w, &h);
+    TEST_ASSERT_NOT_NULL(shape11);
+    TEST_ASSERT_EQUAL_UINT8(LOGO_SHAPE_PEN, shape11[15 * 16]);
+    TEST_ASSERT_EQUAL_UINT8(LOGO_SHAPE_PEN, shape11[15 * 16 + 15]);
 }
 
 void test_sprite_scene_configures_rotation_scale_and_layers(void)
@@ -165,7 +186,7 @@ void test_timed_scenes_run_and_restore_automatic_refresh(void)
 int main(void)
 {
     UNITY_BEGIN();
-    RUN_TEST(test_setup_defines_palette_and_bitmap_costumes);
+    RUN_TEST(test_setup_defines_palette_and_costumes);
     RUN_TEST(test_sprite_scene_configures_rotation_scale_and_layers);
     RUN_TEST(test_tile_scene_captures_colour_costume_and_stamps_canvas);
     RUN_TEST(test_timed_scenes_run_and_restore_automatic_refresh);

@@ -2,7 +2,7 @@
 //  Pico Logo
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
-//  Colour costume pool. See costumes.h for the model.
+//  Costume pool. See costumes.h for the model.
 //
 //  Pixel blocks are kept packed at the front of the pool in slot-offset
 //  order. Deleting or replacing a costume memmoves the blocks above it
@@ -54,8 +54,8 @@ static void pool_release(uint8_t slot)
 bool costume_put(uint8_t slot, uint8_t w, uint8_t h, const uint8_t *pixels)
 {
     if (slot == 0 || slot >= COSTUME_SLOTS || !pixels ||
-        w < COSTUME_MIN_DIM || w > COSTUME_MAX_DIM ||
-        h < COSTUME_MIN_DIM || h > COSTUME_MAX_DIM)
+        w < LOGO_SHAPE_MIN_DIM || w > LOGO_SHAPE_MAX_DIM ||
+        h < LOGO_SHAPE_MIN_DIM || h > LOGO_SHAPE_MAX_DIM)
     {
         return false;
     }

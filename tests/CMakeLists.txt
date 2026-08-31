@@ -2,15 +2,20 @@
 # This file is included by the parent CMakeLists.txt when BUILD_TESTING=ON
 # The parent already defines logo_core_host and logo_devices_host
 
-# Test utilities library (includes mock device, scaffold, and unity)
+# Test utilities library (includes mock device, scaffold, and unity).
+# The costume pool comes along because turtle shapes are one model now:
+# the mock stores what putsh and snapsh make in the same pool the board
+# does, rather than keeping a second, simpler idea of a shape.
 add_library(test_utils
     mock_device.c
     test_scaffold.c
     unity.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/costumes.c
 )
 
 target_include_directories(test_utils PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
 )
 
 target_link_libraries(test_utils PUBLIC logo_core)
@@ -323,6 +328,7 @@ add_executable(test_costumes
 )
 target_include_directories(test_costumes PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/devices/picocalc
 )
 add_test(NAME test_costumes COMMAND test_costumes)

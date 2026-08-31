@@ -1406,49 +1406,130 @@ void test_setsh_requires_input(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
+// A shape is rows of hex pixel pairs, `ff` transparent and `fe` the pen
+// colour. These helpers build a spec and read one back, so the tests can
+// talk about a picture rather than about 128 characters of quoting.
+
+// One 8-wide row: `fill` repeated, then the rest transparent
+static void shape_row(char *out, const char *fill, int fill_pixels)
+{
+    out[0] = '\0';
+    for (int i = 0; i < 8; i++)
+    {
+        strcat(out, i < fill_pixels ? fill : "ff");
+    }
+}
+
+// An 8x8 spec whose row r has r pixels of `fill` at its left
+static const char *shape_wedge_8x8(const char *fill)
+{
+    static char spec[8 * 20 + 8];
+    char row[17];
+    strcpy(spec, "[");
+    for (int r = 0; r < 8; r++)
+    {
+        shape_row(row, fill, r);
+        strcat(spec, " ");
+        strcat(spec, row);
+    }
+    strcat(spec, "]");
+    return spec;
+}
+
+// Assert the list is exactly these row words, in order
+static void assert_shape_rows(Node list, const char **rows, int count)
+{
+    for (int i = 0; i < count; i++)
+    {
+        TEST_ASSERT_FALSE(mem_is_nil(list));
+        Node item = mem_car(list);
+        TEST_ASSERT_TRUE(mem_is_word(item));
+        TEST_ASSERT_EQUAL_size_t(strlen(rows[i]), mem_word_len(item));
+        TEST_ASSERT_EQUAL_STRING_LEN(rows[i], mem_word_ptr(item), strlen(rows[i]));
+        list = mem_cdr(list);
+    }
+    TEST_ASSERT_TRUE(mem_is_nil(list));
+}
+
 void test_putsh_sets_shape_data(void)
 {
-    // Set shape 1 data
-    Result r = run_string("putsh 1 [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15]");
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "putsh 1 %s", shape_wedge_8x8("0c"));
+    Result r = run_string(cmd);
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
-    
-    // Verify shape data was set
-    const MockDeviceState *state = mock_device_get_state();
-    for (int i = 0; i < 16; i++)
+
+    uint8_t w = 0, h = 0;
+    const uint8_t *pixels = mock_device_get_shape(1, &w, &h);
+    TEST_ASSERT_NOT_NULL(pixels);
+    TEST_ASSERT_EQUAL_UINT8(8, w);
+    TEST_ASSERT_EQUAL_UINT8(8, h);
+
+    // Row r is r pixels of colour 12, then transparent to the edge
+    for (int row = 0; row < 8; row++)
     {
-        TEST_ASSERT_EQUAL(i, state->shape.shapes[0][i]);  // Shape 1 is at index 0
+        for (int col = 0; col < 8; col++)
+        {
+            TEST_ASSERT_EQUAL_UINT8(col < row ? 0x0c : LOGO_SHAPE_TRANSPARENT,
+                                    pixels[row * 8 + col]);
+        }
     }
 }
 
 void test_putsh_shape_15(void)
 {
-    Result r = run_string("putsh 15 [255 254 253 252 251 250 249 248 247 246 245 244 243 242 241 240]");
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "putsh 15 %s", shape_wedge_8x8("fe"));
+    Result r = run_string(cmd);
     TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
-    
-    const MockDeviceState *state = mock_device_get_state();
-    for (int i = 0; i < 16; i++)
-    {
-        TEST_ASSERT_EQUAL(255 - i, state->shape.shapes[14][i]);  // Shape 15 is at index 14
-    }
+
+    uint8_t w = 0, h = 0;
+    const uint8_t *pixels = mock_device_get_shape(15, &w, &h);
+    TEST_ASSERT_NOT_NULL(pixels);
+    TEST_ASSERT_EQUAL_UINT8(LOGO_SHAPE_PEN, pixels[7 * 8]);  // last row starts with pen
+}
+
+// A shape need not be square: width is the row length, height the count
+void test_putsh_accepts_a_rectangle(void)
+{
+    Result r = run_string(
+        "putsh 2 [ffffffffffffffffffffffffffffffff"
+        "         ffffffffffffffffffffffffffffffff"
+        "         ffffffffffffffffffffffffffffffff"
+        "         ffffffffffffffffffffffffffffffff"
+        "         ffffffffffffffffffffffffffffffff"
+        "         ffffffffffffffffffffffffffffffff"
+        "         ffffffffffffffffffffffffffffffff"
+        "         ffffffffffffffffffffffff090909ff]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    uint8_t w = 0, h = 0;
+    const uint8_t *pixels = mock_device_get_shape(2, &w, &h);
+    TEST_ASSERT_NOT_NULL(pixels);
+    TEST_ASSERT_EQUAL_UINT8(16, w);
+    TEST_ASSERT_EQUAL_UINT8(8, h);
+    TEST_ASSERT_EQUAL_UINT8(9, pixels[7 * 16 + 12]);
 }
 
 void test_putsh_rejects_shape_0(void)
 {
     // Shape 0 cannot be changed (it's the line-drawn turtle)
-    Result r = run_string("putsh 0 [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "putsh 0 %s", shape_wedge_8x8("0c"));
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string(cmd).status);
 }
 
 void test_putsh_rejects_negative_shape(void)
 {
-    Result r = run_string("putsh -1 [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "putsh -1 %s", shape_wedge_8x8("0c"));
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string(cmd).status);
 }
 
 void test_putsh_rejects_shape_above_15(void)
 {
-    Result r = run_string("putsh 16 [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]");
-    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "putsh 16 %s", shape_wedge_8x8("0c"));
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string(cmd).status);
 }
 
 void test_putsh_requires_list(void)
@@ -1457,30 +1538,78 @@ void test_putsh_requires_list(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
-void test_putsh_requires_16_elements(void)
+// Every row is the same width, or there is no rectangle to store
+void test_putsh_rejects_ragged_rows(void)
 {
-    // Too few elements
-    Result r = run_string("putsh 1 [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14]");
+    Result r = run_string(
+        "putsh 1 [ffffffffffffffff ffffffffffffffff ffffffffffffffff"
+        "         ffffffffffffffff ffffffffffffffff ffffffffffffffff"
+        "         ffffffffffffffff ffffffffffffff]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
-void test_putsh_requires_valid_numbers(void)
+// Two digits a pixel, so an odd count is half a pixel short
+void test_putsh_rejects_odd_length_row(void)
 {
-    // Non-numeric value in list
-    Result r = run_string("putsh 1 [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 abc]");
+    Result r = run_string(
+        "putsh 1 [fffffffffffffffff ffffffffffffffff ffffffffffffffff"
+        "         ffffffffffffffff ffffffffffffffff ffffffffffffffff"
+        "         ffffffffffffffff ffffffffffffffff]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
-void test_putsh_rejects_negative_values(void)
+void test_putsh_rejects_non_hex(void)
 {
-    Result r = run_string("putsh 1 [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 -1]");
+    Result r = run_string(
+        "putsh 1 [ffffffffffffffgg ffffffffffffffff ffffffffffffffff"
+        "         ffffffffffffffff ffffffffffffffff ffffffffffffffff"
+        "         ffffffffffffffff ffffffffffffffff]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
-void test_putsh_rejects_values_above_255(void)
+void test_putsh_rejects_shape_narrower_than_eight(void)
 {
-    Result r = run_string("putsh 1 [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 256]");
+    Result r = run_string(
+        "putsh 1 [ffffffffffffff ffffffffffffff ffffffffffffff"
+        "         ffffffffffffff ffffffffffffff ffffffffffffff"
+        "         ffffffffffffff ffffffffffffff]");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_rejects_shape_shorter_than_eight(void)
+{
+    Result r = run_string(
+        "putsh 1 [ffffffffffffffff ffffffffffffffff ffffffffffffffff"
+        "         ffffffffffffffff ffffffffffffffff ffffffffffffffff"
+        "         ffffffffffffffff]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+}
+
+void test_putsh_rejects_shape_wider_than_thirty_two(void)
+{
+    char cmd[4096];
+    char row[80];
+    memset(row, 'f', 66);
+    row[66] = '\0';  // 33 pixels
+    int n = snprintf(cmd, sizeof(cmd), "putsh 1 [");
+    for (int i = 0; i < 8; i++)
+    {
+        n += snprintf(cmd + n, sizeof(cmd) - n, " %s", row);
+    }
+    snprintf(cmd + n, sizeof(cmd) - n, "]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string(cmd).status);
+}
+
+void test_putsh_rejects_shape_taller_than_thirty_two(void)
+{
+    char cmd[4096];
+    int n = snprintf(cmd, sizeof(cmd), "putsh 1 [");
+    for (int i = 0; i < 33; i++)
+    {
+        n += snprintf(cmd + n, sizeof(cmd) - n, " ffffffffffffffff");
+    }
+    snprintf(cmd + n, sizeof(cmd) - n, "]");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string(cmd).status);
 }
 
 void test_putsh_requires_inputs(void)
@@ -1492,45 +1621,144 @@ void test_putsh_requires_inputs(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
-void test_getsh_outputs_shape_data(void)
+// The pool is finite, and a shape it cannot hold says so rather than
+// half-storing
+void test_putsh_reports_full_pool(void)
 {
-    // First set some shape data
-    run_string("putsh 1 [24 60 126 90 90 90 126 231 189 189 165 36 36 36 102 0]");
-    
-    // Now get it back
+    char cmd[4096];
+    char row[80];
+    memset(row, 'f', 64);
+    row[64] = '\0';  // 32 pixels
+
+    // Eight 32x32 shapes are 8192 bytes, exactly the pool
+    for (int slot = 1; slot <= 9; slot++)
+    {
+        int n = snprintf(cmd, sizeof(cmd), "putsh %d [", slot);
+        for (int i = 0; i < 32; i++)
+        {
+            n += snprintf(cmd + n, sizeof(cmd) - n, " %s", row);
+        }
+        snprintf(cmd + n, sizeof(cmd) - n, "]");
+
+        Result r = run_string(cmd);
+        if (slot <= 8)
+        {
+            TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+        }
+        else
+        {
+            TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+            TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
+        }
+    }
+}
+
+void test_getsh_outputs_shape_rows(void)
+{
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "putsh 1 %s", shape_wedge_8x8("0c"));
+    run_string(cmd);
+
     Result r = run_string("getsh 1");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
-    
-    // Verify the list contains the correct values
-    Node list = r.value.as.node;
-    int expected[] = {24, 60, 126, 90, 90, 90, 126, 231, 189, 189, 165, 36, 36, 36, 102, 0};
-    
-    for (int i = 0; i < 16; i++)
-    {
-        TEST_ASSERT_FALSE(mem_is_nil(list));
-        Node item = mem_car(list);
-        Value item_val = value_word(item);
-        float num;
-        TEST_ASSERT_TRUE(value_to_number(item_val, &num));
-        TEST_ASSERT_EQUAL_FLOAT((float)expected[i], num);
-        list = mem_cdr(list);
-    }
-    TEST_ASSERT_TRUE(mem_is_nil(list));
+
+    const char *rows[] = {
+        "ffffffffffffffff",
+        "0cffffffffffffff",
+        "0c0cffffffffffff",
+        "0c0c0cffffffffff",
+        "0c0c0c0cffffffff",
+        "0c0c0c0c0cffffff",
+        "0c0c0c0c0c0cffff",
+        "0c0c0c0c0c0c0cff",
+    };
+    assert_shape_rows(r.value.as.node, rows, 8);
 }
 
-void test_getsh_shape_15(void)
+// What putsh took, getsh gives back -- the point of one format
+void test_putsh_getsh_roundtrip(void)
 {
-    run_string("putsh 15 [1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16]");
-    
-    Result r = run_string("getsh 15");
+    Result put = run_string(
+        "putsh 3 [00010203040506070809fefeffff0f10"
+        "         101112131415161718191a1b1c1d1e1f"
+        "         202122232425262728292a2b2c2d2e2f"
+        "         303132333435363738393a3b3c3d3e3f"
+        "         404142434445464748494a4b4c4d4e4f"
+        "         505152535455565758595a5b5c5d5e5f"
+        "         606162636465666768696a6b6c6d6e6f"
+        "         707172737475767778797a7b7c7d7e7f]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, put.status);
+
+    Result r = run_string("getsh 3");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    const char *rows[] = {
+        "00010203040506070809fefeffff0f10",
+        "101112131415161718191a1b1c1d1e1f",
+        "202122232425262728292a2b2c2d2e2f",
+        "303132333435363738393a3b3c3d3e3f",
+        "404142434445464748494a4b4c4d4e4f",
+        "505152535455565758595a5b5c5d5e5f",
+        "606162636465666768696a6b6c6d6e6f",
+        "707172737475767778797a7b7c7d7e7f",
+    };
+    assert_shape_rows(r.value.as.node, rows, 8);
+}
+
+// The diamond the reference prints under getsh, so the example there
+// cannot drift away from what Logo actually says
+void test_getsh_matches_the_reference_example(void)
+{
+    Result put = run_string(
+        "putsh 3 [fffffffefeffffff"
+        "         fffffefefefeffff"
+        "         fffefefefefefeff"
+        "         fefefefefefefefe"
+        "         fefefefefefefefe"
+        "         fffefefefefefeff"
+        "         fffffefefefeffff"
+        "         fffffffefeffffff]");
+    TEST_ASSERT_EQUAL(RESULT_NONE, put.status);
+
+    reset_output();
+    Result r = run_string("show getsh 3");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING(
+        "[fffffffefeffffff fffffefefefeffff fffefefefefefeff fefefefefefefefe "
+        "fefefefefefefefe fffefefefefefeff fffffefefefeffff fffffffefeffffff]\n",
+        mock_device_get_output());
+}
+
+// Hand-typed uppercase reads the same, and comes back lowercase
+void test_putsh_accepts_uppercase_hex(void)
+{
+    run_string(
+        "putsh 1 [FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF"
+        "         FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF"
+        "         FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFAB]");
+
+    Result r = run_string("getsh 1");
+    TEST_ASSERT_EQUAL(RESULT_OK, r.status);
+
+    Node list = r.value.as.node;
+    for (int i = 0; i < 7; i++) list = mem_cdr(list);
+    Node last = mem_car(list);
+    TEST_ASSERT_EQUAL_STRING_LEN("ffffffffffffffab", mem_word_ptr(last), 16);
+}
+
+// A slot nothing has been put in holds no shape, and says so
+void test_getsh_empty_slot_outputs_empty_list(void)
+{
+    Result r = run_string("getsh 7");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
     TEST_ASSERT_EQUAL(VALUE_LIST, r.value.type);
+    TEST_ASSERT_TRUE(mem_is_nil(r.value.as.node));
 }
 
 void test_getsh_rejects_shape_0(void)
 {
-    // Shape 0 is the line-drawn turtle, not a bitmap
+    // Shape 0 is the line-drawn turtle, not a stored shape
     Result r = run_string("getsh 0");
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
@@ -1553,28 +1781,58 @@ void test_getsh_requires_input(void)
     TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
 }
 
-void test_putsh_getsh_roundtrip(void)
+// One slot, one shape: a capture reads back through getsh like anything
+// else, and a putsh over it replaces it rather than hiding behind it
+void test_snapsh_capture_reads_back_through_getsh(void)
 {
-    // Set shape data
-    run_string("putsh 3 [255 128 64 32 16 8 4 2 1 0 255 128 64 32 16 8]");
-    
-    // Get it back and verify
-    Result r = run_string("getsh 3");
+    // A block of colour 9 on the canvas, centred on the home turtle
+    mock_device_paint_canvas(160 - 4, 160 - 4, 8, 8, 9);
+    Result snap = run_string("snapsh 4 8 8");
+    TEST_ASSERT_EQUAL(RESULT_NONE, snap.status);
+
+    Result r = run_string("getsh 4");
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
-    
-    Node list = r.value.as.node;
-    int expected[] = {255, 128, 64, 32, 16, 8, 4, 2, 1, 0, 255, 128, 64, 32, 16, 8};
-    
-    for (int i = 0; i < 16; i++)
-    {
-        TEST_ASSERT_FALSE(mem_is_nil(list));
-        Node item = mem_car(list);
-        Value item_val = value_word(item);
-        float num;
-        TEST_ASSERT_TRUE(value_to_number(item_val, &num));
-        TEST_ASSERT_EQUAL_FLOAT((float)expected[i], num);
-        list = mem_cdr(list);
-    }
+
+    const char *rows[] = {
+        "0909090909090909", "0909090909090909", "0909090909090909",
+        "0909090909090909", "0909090909090909", "0909090909090909",
+        "0909090909090909", "0909090909090909",
+    };
+    assert_shape_rows(r.value.as.node, rows, 8);
+}
+
+void test_putsh_replaces_a_capture(void)
+{
+    mock_device_paint_canvas(160 - 8, 160 - 8, 16, 16, 9);
+    run_string("snapsh 4 16 16");
+
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "putsh 4 %s", shape_wedge_8x8("0c"));
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string(cmd).status);
+
+    uint8_t w = 0, h = 0;
+    const uint8_t *pixels = mock_device_get_shape(4, &w, &h);
+    TEST_ASSERT_NOT_NULL(pixels);
+    TEST_ASSERT_EQUAL_UINT8(8, w);
+    TEST_ASSERT_EQUAL_UINT8(8, h);
+    TEST_ASSERT_EQUAL_UINT8(0x0c, pixels[7 * 8]);
+}
+
+void test_snapsh_replaces_a_putsh_shape(void)
+{
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "putsh 4 %s", shape_wedge_8x8("0c"));
+    run_string(cmd);
+
+    mock_device_paint_canvas(160 - 8, 160 - 8, 16, 16, 9);
+    TEST_ASSERT_EQUAL(RESULT_NONE, run_string("snapsh 4 16 16").status);
+
+    uint8_t w = 0, h = 0;
+    const uint8_t *pixels = mock_device_get_shape(4, &w, &h);
+    TEST_ASSERT_NOT_NULL(pixels);
+    TEST_ASSERT_EQUAL_UINT8(16, w);
+    TEST_ASSERT_EQUAL_UINT8(16, h);
+    TEST_ASSERT_EQUAL_UINT8(9, pixels[0]);
 }
 
 void test_shape_primitives_registered(void)
@@ -2547,22 +2805,32 @@ int main(void)
     RUN_TEST(test_setsh_requires_input);
     RUN_TEST(test_putsh_sets_shape_data);
     RUN_TEST(test_putsh_shape_15);
+    RUN_TEST(test_putsh_accepts_a_rectangle);
     RUN_TEST(test_putsh_rejects_shape_0);
     RUN_TEST(test_putsh_rejects_negative_shape);
     RUN_TEST(test_putsh_rejects_shape_above_15);
     RUN_TEST(test_putsh_requires_list);
-    RUN_TEST(test_putsh_requires_16_elements);
-    RUN_TEST(test_putsh_requires_valid_numbers);
-    RUN_TEST(test_putsh_rejects_negative_values);
-    RUN_TEST(test_putsh_rejects_values_above_255);
+    RUN_TEST(test_putsh_rejects_ragged_rows);
+    RUN_TEST(test_putsh_rejects_odd_length_row);
+    RUN_TEST(test_putsh_rejects_non_hex);
+    RUN_TEST(test_putsh_rejects_shape_narrower_than_eight);
+    RUN_TEST(test_putsh_rejects_shape_shorter_than_eight);
+    RUN_TEST(test_putsh_rejects_shape_wider_than_thirty_two);
+    RUN_TEST(test_putsh_rejects_shape_taller_than_thirty_two);
     RUN_TEST(test_putsh_requires_inputs);
-    RUN_TEST(test_getsh_outputs_shape_data);
-    RUN_TEST(test_getsh_shape_15);
+    RUN_TEST(test_putsh_reports_full_pool);
+    RUN_TEST(test_getsh_outputs_shape_rows);
+    RUN_TEST(test_getsh_empty_slot_outputs_empty_list);
     RUN_TEST(test_getsh_rejects_shape_0);
     RUN_TEST(test_getsh_rejects_negative);
     RUN_TEST(test_getsh_rejects_above_15);
     RUN_TEST(test_getsh_requires_input);
     RUN_TEST(test_putsh_getsh_roundtrip);
+    RUN_TEST(test_getsh_matches_the_reference_example);
+    RUN_TEST(test_putsh_accepts_uppercase_hex);
+    RUN_TEST(test_snapsh_capture_reads_back_through_getsh);
+    RUN_TEST(test_putsh_replaces_a_capture);
+    RUN_TEST(test_snapsh_replaces_a_putsh_shape);
     RUN_TEST(test_shape_primitives_registered);
 
     // Arc tests

@@ -32,10 +32,8 @@
 
 // Rendered turtle raster sizing for the screen compositor. Shape 0 (the
 // line-drawn triangle) rasterizes into 24x24 to accommodate rotation;
-// mono bitmap shapes 1-15 use 16x16; colour costumes render at their
-// own size up to the raster cap of 32x32.
+// shapes 1-15 render at their own size, up to the raster cap of 32x32.
 #define SHAPE0_RASTER_SIZE 24
-#define BITMAP_RASTER_SIZE 16
 #define TURTLE_RASTER_MAX 32
 
 // Per-turtle state. The stateful console ops act on the turtle selected
@@ -119,11 +117,6 @@ static void turtles_init(void)
 }
 
 uint8_t background_colour = GFX_DEFAULT_BACKGROUND;     // Background color for graphics
-
-// Shape system (shared by all turtles)
-// Shapes 1-15 stored internally as 16-bit rows (doubled from user's 8-bit)
-// Shape 0 is the line-drawn turtle and doesn't use this storage
-static uint16_t turtle_shapes[15][16];  // shapes[0] = shape 1, shapes[14] = shape 15
 
 // Boundary mode constants
 typedef enum {
@@ -529,11 +522,12 @@ static void turtle_update_raster(void)
     }
     else
     {
-        // Build the base image: a colour costume's pixels, or the mono
-        // 16x16 bitmap (rows doubled from the user's 8 bits)
+        // Build the base image from the slot's costume, which is the only
+        // form a shape takes. An undefined slot draws nothing, but the
+        // code below still wants a raster, so it gets a transparent one.
         static uint8_t base[TURTLE_RASTER_MAX * TURTLE_RASTER_MAX];
         int bw, bh;
-        uint8_t blank;  // the transparent value for this raster kind
+        const uint8_t blank = SCREEN_SPRITE_TRANSPARENT;
 
         uint8_t costume_w, costume_h;
         const uint8_t *costume_pixels;
@@ -542,30 +536,14 @@ static void turtle_update_raster(void)
             bw = costume_w;
             bh = costume_h;
             memcpy(base, costume_pixels, (size_t)(bw * bh));
-            blank = SCREEN_SPRITE_TRANSPARENT;
-            cur->raster_indexed = true;
         }
         else
         {
-            bw = BITMAP_RASTER_SIZE;
-            bh = BITMAP_RASTER_SIZE;
-            memset(base, 0, BITMAP_RASTER_SIZE * BITMAP_RASTER_SIZE);
-
-            const uint16_t *shape = turtle_shapes[cur->shape - 1];
-            for (int row = 0; row < 16; row++)
-            {
-                uint16_t row_bits = shape[row];
-                if (row_bits == 0) continue;
-                for (int col = 0; col < 16; col++)
-                {
-                    if (row_bits & (0x8000 >> col))
-                    {
-                        base[row * BITMAP_RASTER_SIZE + col] = 1;
-                    }
-                }
-            }
-            blank = 0;
+            bw = LOGO_SHAPE_MIN_DIM;
+            bh = LOGO_SHAPE_MIN_DIM;
+            memset(base, blank, (size_t)(bw * bh));
         }
+        cur->raster_indexed = true;
 
         // The raster cap makes magnification effective only up to 16x16
         int m = cur->mag;
@@ -1219,7 +1197,7 @@ static void turtle_stamp(void)
 }
 
 // Capture the w x h canvas region centred on the selected turtle into
-// colour costume slot (the snapsh primitive). Background pixels become
+// shape slot (the snapsh primitive). Background pixels become
 // transparent. Returns false when the costume pool is full.
 static bool turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
 {
@@ -1244,77 +1222,30 @@ static bool turtle_snap_costume(uint8_t slot, uint8_t w, uint8_t h)
     return true;
 }
 
-// Get shape data for shapes 1-15
-// Returns 16 bytes representing 8 columns x 16 rows
-// Each byte is one row, MSB = leftmost column
-// Returns false if shape_num is 0 or > 15
-static bool turtle_get_shape_data(uint8_t shape_num, uint8_t *data)
+// Read back a shape (1-15) as the pixels it is made of, straight out of
+// the pool. NULL when the slot holds no shape; the pointer is good until
+// the next put or snap, which is all getsh needs to build its rows.
+static const uint8_t *turtle_get_shape_data(uint8_t shape_num, uint8_t *w, uint8_t *h)
 {
-    if (shape_num == 0 || shape_num > 15 || data == NULL)
-        return false;
-    
-    uint16_t *shape = turtle_shapes[shape_num - 1];
-    
-    // Convert internal 16-bit rows to user's 8-bit rows
-    // Internal format has each pixel doubled horizontally
-    // So we take every other bit from the 16-bit value
-    // (bits 15, 13, 11, 9, 7, 5, 3, 1 when counting from the right, LSB = bit 0)
-    for (int row = 0; row < 16; row++)
+    const uint8_t *pixels;
+    if (shape_num == 0 || shape_num > 15 || !costume_get(shape_num, w, h, &pixels))
     {
-        uint8_t result = 0;
-        uint16_t internal_row = shape[row];
-        
-        // Extract bits 15, 13, 11, 9, 7, 5, 3, 1 (every other bit from MSB downward)
-        // These represent the original 8 columns
-        for (int col = 0; col < 8; col++)
-        {
-            if (internal_row & (0x8000 >> (col * 2)))
-            {
-                result |= (0x80 >> col);
-            }
-        }
-        data[row] = result;
+        return NULL;
     }
-    
-    return true;
+    return pixels;
 }
 
-// Put shape data for shapes 1-15
-// Takes 16 bytes representing 8 columns x 16 rows
-// Each byte is one row, MSB = leftmost column
-// Returns false if shape_num is 0 or > 15
-static bool turtle_put_shape_data(uint8_t shape_num, const uint8_t *data)
+// Define a shape (1-15) from w x h pixels, replacing whatever the slot
+// held. Same store as snapsh writes, so a hand-written shape and a
+// captured one are the same thing from here on.
+static bool turtle_put_shape_data(uint8_t shape_num, uint8_t w, uint8_t h, const uint8_t *data)
 {
-    if (shape_num == 0 || shape_num > 15 || data == NULL)
-        return false;
-    
-    uint16_t *shape = turtle_shapes[shape_num - 1];
-    
-    // Convert user's 8-bit rows to internal 16-bit rows
-    // Double each pixel horizontally
-    for (int row = 0; row < 16; row++)
+    if (shape_num == 0 || shape_num > 15 || !costume_put(shape_num, w, h, data))
     {
-        uint16_t result = 0;
-        uint8_t user_row = data[row];
-        
-        // Each bit in user_row becomes two bits in internal row
-        for (int col = 0; col < 8; col++)
-        {
-            if (user_row & (0x80 >> col))
-            {
-                // Set two adjacent bits
-                result |= (0xC000 >> (col * 2));
-            }
-        }
-        shape[row] = result;
+        return false;
     }
 
-    // putsh defines the slot's mono shape; a colour costume in the slot
-    // (from snapsh) would shadow it, so remove it
-    costume_delete(shape_num);
-
     refresh_shape_wearers(shape_num);
-
     return true;
 }
 

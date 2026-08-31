@@ -17,6 +17,7 @@
 //  as littlefs does on the device -- leaving the shared mock untouched.
 //
 
+#include "core/limits.h"
 #include "test_scaffold.h"
 #include "test_mock_fs.h"
 #include "mock_device.h"
@@ -83,7 +84,7 @@ static void load_pfs(void)
     TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot open " PFS_PATH);
 
     char line[512];
-    char proc[8192];
+    char proc[LOGO_LOAD_PROC_BUFFER_SIZE];  // what `load` gives a definition
     size_t proc_len = 0;
     bool in_def = false;
 
