@@ -5004,6 +5004,14 @@ void test_the_band_colours_the_crowd_and_not_the_walls_or_the_man(void)
     TEST_ASSERT_EQUAL_INT_MESSAGE(249, (int)mock_device_get_line(0)->colour,
         "a bolt did not wear the difficulty band");
 
+    // AND THE MAN IS ASKED AT A DIFFERENT SCORE, because 3000 lands on the
+    // band whose own colour is 249 -- `dt.col`'s fourth row is $AA's green --
+    // and a man drawn in `rob.pc` would pass unnoticed there.  At 5000 the
+    // band is 131 and the two are distinguishable.
+    run("make \"score 5000  place.bolts");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(131.0f, num(":rob.pc"),
+        "the band is not distinct from the man's own colour");
+
     man_at(-5, 45);
     mock_device_clear_graphics();
     run("draw.man");
