@@ -1573,7 +1573,120 @@ landed 2026-08-28, suite 78/78 green, all four presets link.**
 
 ### P15 — Berzerk (design first)
 
-Status: **THE SCREEN SCROLL BETWEEN ROOMS IS IN, TAKEN OUT OF M7 BECAUSE IT WAS
+Status: **M5 IS DONE AND RUNS ON A BOARD — EVIL OTTO, AND WITH HIM THE ROOM
+ACQUIRES A CLOCK (2026-08-31).** Everything else in this game will wait for you: the crowd is
+slow *because* it is a crowd ([B75](bugs.md)) and the maze is the same maze
+however long you stand in it. Otto arrives on a timer, walks through walls,
+kills robots by touching them and cannot be shot, so from this milestone the
+game asks you to leave. The gate's three phrases are in — $2ABC's three-number
+sum at 40 ticks a unit with two put back per kill, walls ignored, robots eaten
+and paid for — and the timer is on the readout as `OT`. **78 procedures (of
+100), 129 host tests, `ctest` green at 84/84, all three presets link — and it
+read on hardware the same day. `fast`: **HUD 24, FRAME 50, WORST 104, ROOM
+25**, and the clock needs no naming because `clock` refuses to start the game
+below 300 MHz. **And both of the judgements no measurement could supply came
+back right, neither of them tuned: the hop reads right and the nine seconds
+reads right.** The nine is worth a sentence about why it was ever in doubt —
+nobody chose it, it is `ROBOT_SPEED + RSAVED + RBOLTS` units of forty ticks,
+three quantities picked for other reasons, and the design's own note on that sum
+is that it is *backwards* (a fast, crowded, well-armed room buys you more time).
+It was ported because it is the cabinet's, not because it was expected to feel
+like anything. **So M5 is closed on every phrase of its gate.**
+
+**One defect came back and it is the one this milestone was always going to
+produce: [B78](bugs.md), Otto eating the maze as he walks.** The search that
+found the two findings below was aimed at *scheduling*, which is what B69, B73
+and B75 all were, and it found both; what it was not aimed at is what a **new
+kind of figure** does to an invariant nobody had written down. Every figure in
+Berzerk is kept off the ink by construction — the man dies on a wall, a robot
+dies on a wall, a bolt dies on a wall — and the erase-in-place decision stands
+on that. Otto is exempt from all three in one design sentence, "he walks through
+walls", and his eraser was *correct*: it covers his 8 × 8 exactly, which is
+precisely the problem when the walls are drawn once a room. **The cabinet never
+notices because it XORs sprites into video RAM** ($275B's `ld b,$90`), so
+drawing Otto twice restores what was under him for free; `stamp` writes pixels.
+Fixed by putting the wall back rather than stopping him taking it, with three
+tests and two of them verified failing first. **The re-read confirmed it — the
+walls remain, and FRAME went to 50-51, which is the repaint priced**: sixteen
+strokes on the frames he stands on ink, tipping a millisecond past the period on
+a minority of them.
+
+**And the re-read found a second, [B79](bugs.md), reported as *"thought once
+Otto left behind a trail"* — which is B67's other half for the third time.**
+`stamp` places a costume at `round(centre) − w/2` while a pen stroke rounds its
+own endpoints, so a figure on a **half** pixel is drawn at one column and rubbed
+out at another. The man met this at B67; a robot never does, because he spawns
+and moves in whole pixels. **Otto inherited a fraction without anyone noticing
+the inheritance**: `$2AB6` copies MAN_X/MAN_Y, our man moves 1.5 steps a frame,
+and `$2A9D`'s clamps replace only *one* axis — so a side doorway gives him a
+fractional y and the top or bottom a fractional x, while the clamped axis looks
+integral. Hence "once". Fixed in both places for a word each, and **the test
+that should have caught it existed, asserted the right bound and passed**
+because it staged him at a single whole-pixel position — B71's trap in a
+different costume. It now runs six positions, three of them half.
+
+**FRAME 50 IS THE PAD AND NOT A SIX-MILLISECOND SPEED-UP.** `sync` pads a frame
+that fits to exactly the period, so 50 is this number's *floor*: it says the
+body fit inside the budget, not by how much. M5 only adds work — one figure,
+one stamp, three erase strokes — so there is no version of this where the code
+got faster, and the difference from M4's 56 is the **scene**: M4's was read at
+eleven robots *and bolts in the air*, M3's 53 with nothing firing. What settles
+it is one glance at `ROB`. **ROOM 24 → 25 is the one figure that is M5's own**
+and it is the right size — `place.otto` is nine `make`s in the build, about a
+millisecond, and it landed as about a millisecond. **HUD 26 → 24 is noise**,
+and useful noise: M5 touches nothing in the mask readout, so ±2 ms is this
+panel's variance and ROOM's +1 sits at the edge of it. **WORST 114 → 104 is
+still M4's open item** — ROOM 25 plus a 50 body is 75, leaving ~29 where M4 left
+~34, so it moved with FRAME rather than shrinking on its own.
+
+**The milestone's own work was [§7.5](berzerk-design.md), which had been left
+as "a gap rather than a choice" and is now neither.** Otto was the last figure
+still drawn with a pen, because the disassembly renders his pattern table at
+$120B as Z80 instructions and transcribing a mis-decoded region gets you a
+*plausible* wrong answer. The fix is not care, it is a decoding rule: the
+sprite fetch at $2765 reads the high byte first, so a pattern table is
+**big-endian**, and read that way $120B is sixteen exact entries with a zero
+terminator at $122B and a loop back to its own seventh. Read the other way its
+first entry is $2E12, which is nowhere. **And the height of the bounce is not
+in the pixels** — nine of his sixteen frames are the same face bitmap, and what
+differs is a two-byte escape in front of the sprite data that $2772 adds to the
+video RAM address before drawing. At a 32-byte row stride those are 32, 16, 8,
+4 and 2 rows *down*, so the animation is two columns (a slot and an offset) and
+**Otto is eight costumes rather than sixteen**. Three things fall out of it and
+none was designed: his stored position is the *top* of the arc and the ball
+hangs under it, which is what $2AB4's y clamp protects; **the collision follows
+the bounce**, because the cabinet's intercept bit is set by the sprite draw
+itself, so Otto at the top of his hop passes over your head; and the six
+arrival frames play once and never again, because the loop-back skips them.
+
+**Two findings, and both are scheduling rather than pixels.** *He is a vector
+from the moment the room is built, which taxes the crowd before he ever
+appears*: $2154 jumps to $2A8E as the last act of placing the robots and
+$2A8E's second instruction is `call $200E`, the same routine that links a
+robot's vector into the circular chain — his MOVE bit is not set until he
+arrives, but the interrupt spends his turn either way. So **B75's denominator
+is one larger than B75 said, everywhere**, and the last robot standing shares
+the room's step rate with Otto rather than having it to himself. **This is the
+fourth time in this game that a mechanism was read correctly and its schedule
+was not** (B69, B73, B75, and this). And *his `TPRIME` is 2 and not
+`ROBOT_SPEED`* — the player's own number — so alone in a cleared room he moves
+at **exactly the man's thirty pixels a second**: he does not outrun you, he
+corners you, and the only thing that lets him catch you is that walls do not
+slow him down.
+
+**The costume ceiling moved again, 23 → 25, and the arithmetic that set it at
+23 is why.** `LOGO_SHAPE_MAX_SLOT` was raised to 23 under [B77](bugs.md) on a
+count that included the robot's four explosion frames — which take no slot at
+all, since M3 decided the explosion is drawn — and that **left Otto out of the
+inventory altogether**, because §7.5 had him as a pen figure rather than a
+number. Twenty-five is the honest total for the whole cabinet (nine of the man,
+eight of the robot, eight of Otto) and **there are no spare slots**; M7's
+polish has to buy its slots from something. One departure from the ROM and it
+is a readout: `BLAM` increments `OTTO_TIME` on every robot death whether Otto
+has arrived or not, and this port does it only while he is still counting down,
+because `OT` would otherwise climb after he was already in the room.
+
+**THE SCREEN SCROLL BETWEEN ROOMS IS IN, TAKEN OUT OF M7 BECAUSE IT WAS
 ASKED FOR (2026-08-31) — and [§17](berzerk-design.md) had priced it at double.**
 The request names what it is for: *the cabinet slides the maze out of view
 between rooms, which gives the player a chance to breathe.* §17 had cut it on
@@ -2135,6 +2248,7 @@ the game is not started.
 
 | Date | Item | Change |
 |---|---|---|
+| 2026-08-31 | P15 | **M5 done: Evil Otto, and with him the room acquires a clock. Read on a board the same day at `fast`: HUD 24, FRAME 50, WORST 104, ROOM 25, and the hop reads right. Two defects back over two readings, both fixed.** **[B78](bugs.md)**, Otto eating the maze as he walks — he is the first figure in this game *meant* to overlap the walls, and the cabinet never notices because it XORs its sprites into video RAM where we stamp pixels; fixed by putting the wall back rather than stopping him taking it, and the re-read confirms the walls remain at **FRAME 50-51**, which is the sixteen-stroke repaint priced at a millisecond on a minority of frames. **[B79](bugs.md)**, *"thought once Otto left behind a trail"* — B67's other half for the third time: `stamp` rounds a costume's corner and a pen stroke rounds its own endpoints, so a figure on a half pixel is drawn at one column and erased at another. Otto inherited a fraction nobody noticed him inheriting, because `$2AB6` copies MAN_X/MAN_Y, our man moves 1.5 steps a frame, and `$2A9D`'s clamps replace only one axis. **Three for three now**: a draw/erase pair that agrees at integer positions is not tested until it is tested at half ones. **And both judgements came back right untuned — the hop and the nine seconds — so M5 is closed on every phrase of its gate** **FRAME 50 is the pad and not a speed-up** — `sync` pads a frame that fits to exactly the period, so 50 is that number's floor and says only that the body fit inside the budget; M5 adds work and cannot have made the frame faster, so the difference from M4's 56 is the scene (M4's was read at eleven robots *and bolts in the air*) and one glance at `ROB` settles it. **ROOM 24 → 25 is M5's own cost**, `place.otto` inside the build, and it is the right size; **HUD 26 → 24 is noise on an unchanged path**, which usefully puts ±2 ms under the rest of the row; **WORST 114 → 104** is still M4's open item, moved with FRAME rather than shrunk. The build's scheduling findings — Otto in the round robin from the room build, so B75's denominator is one larger everywhere, and his `TPRIME` of 2 rather than `ROBOT_SPEED` — came out of *looking* for that shape before it was written, which is B69, B73 and B75 paying off The gate's three phrases — the timer arithmetic ($2ABC's `ROBOT_SPEED + RSAVED + RBOLTS`, one unit every 40 ticks, two put back per robot killed at $2486), walls ignored (he is steered by `SETDIR` and never by `IQ`, which is one omission rather than a rule), and robots eaten and paid for. 78 procedures, 129 host tests, `ctest` green at 84/84, all three presets link; not yet read on a board. **The milestone's own work was [§7.5](berzerk-design.md), a gap the design had deferred twice**: his pattern table at $120B renders in the listing as Z80 instructions, and what decodes it is the sprite fetch at $2765 reading the **high byte first** — pattern tables are big-endian, and read that way $120B is sixteen exact entries with a zero at $122B and a loop back to its own seventh. Read little-endian the first entry is $2E12, which is nowhere; the wrong reading looks like garbage rather than like a mistake, which is the only reason the region was hard. **And the bounce is not in the pixels**: nine of his sixteen frames are the same face, and the difference is a two-byte escape that $2772 adds to the video RAM address — 32, 16, 8, 4 and 2 rows down at a 32-byte stride — so he is **eight costume slots and not sixteen**, his stored position is the *top* of the arc, and the collision follows the bounce because the cabinet's intercept bit is set by the draw itself (Otto at the top of his hop passes over your head, for free). **Two findings, both scheduling**: he is a **vector from the moment the room is built** ($2154 → $2A8E → $200E), so B75's denominator is one larger everywhere and the last robot standing shares the room with him — the fourth time in this game a mechanism was read right and its schedule was not (B69, B73, B75) — and his **`TPRIME` is 2, the player's number, not `ROBOT_SPEED`**, so alone in a cleared room he is exactly the man's speed. **`LOGO_SHAPE_MAX_SLOT` 23 → 25**: the count that set it at 23 included the explosion's four frames, which take no slot, and left Otto out entirely; twenty-five is the whole cabinet and there are no spares left |
 | 2026-08-31 | P15 | **The robots did not animate, and the ROM always said they should** ([B77](bugs.md), reported from a board and **confirmed fixed on one the same day**). §7.3 read the eight STANDING frames at `$1000` -- which differ in the eye row alone, `66 4E 1E 7E 78 71` -- wrote "this row is the only one that animates", and generalised that to the whole robot. `$1000` is one of five tables and the only one like that: the four walking tables move the feet, and `rb1`-`rb4` were **the first pointer of each table**, cached as though a table were a sprite. Four patterns added as slots 14-17 with a per-robot phase; left stays free because `$1155` is `$112C` mirrored and `$1162` is `$111F` mirrored. **The first fix did not animate either**: `$27A9` advances the pattern pointer on the countdown that moves the vector, one frame a pixel at 60 Hz, and our frame is three of its ticks -- so three steps through a three-frame table land on the same frame every time, and the cabinet's own phase renders as a robot sliding with his legs locked. The walk advances once per rendered frame the robot moved in. **Why it lasted four milestones and a board session: no test had ever looked at a sprite's pixels.** The mock stages its canvas rather than rasterising pen strokes, so `snapsh` captured a blank field there and every costume test could only count captures and measure the bounding box -- a sprite could have been the wrong drawing entirely and stayed green. **Three changes underneath it.** `LOGO_SHAPE_MAX_SLOT`: the costume ceiling was 15 and the literal lived in eight places across three layers, so it is now one constant in `core/limits.h` and the value is 23 -- a slot is six bytes of table, measured at exactly +48 bytes on all three boards, and the 8 KB pixel pool is untouched. The sprites moved from `render.sprite` + `snapsh` to `putsh`, retiring ~400 statements and §18's measured ~18 ms a sprite at startup thirteen times over; the costumes are byte-identical because this game draws in colour 254, 254 IS `LOGO_SHAPE_PEN`, and `screen_gfx_snap` maps only the background to transparent. And the objection recorded in the file -- that `putsh` doubles every pixel horizontally and so could not draw an 8-wide man -- was true of the old monochrome form and is not true of the colour one. [B76](bugs.md) found and fixed on the way: a frame-cost test asserted an exact cell count over one arbitrary window, which oscillates with how many bolts are alive, and was passing on phase. 17 slots of 23, 1,920 bytes of the 8 KB pool, 15,786 free cells and 19,532 free word-table bytes on the tightest board's arena. 84/84 ctest green |
 | 2026-08-31 | P15 | **The screen scroll between rooms, taken out of M7 because it was asked for — and [§17](berzerk-design.md)'s price for it was double.** The request says what it is for: *the cabinet slides the maze out of view between rooms, which gives the player a chance to breathe.* §17 cut it on "a full-screen present per step and **the room has to be drawn twice during it**", and the ROM does not do the second half. `SCROLL_UP`/`DOWN`/`LEFT`/`RIGHT` ($2175–$2419) step the bitmap **eight pixels** for one full screen (`$20` one-byte `ldir`s across, `$1B` of `$0100` up) and each step **zeroes the rows it vacated** — *"remove junk left after scroll"* — so **nothing scrolls in behind the maze**; it leaves to black and `$2209` does not seed the next room until the loop ends. A step therefore draws **one** room: a `clean`, sixteen strokes and a present, ~21 ms. The cabinet's *step* is what transfers and the count falls out of the canvas — **40 across, 30 down**. **The pause is the cabinet's as well, and it is one step a frame**: the cabinet's step is ~57 ms up/down and ~60 across by arithmetic (6,400-byte `ldir`s at 21 T-states a byte on a 2.5 MHz Z80 plus the zeroing), so its transition is ~**1.53 s** and ~**1.92 s**, and ours wants 51 and 48 ms a step against a frame period of **50**. Each step therefore ends on `sync` — the frame loop's own call — and a doorway is **thirty or forty frames**: **1.50 s and 2.00 s**, the step travelling 160 pixels a second against 138, with ~29 ms of margin inside each frame. `frame_sync_wait_ms` drops the slippage of a step that overran rather than chasing it. **One departure**: the figures do not slide — in the cabinet they are ink in the moved bitmap, here they are stamps over a canvas the slide redraws, and half of it (the man, not the crowd) would read as a defect. **A frame that scrolled is not a frame** — a deliberate hold of a second and a half, kept out of `WORST` and timed into `SL` on the readout beside `ROOM` and `HUD`, where it should read ~1500 down and ~2000 across and anything higher is a step that did not fit its frame. **A death does not scroll** ($1806 re-enters $209D directly; only the doorway at $21CF reaches it). 73 procedures, **113 host tests**, `ctest` green at 84/84. **[§22 Q4](berzerk-design.md) closed**: it weighed a present cost against an irritation, and the cost lands between rooms where there is no frame budget to overrun |
 | 2026-08-31 | P15 | **M4's robots were about ten times too fast, and the cause is one instruction in the cabinet's interrupt handler ([B75](bugs.md)).** Reported off a recording — *"the robots move much faster in the port (twice as fast?)"* — and settled by ***"at the start of the game, the robots move about once per second"***, against a port doing **fifteen pixels a second**. `BOTTOM_OF_SCREEN_INTERRUPT` ($26D9) runs once a video frame and moves **exactly two things**: the man through `MAN_PTR`, and **ONE** vector through `V.PTR` — then it walks `V.PTR` on to the next vector. So a robot moves **only when his turn comes round**, and the man is exempt because $1FD6 allocates his vector inline with a *null* link where $200E links a robot's into the chain. §8.1 read the `TIME`/`TPRIME` reload right and then assumed every object was offered it every tick. **A robot steps one pixel every `(vectors) × ROBOT_SPEED` interrupts**; nine robots at `ROBOT_SPEED` 4 is 36 — 0.6 s a pixel, and the game now measures one pixel in one second. **Three consequences, all of them the game people remember**: the crowd is slow *because* it is a crowd, **killing robots speeds up the survivors** (they are the denominator), and **a robot is never faster than the man until he is the last one left** — where §8.1 and §9.1 had every robot at twice his speed from the fourth room on. The load-bearing test is the aggregate: the cabinet moves at most one robot an interrupt, so a room produces `60/ROBOT_SPEED` steps a second whatever the crowd size, and the port now produces exactly sixty in sixty frames for two, five and ten robots alike. **Third time here that a design sentence was right about a mechanism and wrong about how often it runs** (B69, B73, B75), and the first a host test could not have found. 72 procedures, **110 host tests** |
