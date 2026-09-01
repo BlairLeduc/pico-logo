@@ -177,11 +177,22 @@ static void run(const char *input)
 }
 
 // Put the game in a named room and generate it.
+//
+// AND HOLD EVIL OTTO IN HIS COUNTDOWN, which is the same staging decision as
+// the rest of this helper: `setup.room` builds the maze and nothing else, so a
+// room reached this way has no crowd and no bolts either, and a test asks for
+// what it wants.  From M5 that matters, because his placeholder `o.time` is
+// zero and a room the game never built would otherwise put him on the screen
+// fourteen frames in, walking through walls straight at a man some other test
+// is measuring -- a death, a room rebuild and a crowd nobody asked for.  What
+// his own frame costs is `test_a_frame_carrying_otto_spends_nothing`; where he
+// starts and when he arrives is `place.otto`'s own tests.
 static void in_room(int x, int y)
 {
-    char cmd[96];
+    char cmd[128];
     snprintf(cmd, sizeof(cmd),
-             "make \"room.x %d  make \"room.y %d  setup.room", x, y);
+             "make \"room.x %d  make \"room.y %d  setup.room  "
+             "make \"o.state 0  make \"o.time 9999", x, y);
     run(cmd);
 }
 
@@ -1650,11 +1661,12 @@ void test_berzerk_puts_the_screen_back(void)
 
     // IT HAS TO HAVE PLAYED.  From M3 a board that will not take the fast
     // clock is refused (§15.5), and a refusal skips `play.game` — which leaves
-    // every assertion below true for the wrong reason.  Seventeen costumes is
-    // `init.game` having run: four of the man walking, five shooting poses, and
-    // eight of the robot once both walk cycles are real frames (B77).
+    // every assertion below true for the wrong reason.  Twenty-five costumes is
+    // `init.game` having run: four of the man walking, five shooting poses,
+    // eight of the robot once both walk cycles are real frames (B77), and from
+    // M5 eight of Evil Otto.
     const MockDeviceState *st = mock_device_get_state();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(17, st->costume.put_count,
+    TEST_ASSERT_EQUAL_INT_MESSAGE(25, st->costume.put_count,
         "the game never started, so this proved nothing about putting it back");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("auto", word_of("refreshmode"),
         "the game left the display in sync refresh");
@@ -4314,6 +4326,728 @@ void test_a_doorway_scrolls_and_a_death_does_not(void)
         "the death scrolled");
 }
 
+//==========================================================================
+// Evil Otto (design section 11), M5
+//==========================================================================
+
+// The sixteen entries of $120B, decoded.  The table is BIG-endian -- the
+// sprite fetch at $2765 reads the high byte first -- and its terminating zero
+// at $122B is followed by a LITTLE-endian loop-back to $1217, which is its own
+// seventh entry.  Six frames of arrival play once and ten frames of hop repeat.
+static const int OTTO_SLOT[16] = { 18,19,20,21,22,23,24,25,25,25,25,25,25,25,25,25 };
+
+// And the bounce, which is not in the pixels: a sprite whose first byte has
+// bit 7 set carries a video-RAM offset ($2772), the row stride is 32 bytes
+// ($29A3), and the five escapes in the table are $0400, $0200, $0100, $0080
+// and $0040 -- 32, 16, 8, 4 and 2 rows DOWN, with the twelfth frame carrying
+// no escape at all.  So the stored position is the top of the arc.
+static const int OTTO_OFF[16] = { 32,32,32,32,32,32,32,16,8,4,2,0,2,4,8,16 };
+
+// Put him on the screen by hand, at a named frame of the bounce.
+static void otto_at(float x, float y, int phase)
+{
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd),
+             "make \"o.state 1  make \"o.x %g  make \"o.y %g  make \"o.ph %d  "
+             "make \"o.by %g  make \"o.tick 0  make \"o.drawn \"false",
+             (double)x, (double)y, phase, (double)(y - (float)OTTO_OFF[phase - 1]));
+    run(cmd);
+}
+
+// EIGHT COSTUMES FROM SIXTEEN FRAMES, which is what makes him affordable:
+// nine of the sixteen are the same face at five different heights, and the
+// height is an address offset rather than a bitmap.  Design section 7.5 left
+// him a pen `arc` and called it "a gap rather than a choice", because the
+// listing renders this region as Z80 instructions -- and read little-endian
+// the first entry is $2E12, which is nowhere.
+void test_otto_is_eight_costumes_from_the_roms_pattern_table(void)
+{
+    static const int grow2[8]  = { 24,  24,   0,   0,   0,   0,   0,  0 };
+    static const int grow3[8]  = { 16,  56,  16,   0,   0,   0,   0,  0 };
+    static const int grow4[8]  = { 24,  60,  60,  24,   0,   0,   0,  0 };
+    static const int grow5[8]  = { 56, 124, 124, 124,  56,   0,   0,  0 };
+    static const int grow6[8]  = { 60, 126, 126, 126, 126,  60,   0,  0 };
+    static const int grow7[8]  = { 56, 124, 254, 254, 254, 124,  56,  0 };
+    static const int squash[8] = {  0,   0,   0,  60, 126, 219, 255, 126 };
+    static const int face[8]   = { 60, 126, 219, 255, 255, 189,  66, 60 };
+
+    int before = mock_device_get_state()->costume.put_count;
+    run("setrefresh \"manual  shapes.otto");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(8,
+        mock_device_get_state()->costume.put_count - before,
+        "Evil Otto is not eight costumes");
+
+    assert_slot_is_rom(18, 8, 8, grow2,  "$122E arriving, two rows");
+    assert_slot_is_rom(19, 8, 8, grow3,  "$1234");
+    assert_slot_is_rom(20, 8, 8, grow4,  "$123B");
+    assert_slot_is_rom(21, 8, 8, grow5,  "$1243");
+    assert_slot_is_rom(22, 8, 8, grow6,  "$124C");
+    assert_slot_is_rom(23, 8, 8, grow7,  "$1256");
+    assert_slot_is_rom(24, 8, 8, squash, "$12A7 squashed on the floor");
+    assert_slot_is_rom(25, 8, 8, face,   "$129D the face");
+
+    // THE PADDING GOES AT THE BOTTOM, and that is the ROM's own geometry
+    // rather than a convenience: a sprite is drawn downwards from its anchor,
+    // so an arrival frame two rows tall is a ball that has not yet grown down
+    // to the floor it will land on.  `putsh` will not take a shape under eight
+    // in either axis, so the rows the ROM does not have are transparent.
+    for (int r = 2; r < 8; r++)
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, grow2[r],
+            "the two-row arrival frame has ink below its own height");
+}
+
+// AND THE TABLE ITSELF, both columns, because the frame sequence is the one
+// thing here a person watching a board cannot check: nine of the sixteen
+// entries wear the same costume and differ only in how high off the floor
+// they are drawn.
+void test_the_bounce_is_the_roms_own_sixteen_frames(void)
+{
+    for (int i = 1; i <= 16; i++)
+    {
+        char e[32], msg[128];
+        snprintf(e, sizeof(e), "item %d :o.sh", i);
+        snprintf(msg, sizeof(msg), "pattern entry %d wears slot %g, not %d",
+                 i, (double)num(e), OTTO_SLOT[i - 1]);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(OTTO_SLOT[i - 1], (int)num(e), msg);
+
+        snprintf(e, sizeof(e), "item %d :o.off", i);
+        snprintf(msg, sizeof(msg), "pattern entry %d is %g rows off the top of the arc, not %d",
+                 i, (double)num(e), OTTO_OFF[i - 1]);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(OTTO_OFF[i - 1], (int)num(e), msg);
+    }
+
+    // The loop-back at $122C is $1217, the table's SEVENTH entry, so the six
+    // arrival frames play once and never again.
+    run("make \"rob.vecs 1  make \"p.x 110  make \"p.y 40");
+    otto_at(-120, 40, 1);
+    int seen_arrival_after_loop = 0, wrapped = 0;
+    for (int f = 0; f < 200; f++)
+    {
+        run("step.otto");
+        int ph = (int)num(":o.ph");
+        if (wrapped && ph < 7)
+            seen_arrival_after_loop++;
+        if (ph == 7 && f > 6)
+            wrapped = 1;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(wrapped, "the bounce never came back round to its seventh frame");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, seen_arrival_after_loop,
+        "he arrived a second time -- the loop-back went to the top of the table, not to $1217");
+}
+
+// THE TIMER IS THREE NUMBERS ADDED UP ($2ABC): OTTO_TIME = ROBOT_SPEED +
+// RSAVED + RBOLTS.  A fast, crowded, well-armed room buys you MORE time, which
+// is backwards until you notice that it is the room that is already hard.
+void test_ottos_clock_is_speed_plus_crowd_plus_bolts(void)
+{
+    static const struct { int tp, live, bolts, want; } room[] = {
+        { 4,  9, 0, 13 },   // the opening room: about nine seconds
+        { 1, 11, 5, 17 },
+        { 3,  0, 2,  5 },
+    };
+    for (size_t i = 0; i < sizeof(room) / sizeof(room[0]); i++)
+    {
+        char cmd[192], msg[160];
+        snprintf(cmd, sizeof(cmd),
+                 "make \"p.x -96  make \"p.y 42  make \"rob.tp %d  "
+                 "make \"rob.live %d  make \"rob.bolts %d  place.otto",
+                 room[i].tp, room[i].live, room[i].bolts);
+        run(cmd);
+        snprintf(msg, sizeof(msg),
+                 "ROBOT_SPEED %d, %d robots and %d bolts gave OTTO_TIME %g, not %d",
+                 room[i].tp, room[i].live, room[i].bolts, (double)num(":o.time"), room[i].want);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)room[i].want, num(":o.time"), msg);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":o.state"),
+            "a room opened with Otto already in it");
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":o.drawn"),
+            "a new room thinks Otto is still on the canvas, so its first erase "
+            "will rub a hole in the maze");
+    }
+}
+
+// AND EVERY ROBOT YOU KILL PUTS TWO BACK ($2486, `inc (hl)` twice inside
+// BLAM -- "delay otto's appearance slightly").  So clearing a room is also how
+// you buy the time to clear it, and a room you fight in is longer than a room
+// you run through.
+void test_a_robot_killed_puts_two_units_back_on_ottos_clock(void)
+{
+    run("make \"p.x -96  make \"p.y 42  make \"rob.tp 4  "
+        "make \"rob.live 3  make \"rob.bolts 0  place.otto");
+    float before = num(":o.time");
+
+    robot_at(1, -30, 44, 0, 1);
+    run("rob.dies 1");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(before + 2.0f, num(":o.time"),
+        "killing a robot did not delay Otto");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(50.0f, num(":score"),
+        "the robot was not worth fifty");
+
+    // Once he is here the cabinet still increments a number nothing reads.
+    // We do not, because `OT` on the readout would then climb after he had
+    // already arrived and the number would be a lie.
+    run("make \"o.state 1");
+    before = num(":o.time");
+    robot_at(2, -30, 44, 0, 1);
+    run("rob.dies 2");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(before, num(":o.time"),
+        "the clock moved after Otto had already arrived");
+}
+
+// A UNIT IS FORTY TICKS, which is $2ACE's `ld a,$28` in front of
+// ACTIVATE_HEAD_JOB: two thirds of a second, so the opening room's thirteen
+// units are about nine seconds.  One of our frames is three ticks, and the
+// countdown keeps its phase across the reload so the unit stays forty and does
+// not drift to forty-two.
+void test_otto_arrives_forty_ticks_a_unit(void)
+{
+    run("make \"p.x -96  make \"p.y 42  make \"rob.tp 4  "
+        "make \"rob.live 9  make \"rob.bolts 0  place.otto");
+    run("make \"rob.vecs 10");
+
+    int frames = 0;
+    while (num(":o.state") == 0.0f && frames < 1000)
+    {
+        run("step.otto");
+        frames++;
+    }
+
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "thirteen units of forty ticks is 520 ticks and 173 frames; he took %d",
+             frames);
+    // 13 x 40 = 520 ticks at three a frame.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(174, frames, msg);
+}
+
+// HE ENTERS WHERE THE MAN ENTERED, which is the 2600 manual's sentence and
+// $2A9D's code -- MAN_X and MAN_Y read at room build, then clamped AWAY from
+// him in three comparisons.  The y clamp is the one that matters most, because
+// the bounce hangs BELOW the stored position and an unclamped entry through
+// the bottom doorway would hop off the screen.
+void test_otto_enters_where_the_man_entered(void)
+{
+    static const struct { float px, py, ox, oy; const char *what; } way[] = {
+        { -96.0f,   42.0f, -96.0f,   42.0f, "a new game, just inside the left doorway" },
+        { -118.0f,  42.0f, -124.0f,  42.0f, "in through the left door: arcade x 2" },
+        { 104.0f,   42.0f,  122.0f,  42.0f, "in through the right door: arcade x 248" },
+        { 0.0f,    -43.0f,   0.0f,  -18.0f, "in through the bottom door: arcade y 160" },
+        { 0.0f,    136.0f,   0.0f,  136.0f, "in through the top door: no clamp" },
+        { -102.0f,  42.0f, -102.0f,  42.0f, "arcade x 24 exactly, which is not under 24" },
+        { -103.0f,  42.0f, -124.0f,  42.0f, "arcade x 23, which is" },
+        { 103.0f,   42.0f, 103.0f,   42.0f, "arcade x 229, which is not 230 yet" },
+        { 0.0f,    -37.0f,   0.0f,  -37.0f, "arcade y 179, which is not 180 yet" },
+        { 0.0f,    -38.0f,   0.0f,  -18.0f, "arcade y 180 exactly, which is" },
+    };
+
+    for (size_t i = 0; i < sizeof(way) / sizeof(way[0]); i++)
+    {
+        char cmd[160], msg[192];
+        snprintf(cmd, sizeof(cmd),
+                 "make \"p.x %g  make \"p.y %g  make \"rob.tp 4  make \"rob.live 5  "
+                 "make \"rob.bolts 0  place.otto", (double)way[i].px, (double)way[i].py);
+        run(cmd);
+        snprintf(msg, sizeof(msg), "%s: the man at %g,%g put Otto at %g,%g",
+                 way[i].what, (double)way[i].px, (double)way[i].py,
+                 (double)num(":o.x"), (double)num(":o.y"));
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(way[i].ox, num(":o.x"), msg);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(way[i].oy, num(":o.y"), msg);
+    }
+}
+
+// HE IS STEERED BY `SETDIR` ($2B39) AND NEVER BY `IQ`, and that is the whole
+// of "he walks through walls": one omission, not a rule.  The check is that he
+// stands on ink on his way -- a robot in the same place has his direction
+// cleared before the step that would land him there, and dies if it is not.
+void test_otto_walks_through_walls(void)
+{
+    // A room whose cell (1,1) is walled along its top, which is the same wall
+    // `test_an_interior_wall_kills_him` walks the man into.
+    int found = -1;
+    for (int r = 0; r < 64 && found < 0; r++)
+    {
+        in_room(r, 0);
+        if ((mask_at(-46, 40) & 4) != 0)
+            found = r;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(found >= 0, "no room in 64 walls the top of cell (1,1)");
+
+    in_room(found, 0);
+    no_robots();
+    man_at(-50, 40);
+    run("make \"rob.vecs 1");
+    otto_at(-50, 120, 12);
+
+    int stood_on_a_wall = 0;
+    for (int f = 0; f < 200 && num(":o.y") > 46.0f; f++)
+    {
+        run("step.otto");
+        if (strcmp(word_of("on.wall? :o.x :o.by 8"), "true") == 0)
+            stood_on_a_wall = 1;
+    }
+
+    TEST_ASSERT_TRUE_MESSAGE(stood_on_a_wall,
+        "he never touched the wall between him and the man, so this proved nothing");
+    char msg[128];
+    snprintf(msg, sizeof(msg), "he stopped at %g,%g, on the far side of the wall",
+             (double)num(":o.x"), (double)num(":o.y"));
+    TEST_ASSERT_TRUE_MESSAGE(num(":o.y") <= 74.0f, msg);
+}
+
+// HE KILLS ROBOTS BY TOUCHING THEM AND YOU ARE PAID FOR THEM, which is the
+// 2600 manual's strategy of putting robots between you and Otto and is real:
+// the arcade reaches BLAM the same way a bolt does.  So a robot he eats is
+// fifty points and one fewer thing sharing the room's step rate.
+void test_otto_eats_a_robot_and_pays_fifty(void)
+{
+    in_room(9, 9);
+    no_robots();
+    man_at(110, 40);
+    run("make \"rob.vecs 2  make \"rob.live 1  make \"score 0");
+    robot_at(1, -100, 40 - 32.0f, 0, 1);
+    otto_at(-120, 40, 12);   // frame 12 is the top of the arc, offset 0
+
+    for (int f = 0; f < 40 && robot_state(1) == 1; f++)
+        run("step.otto");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, robot_state(1),
+        "Otto walked over a robot and it lived");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(50.0f, num(":score"),
+        "the robot Otto ate was not worth fifty");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":rob.live"),
+        "the live count did not follow him");
+
+    // AND HE IS NOT A ROBOT: `rob.dies` is the only thing that ran, so nothing
+    // put him in a slot and nothing can shoot at him.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":o.state"), "eating a robot cost Otto something");
+}
+
+// HE CANNOT BE SHOT.  The 2600's rebound and invincible Ottos are 2600
+// variations; the arcade has one Otto and he is invincible (section 17).  Here
+// that is an absence rather than a rule -- `bolt.robots` scans the eleven robot
+// slots and he is not in one -- so the test is that a bolt drawn straight
+// through him neither stops nor scores.
+void test_a_bolt_flies_straight_through_otto(void)
+{
+    in_room(9, 9);
+    no_robots();
+    no_bolts();
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    man_at(-110, 40);
+    run("make \"rob.vecs 1  make \"score 0");
+    otto_at(0, 40, 12);
+    run("make \"o.state 1");
+    run("fire.bolt 1 2 -100 40 0");
+
+    // Twelve passes at nine pixels each takes the head from -100 to 8, which
+    // is a hundred and eight pixels of open ground with Otto standing at zero.
+    for (int f = 0; f < 12; f++)
+        run("step.bolts");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":o.state"), "a bolt killed Evil Otto");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":score"), "a bolt scored off Evil Otto");
+    TEST_ASSERT_TRUE_MESSAGE(num("item 1 :b.dir") > 0.0f,
+        "the bolt stopped on Otto instead of flying through him");
+    TEST_ASSERT_TRUE_MESSAGE(num("item 1 :b.x") > 0.0f,
+        "the bolt never reached him, so this proved nothing");
+}
+
+// AND HE IS A VECTOR FROM THE MOMENT THE ROOM IS BUILT, WHICH TAXES THE CROWD
+// BEFORE HE EVER APPEARS.  $2154 jumps to $2A8E as the last act of placing the
+// robots and $2A8E's second instruction is `call $200E` -- the same routine
+// that links a ROBOT's vector into the circular chain.  His MOVE bit is not set
+// until he arrives ($2AEF), but the interrupt spends his turn either way,
+// because $2704 walks V.PTR past him regardless.  So B75's denominator is one
+// larger than B75 said, everywhere.
+void test_otto_takes_a_turn_before_he_arrives(void)
+{
+    for (int r = 0; r < 5; r++)
+    {
+        in_room(r, r);
+        run("make \"p.x -96  make \"p.y 42  place.robots  place.bolts  place.otto");
+        char msg[160];
+        snprintf(msg, sizeof(msg),
+                 "room %d,%d placed %g robots and %g vectors -- Otto is not in the chain",
+                 r, r, (double)num(":rob.live"), (double)num(":rob.vecs"));
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":rob.live") + 1.0f, num(":rob.vecs"), msg);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":o.state"),
+            "he was on the screen before his own timer ran");
+    }
+}
+
+// How far Otto walks east in `frames` frames with `vecs` things taking turns.
+static int otto_travel(int vecs, int frames)
+{
+    no_robots();
+    no_bolts();
+    set_cells((const int[15]){ 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0 });
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd),
+             "make \"p.x 110  make \"p.y 40  make \"p.dying 0  make \"rob.vecs %d", vecs);
+    run(cmd);
+    otto_at(-120, 40, 12);
+    for (int f = 0; f < frames; f++)
+        run("step.otto");
+    return (int)(num(":o.x") + 120.0f);
+}
+
+// HIS TPRIME IS 2 ($2AEB) AND NOT ROBOT_SPEED, which is the PLAYER's number
+// ($2004).  So alone in a cleared room he moves at exactly the man's thirty
+// pixels a second -- Berzerk's Otto corners you, he does not outrun you -- and
+// in a full room he is one of twelve things taking turns and barely crawls.
+// That is also why he is faster than a robot in the first three rooms, level in
+// the fourth and slower after: the robots' TPRIME falls to 1 and his does not.
+void test_otto_alone_is_the_mans_own_speed(void)
+{
+    // Three seconds at 20 fps.  1.5 steps a frame is the man's own rate.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(90, otto_travel(1, 60),
+        "Otto alone in a cleared room is not the man's speed");
+
+    // Eleven robots and himself: 180 ticks over a period of 24.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(7, otto_travel(12, 60),
+        "Otto in a full room does not take his turn with the crowd");
+}
+
+// AND HE KILLS THE MAN, on the box the man's own sprite makes -- 8 x 16
+// against Otto's 8 x 8, and Otto's measured where he is DRAWN.  The cabinet has
+// no choice about that: its intercept bit is set by the sprite draw itself, so
+// the bounce is in the collision by construction.  What it buys is worth
+// keeping -- Otto at the top of his arc passes over your head.
+void test_otto_kills_the_man_at_the_bottom_of_his_hop_and_not_the_top(void)
+{
+    in_room(9, 9);
+    no_robots();
+    // A full room's worth of vectors, so this step is one he does not move in:
+    // his position and his frame both stand still and the test is about the
+    // bounce alone.  A step he moves in advances the pattern BEFORE the
+    // collision, which is the cabinet's order too -- it moves, draws, and reads
+    // the intercept the draw set.
+    run("make \"rob.vecs 12");
+
+    // Level with him: the hop is on the floor (frame 7, 32 rows down).
+    man_at(-50.0f, 40.0f - 32.0f);
+    otto_at(-50, 40, 7);
+    run("step.otto");
+    TEST_ASSERT_TRUE_MESSAGE(num(":p.dying") > 0.0f, "Otto walked through the man");
+
+    // The same position at the top of the arc, thirty-two rows higher, and he
+    // is over the man's head.
+    man_at(-50.0f, 40.0f - 32.0f);
+    otto_at(-50, 40, 12);
+    run("step.otto");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":p.dying"),
+        "Otto killed him from the top of his hop, so the bounce is not in the collision");
+}
+
+// THE BOUNCE HANGS BELOW THE STORED POSITION, which is what the escape byte
+// means: the offset is ADDED to the video RAM address and the address grows
+// downwards.  So `o.y` is the top of the arc and the stamp is half a sprite
+// south of `o.by`, the way a robot's is half a sprite south of `r.y`.
+void test_otto_stamps_half_a_sprite_below_the_top_of_his_arc(void)
+{
+    in_room(9, 9);
+    for (int ph = 1; ph <= 16; ph++)
+    {
+        otto_at(-40, 60, ph);
+        mock_device_clear_graphics();
+        run("draw.otto");
+
+        char msg[160];
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, mock_device_stamp_count(), "Otto is not one stamp");
+        const MockStamp *st = mock_device_get_stamp(0);
+        snprintf(msg, sizeof(msg), "frame %d stamped slot %d, not %d",
+                 ph, st->shape, OTTO_SLOT[ph - 1]);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(OTTO_SLOT[ph - 1], st->shape, msg);
+        snprintf(msg, sizeof(msg), "frame %d stamped at y %g, and %d rows down is %g",
+                 ph, (double)st->y, OTTO_OFF[ph - 1], (double)(60.0 - OTTO_OFF[ph - 1] - 3.5));
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, -36.5f, st->x, "the stamp is not half a sprite east");
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f,
+            60.0f - (float)OTTO_OFF[ph - 1] - 3.5f, st->y, msg);
+    }
+}
+
+// The eraser, and it is `erase.robots`' arithmetic at eight rows: three pen 3
+// strokes at x + 1, x + 4 and x + 6 running from y - 1 down five cover the
+// 8 x 8 exactly and nothing outside it.  A wide pen in this interpreter is a
+// filled disc and 3 is the only width that is a square (B67), and the walls are
+// drawn once a room, so an eraser that spills eats a hole nothing repaints.
+//
+// AND IT ERASES WHERE HE WAS DRAWN, not where he is.  The bounce moves him
+// between the draw and the next erase even on a frame he did not walk in, so
+// `o.dx`/`o.dy` are the man's own `p.dx`/`p.dy` trick.
+void test_the_erase_covers_every_pixel_otto_stamped(void)
+{
+    static bool covered[240][320];
+
+    // AND AT HALF POSITIONS AS WELL AS WHOLE ONES, which is B67's second half
+    // and the reason this test has a list instead of a position.  Otto's start
+    // is `$2AB6` copying MAN_X/MAN_Y, and our man's stored position moves 1.5
+    // steps a frame -- so half his coordinates are half-pixels, and `$2A9D`'s
+    // clamps only replace ONE axis.  Walk in through a side doorway and Otto
+    // inherits a fractional y; through the top or bottom and a fractional x.
+    static const float where[6][2] = {
+        { -40.0f, 60.0f }, { -40.5f, 60.0f }, { -40.0f, 60.5f },
+        { -40.5f, 60.5f }, { 40.5f, -20.5f }, { -96.0f, 42.0f },
+    };
+
+    in_room(9, 9);
+    for (size_t w = 0; w < sizeof(where) / sizeof(where[0]); w++)
+    {
+    char at[64];
+    snprintf(at, sizeof(at), "at %g,%g", (double)where[w][0], (double)where[w][1]);
+
+    otto_at(where[w][0], where[w][1], 12);
+    mock_device_clear_graphics();
+    run("draw.otto");
+    const MockStamp *st = mock_device_get_stamp(0);
+    int sx0 = SCR_X(st->x) - 4, sy0 = SCR_Y(st->y) - 4;
+
+    // He hops between the two, which is exactly the case a naive eraser gets
+    // wrong: `o.by` is now 32 rows lower than the pixels on the screen.
+    run("make \"o.ph 7  make \"o.by :o.dy - 32");
+
+    mock_device_clear_graphics();
+    run("erase.otto");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, mock_device_line_count(),
+        "Otto is not three erase strokes");
+    erase_coverage(covered);
+
+    for (int y = 0; y < 8; y++)
+        for (int x = 0; x < 8; x++)
+        {
+            char msg[160];
+            snprintf(msg, sizeof(msg),
+                     "%s: Otto's pixel %d,%d survives the erase -- he leaves a trail",
+                     at, x, y);
+            TEST_ASSERT_TRUE_MESSAGE(covered[sy0 + y][sx0 + x], msg);
+        }
+
+    for (int y = sy0 - 3; y < sy0 + 11; y++)
+        for (int x = sx0 - 3; x < sx0 + 11; x++)
+        {
+            if (x >= sx0 && x < sx0 + 8 && y >= sy0 && y < sy0 + 8)
+                continue;
+            char msg[176];
+            snprintf(msg, sizeof(msg),
+                     "%s: Otto's eraser painted %d,%d, which is outside him and may "
+                     "be a wall", at, x - sx0, y - sy0);
+            TEST_ASSERT_FALSE_MESSAGE(covered[y][x], msg);
+        }
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, (int)num("pensize"),
+        "the eraser left the pen three wide, so the next wall is a slab");
+    }
+
+    // AND NOTHING TO ERASE IS NOTHING DRAWN.  A room change cleans the canvas
+    // and builds a new Otto, so the frame after it must not rub at where the
+    // last one stood.
+    mock_device_clear_graphics();
+    run("erase.otto");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, mock_device_line_count(),
+        "Otto was erased twice, which is a hole in the new room's wall");
+}
+
+// Section 18's fourth ceiling, with Otto on the screen.  He is a constant
+// rather than a crowd, but he is a constant that runs in every frame of every
+// room from the moment his timer expires, and `.setitem` of a number the
+// workspace has not held before interns a word (B52).  He writes none: every
+// number he holds is a `make` on a global, his position is whole pixels, and
+// `o.tick`, `o.tk` and `o.ph` are small closed sets by construction.
+void test_a_frame_carrying_otto_spends_nothing(void)
+{
+    run("setrefresh \"manual");
+    in_room(9, 9);
+    no_robots();
+    man_at(110, 40);
+    // Twelve vectors is a full room, which is also slow enough that six
+    // hundred frames do not walk him into the man and end the measurement in a
+    // room build.
+    run("make \"rob.vecs 12");
+    otto_at(-120, 40, 1);
+
+    for (int i = 0; i < 200; i++)   // warm: every frame of the bounce, every slot
+        frame();
+
+    run("make \"frames 0");
+    float nodes0 = num("nodes"), atoms0 = num("atoms");
+    for (int i = 0; i < 600; i++)
+        frame();
+
+    char msg[160];
+    snprintf(msg, sizeof(msg), "six hundred frames with Otto in the room spent %g cells",
+             (double)(nodes0 - num("nodes")));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(nodes0, num("nodes"), msg);
+    snprintf(msg, sizeof(msg), "six hundred frames with Otto in the room spent %g bytes "
+             "of word table", (double)(atoms0 - num("atoms")));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(atoms0, num("atoms"), msg);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":o.state"),
+        "Otto was not on the screen for the measurement");
+}
+
+
+// Everything a colour painted, so a test can ask what was rubbed out and what
+// was put back in the same frame.  Every stroke this game draws is
+// axis-aligned, so a bounding box is exact; pen 3 is a square brush and spreads
+// one pixel each way (B67), pen 1 does not.
+static void colour_coverage(bool out[240][320], int colour)
+{
+    memset(out, 0, sizeof(bool) * 240 * 320);
+    for (int i = 0; i < mock_device_line_count(); i++)
+    {
+        const MockLine *l = mock_device_get_line(i);
+        if ((int)l->colour != colour)
+            continue;
+        int x1 = SCR_X(l->x1), x2 = SCR_X(l->x2);
+        int y1 = SCR_Y(l->y1), y2 = SCR_Y(l->y2);
+        int r = (l->pen_size >= 3) ? 1 : 0;
+        for (int y = (y1 < y2 ? y1 : y2); y <= (y1 < y2 ? y2 : y1); y++)
+            for (int x = (x1 < x2 ? x1 : x2); x <= (x1 < x2 ? x2 : x1); x++)
+                for (int oy = -r; oy <= r; oy++)
+                    for (int ox = -r; ox <= r; ox++)
+                        if (x + ox >= 0 && x + ox < 320 && y + oy >= 0 && y + oy < 240)
+                            out[y + oy][x + ox] = true;
+    }
+}
+
+// B78: OTTO ERASES WALLS AS HE MOVES, reported from a board.
+//
+// He is the first figure in this game that is MEANT to overlap the maze, and
+// erase-in-place cannot restore what was under him.  Every other figure is kept
+// off the walls by construction -- the man dies on one, robots die on one,
+// bolts die on one -- which is the invariant §3's whole erase decision stands
+// on, and Otto is exempt from all three by design (§11: "he walks through
+// walls").  The cabinet has the problem and does not notice, because it XORs
+// its sprites into video RAM ($275B's `ld b,$90`): drawing Otto a second time
+// XORs him back out and the wall underneath comes back for free.
+//
+// So the fix is not to stop him erasing -- it is to put back what he took.
+void test_otto_puts_back_the_wall_he_walked_over(void)
+{
+    static bool erased[240][320], painted[240][320];
+
+    // A room whose cell (1,1) is walled along its top: a horizontal run at
+    // turtle y = 74, which is the same wall `test_an_interior_wall_kills_him`
+    // walks the man into.
+    int found = -1;
+    for (int r = 0; r < 64 && found < 0; r++)
+    {
+        in_room(r, 0);
+        if ((mask_at(-46, 40) & 4) != 0)
+            found = r;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(found >= 0, "no room in 64 walls the top of cell (1,1)");
+
+    run("setrefresh \"manual");
+    in_room(found, 0);
+    no_robots();
+    no_bolts();
+    man_at(-96, 42);
+    // A full room's worth of vectors, so the frame under test is one he does
+    // not move in: what is being measured is the erase, not the walk.
+    run("make \"rob.vecs 12");
+    otto_at(-50, 78, 12);   // frame 12 is the top of the arc, so he is drawn at 78
+    run("draw.otto");       // ... and the frame has something of his to rub out
+
+    mock_device_clear_graphics();
+    frame();
+
+    colour_coverage(erased, 255);
+    colour_coverage(painted, 254);
+
+    // His box is x -50..-43 and y 71..78, so it straddles the wall at y = 74.
+    int wall_row = SCR_Y(74.0f);
+    TEST_ASSERT_TRUE_MESSAGE(erased[wall_row][SCR_X(-47.0f)],
+        "Otto's eraser never reached the wall, so this proved nothing");
+
+    for (int x = -50; x <= -43; x++)
+    {
+        int sx = SCR_X((float)x);
+        if (!erased[wall_row][sx])
+            continue;
+        char msg[176];
+        snprintf(msg, sizeof(msg),
+                 "Otto rubbed out the wall pixel at %d,74 and nothing put it back "
+                 "-- he eats the maze as he walks", x);
+        TEST_ASSERT_TRUE_MESSAGE(painted[wall_row][sx], msg);
+    }
+}
+
+// AND THE BORDER TOO, which is the half a mask lookup cannot see: `cell.at`
+// clamps to the 5 x 3 grid, so a crossing test never sees the outer wall
+// (§6.3), and Otto starts ON the border -- $2A9D's x clamp puts him at arcade
+// 2, which is turtle -124, with the border drawn at -122.  So he takes a bite
+// out of it on his first step unless the border is tested by position, which is
+// what this game already does for the player.
+void test_otto_puts_back_the_border_he_starts_on(void)
+{
+    static bool erased[240][320], painted[240][320];
+
+    run("setrefresh \"manual");
+    in_room(9, 9);
+    no_robots();
+    no_bolts();
+    man_at(0, 42);
+    run("make \"rob.vecs 12");
+    // ABOVE THE LEFT DOORWAY, and the doorway is why: `draw.border` leaves the
+    // left edge open from y = 6 to y = 74, so a box inside that gap is erasing
+    // background and there is nothing to put back.  y 93..100 is drawn border.
+    otto_at(-126, 100, 12);  // his box is -126..-119, and the border is at -122
+    run("draw.otto");
+
+    mock_device_clear_graphics();
+    frame();
+
+    colour_coverage(erased, 255);
+    colour_coverage(painted, 254);
+
+    int wall_col = SCR_X(-122.0f);
+    TEST_ASSERT_TRUE_MESSAGE(erased[SCR_Y(98.0f)][wall_col],
+        "Otto's eraser never reached the border, so this proved nothing");
+
+    for (int y = 93; y <= 100; y++)
+    {
+        int sy = SCR_Y((float)y);
+        if (!erased[sy][wall_col])
+            continue;
+        char msg[176];
+        snprintf(msg, sizeof(msg),
+                 "Otto rubbed out the border pixel at -122,%d and nothing put it "
+                 "back -- he eats the room's outer wall where he stands up", y);
+        TEST_ASSERT_TRUE_MESSAGE(painted[sy][wall_col], msg);
+    }
+}
+
+// AND HE DOES NOT REPAINT WHEN HE IS NOWHERE NEAR A WALL, which is the other
+// half of the fix being affordable: putting the maze back is sixteen strokes,
+// so it has to be the exception rather than the frame.
+void test_otto_in_open_ground_does_not_redraw_the_maze(void)
+{
+    run("setrefresh \"manual");
+    in_room(9, 9);
+    no_robots();
+    no_bolts();
+    man_at(0, 42);
+    run("make \"rob.vecs 12");
+    // The middle of a cell, clear of every grid line and every border.
+    otto_at(-46, 40, 12);
+    run("draw.otto");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of("on.wall? :o.dx :o.dy 8"),
+        "the chosen spot is not open ground, so this proves nothing");
+
+    mock_device_clear_graphics();
+    frame();
+
+    static bool painted[240][320];
+    colour_coverage(painted, 254);
+    int any = 0;
+    for (int y = 0; y < 240 && !any; y++)
+        for (int x = 0; x < 320 && !any; x++)
+            if (painted[y][x]) any = 1;
+    TEST_ASSERT_FALSE_MESSAGE(any,
+        "a frame with Otto in open ground redrew the maze, which is sixteen "
+        "strokes for nothing");
+}
+
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -4432,6 +5166,25 @@ int main(void)
     RUN_TEST(test_the_maze_leaves_by_a_whole_screen_eight_pixels_at_a_time);
     RUN_TEST(test_the_slide_shows_the_room_it_is_leaving_and_not_the_one_ahead);
     RUN_TEST(test_a_doorway_scrolls_and_a_death_does_not);
+
+    RUN_TEST(test_otto_is_eight_costumes_from_the_roms_pattern_table);
+    RUN_TEST(test_the_bounce_is_the_roms_own_sixteen_frames);
+    RUN_TEST(test_ottos_clock_is_speed_plus_crowd_plus_bolts);
+    RUN_TEST(test_a_robot_killed_puts_two_units_back_on_ottos_clock);
+    RUN_TEST(test_otto_arrives_forty_ticks_a_unit);
+    RUN_TEST(test_otto_enters_where_the_man_entered);
+    RUN_TEST(test_otto_walks_through_walls);
+    RUN_TEST(test_otto_eats_a_robot_and_pays_fifty);
+    RUN_TEST(test_a_bolt_flies_straight_through_otto);
+    RUN_TEST(test_otto_takes_a_turn_before_he_arrives);
+    RUN_TEST(test_otto_alone_is_the_mans_own_speed);
+    RUN_TEST(test_otto_kills_the_man_at_the_bottom_of_his_hop_and_not_the_top);
+    RUN_TEST(test_otto_stamps_half_a_sprite_below_the_top_of_his_arc);
+    RUN_TEST(test_the_erase_covers_every_pixel_otto_stamped);
+    RUN_TEST(test_a_frame_carrying_otto_spends_nothing);
+    RUN_TEST(test_otto_puts_back_the_wall_he_walked_over);
+    RUN_TEST(test_otto_puts_back_the_border_he_starts_on);
+    RUN_TEST(test_otto_in_open_ground_does_not_redraw_the_maze);
 
     return UNITY_END();
 }

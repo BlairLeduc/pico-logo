@@ -451,11 +451,16 @@ extern "C" {
 // written, so 1..LOGO_SHAPE_MAX_SLOT are the ones a program fills.
 //
 // The count costs a slot table entry each (6 bytes) and nothing else --
-// pixels come from the costume pool, which is sized separately. 23 is
-// what a faithful arcade inventory needs: Berzerk's is 21 (nine of the
-// man, eight of the robot with both walk cycles, four of the explosion),
-// and the pool holds that in 3,008 of its 8,192 bytes.
-#define LOGO_SHAPE_MAX_SLOT 23
+// pixels come from the costume pool, which is sized separately. 25 is
+// what a faithful arcade inventory needs, and Berzerk's is exactly that:
+// nine of the man, eight of the robot with both walk cycles, and eight of
+// Evil Otto (six of arrival and the two the bounce alternates). The pool
+// holds them in 2,432 of its 8,192 bytes.
+//
+// It was 23 until P15 M5, on an arithmetic that counted the robot's four
+// explosion frames and forgot Otto entirely; the explosion turned out to
+// need no slot at all (it is drawn, not stamped) and Otto needs eight.
+#define LOGO_SHAPE_MAX_SLOT 25
 
 // The two shape pixel values that are not literal colours.
 //

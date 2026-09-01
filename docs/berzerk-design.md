@@ -616,21 +616,56 @@ trigger in M4, because building them at M2 costs 5 × 18 ms of startup for a
 pose nothing in the milestone can reach. What M2 owed this section was the
 arithmetic, and the table is it.
 
-### 7.5 Otto is still an `arc`, and that is a gap rather than a choice
+### 7.5 Otto decoded, and the bounce is not in the pixels (M5, 2026-08-31)
 
-A circle, two eyes and a grin — four statements, three of them `arc`, and the
-reference's own worked example draws precisely this face ([`arc`](../reference/Pico_Logo_Reference.md)).
-His bounce is the arcade's: `OttoBounceOffsets` in the Vectrex port
-(`00 08 0C 0E 10 12 12 12 14 …`) is a vertical offset walked from a counter, so
-he moves in a straight line towards you and his *drawing* hops.
+~~A circle, two eyes and a grin — four statements, three of them `arc`.~~
+**Transcribed at M5 and he is eight costumes, slots 18–25.** He was the one
+figure in the game still drawn rather than stamped, and this section called
+that "a gap rather than a choice" because the disassembly renders `$120B`
+onwards as Z80 instructions rather than data.
 
-**The arcade's Otto is a sprite and this document does not have it.** His
-pattern table is at `$120B` and his frames run from about `$122E`, and the
-disassembly renders that whole region as Z80 instructions rather than data —
-the bytes are there (`01 02 18 18`, `01 03 10 38 10`, …, a ball that grows and
-shrinks, which *is* the bounce) but transcribing them out of a mis-decoded
-listing is error-prone and it is M5's job, not M0's. Until then he is drawn,
-not stamped, and he is the one figure in the game that still is.
+**What decodes it is the sprite fetch, `$2765`–`$276C`:** `ld a,(hl) / inc hl /
+ld l,(hl) / ld h,a` reads the **high byte first**, so a pattern table holds its
+addresses **big-endian** — and the terminating zero's loop-back word, read at
+`$27D5` low byte first, does not. Read that way `$120B` is sixteen entries, a
+zero at `$122B` and a loop back to `$1217`, **its own seventh entry**, and
+every address in it lands on a `01 <height>` sprite header. Read
+little-endian the first entry is `$2E12`, which is nowhere — this is the kind
+of region where a wrong reading is *plausible*, which is why M0 declined it.
+
+**So he is six frames of arrival and a ten-frame hop.** Entries 1–6 (`$122E`
+`$1234` `$123B` `$1243` `$124C` `$1256`) are a ball inflating from two rows to
+seven and play **once**; entries 7–16 are the hop and repeat forever. And only
+**two bitmaps** are in the hop — a squashed face on the floor (`$12A7`) and the
+face itself (`$129D`, `3C 7E DB FF FF BD 42 3C`: two eyes and a grin) — because
+**the height of the bounce is not in the pixels at all.**
+
+**The bounce is an address offset.** A sprite whose first byte has bit 7 set is
+an escape: `$2772`–`$2786` takes its low seven bits and the byte after as a
+16-bit number and **adds it to the video RAM address** before drawing (and
+*subtracts* it on a cocktail cabinet, which is the confirmation that it is a
+screen offset and not a flag). The row stride is 32 bytes — `$29A3` builds the
+address as `((y << 8) | x) >> 3` — so the five escapes in the table (`$0400`,
+`$0200`, `$0100`, `$0080`, `$0040`, and none at all on `$129D`) are **32, 16,
+8, 4, 2 and 0 rows down**. The hop runs 32 → 16 → 8 → 4 → 2 → 0 → 2 → 4 → 8 →
+16 and back to 32: six of its ten frames in the top half of the arc, which is
+what a ball does.
+
+Three things follow, and all three are why this is eight slots rather than
+sixteen:
+
+- **The stored position is the TOP of the arc** and the ball hangs *under* it,
+  never above. That is what `$2AB4`'s y clamp is for — an entry through the
+  bottom doorway would otherwise hop off the screen.
+- **Nine of sixteen frames are one bitmap**, so the whole animation is two
+  columns: a slot and an offset.
+- **The collision follows the bounce**, because the cabinet's intercept bit is
+  set by the sprite draw itself and the offset is inside it. Otto at the top of
+  his arc passes over your head, and that is free rather than designed.
+
+The Vectrex's `OttoBounceOffsets` (`00 08 0C 0E 10 12 12 12 14 …`) is Malban
+solving the same problem from the outside; the arcade's own numbers are above
+and this port uses them.
 
 ### 7.6 The two deaths
 
@@ -1199,13 +1234,29 @@ axis, so `round(diff / 5)` separates them.
   ($2ABC) — so a fast, crowded, well-armed room buys you *more* time, which is
   backwards until you notice it is the room that is already hard. It counts
   down one per activation and **every robot you kill adds two back** (`inc (hl)`
-  twice in `BLAM`, $2486).
+  twice in `BLAM`, $2486). **An activation is 40 ticks** — `$2ACE` loads `$28`
+  before `ACTIVATE_HEAD_JOB` — so a unit is two thirds of a second and the
+  opening room (speed 4, ~9.6 robots, no bolts) is **about nine seconds**.
 - **He starts where you came in**, clamped away from you: if the player's
   x < 24 Otto starts at x = 2, if x ≥ 230 he starts at 248, and if y ≥ 180 he
   starts at 160 ($2A9D–$2AB9). The 2600 manual's *"Evil Otto always enters
   where the man enters"* is this code.
 - **He walks through walls.** He is steered by `SETDIR` ($2B39) and never by
   `IQ`, so nothing consults a wall mask on his behalf. One omission, one rule.
+- **His `TPRIME` is 2 ($2AEB) and not `ROBOT_SPEED`** — the *player's* number
+  ($2004). So he is faster than a robot in the first three rooms, level in the
+  fourth and slower after, and alone in a cleared room he moves at exactly the
+  man's thirty pixels a second. Berzerk's Otto corners you; he does not outrun
+  you.
+- **And he is a vector from the moment the room is built, which taxes the crowd
+  before he ever appears** (M5). `$2154` jumps to `$2A8E` as the last act of
+  placing the robots, and `$2A8E`'s second instruction is `call $200E` — the
+  same routine that links a *robot's* vector into the circular chain. His MOVE
+  bit is not set until he arrives ($2AEF), so the interrupt spends his turn on
+  nothing; but it still spends it, because `$2704` walks `V.PTR` past him
+  either way. **So [B75](bugs.md)'s denominator is one larger than B75 said,
+  everywhere**, and the last robot in a room is sharing it with Otto rather
+  than having it to himself.
 - **He kills robots** by touching them, and you are paid for those
   (`CheckForRobotHitByOtto` in the Vectrex; `BLAM` reached the same way in the
   arcade). The 2600 manual's strategy of putting robots between you and Otto is
@@ -1784,8 +1835,12 @@ the source.
 the cabinet has far more sprites than that.** Five robot facings, six eye-row
 animation frames, nine of the man's shooting directions, four explosion frames
 and Otto's bounce are well over fifteen before anything else. **The ceiling is
-now 23** (`LOGO_SHAPE_MAX_SLOT`), raised under [B77](bugs.md) once the robots'
-walk cycles turned out to need four frames the port had never built: a slot is
+now 25** (`LOGO_SHAPE_MAX_SLOT`), raised twice and both times because the
+arithmetic that set it had counted the wrong things: [B77](bugs.md) took it to
+23 when the robots' walk cycles turned out to need four frames the port had
+never built, on a count that still included the explosion's four frames (which
+take no slot — §7.6) and still left **Otto out of the inventory altogether**;
+M5 took it to 25 when his pattern table decoded into eight. A slot is
 six bytes of table and nothing else, measured at 48 bytes across all three
 boards, and the pixels come from the same 8 KB pool. A vector model
 was a *procedure* and cost flash, so this document could carry as many as it
@@ -1821,6 +1876,17 @@ robot facings, 2 spare. The explosion takes §7.6's random dots rather than four
 slots and Otto is drawn (§7.5). **M2 builds four of them**; M3 and M4 build
 theirs when they need them.
 
+**REOPENED AND CLOSED AGAIN AT M5, 2026-08-31, and the spare pair was never
+real.** The count above is right about the man and the robot and wrong about
+what is left over, because it never counted Otto at all — §7.5 had him as a pen
+`arc`, so he was outside the inventory rather than inside it with a number. He
+decodes into **eight** (§7.5), which is not two, and the honest total for the
+whole cabinet is **25**: nine of the man, eight of the robot, eight of Otto.
+So the ceiling moved to 25 and **there are no spare slots**, which is a
+truer statement of this ceiling than "fifteen, with two spare" ever was — M7's
+polish now has to buy its slots from something, and the four the explosion
+would have taken are the obvious place to look.
+
 **And a fourth, which M0 found on a board rather than in a budget: a frame must
 not allocate.** Nothing in this interpreter collects on demand — `alloc_cell`
 and `mem_atom` report out of space rather than collecting and retrying — so a
@@ -1852,7 +1918,7 @@ Each leaves `ctest --preset=tests` green, and each ends with a board reading.
 | M2 | The man | **DONE 2026-08-30.** Walls kill, doors work, and the eight directions read right on the keyboard. 35 procedures, 40 host tests, `ctest` green at 84/84, and read on a board four times: the frame fits at both clocks, and [B67](bugs.md) (the eraser) and [B69](bugs.md) (the end of a wall) came back from it. The milestone's own decision was §7.4's: `setrot "flip`, which takes the cabinet's inventory from twenty-one costumes to thirteen of fifteen. §19's M2 note |
 | M3 | The robots | **DONE 2026-08-30, read on a board, and the gate fails by three milliseconds — deferred to M4 with §22 Q2.** `fast`: HUD 24, FRAME 53, WORST 100 (a defect, fixed, ~76 predicted), ROOM 23; `normal` unplayable. An ordinary frame at eleven robots is **53 ms against 50 — 18.9 fps**, better than §15.3's 55–59 projection and still over. §15.5's clock precondition came forward from M6 with the reading. 51 procedures, 74 host tests. §19's M3 note Seek, `IQ` with §6.3's cell-crossing cache, the five-room count cycle, ROBOT_SPEED as the arcade's reload counter, robots killing robots and killing the man, and the explosion. 48 procedures, 70 host tests, `ctest` green at 84/84. Three decisions and one finding, all in §19's M3 note; [B68](bugs.md) fixed with it |
 | M4 | The bolts | **READ ON A BOARD 2026-08-30 — the frame rate is good and three defects came back, all fixed. Read again 2026-08-31 after [B77](bugs.md): the robots walk and the numbers held.** Both bolt kinds in the cabinet's one seven-slot array, the three firing windows at their boundaries, the shared `RWAIT` holdoff, the man's five shooting poses, §13's below-10,000 table and §12's first row. 72 procedures, 110 host tests, `ctest` green at 84/84. **HUD 26, FRAME 56, WORST 114, ROOM 24 at `fast`** — 17.9 fps with bolts in the air, called "very good", which **answers §22 Q2 at 18 fps with eleven robots**; `WORST` 114 is the one left open. **The alignment rule is corrected rather than confirmed** — the array is processed three times a tick, not twice (§10.2). Five defects: [B72](bugs.md), [B73](bugs.md), [B71](bugs.md), [B74](bugs.md) and **[B75](bugs.md), the robots running ten times too fast because `ROBOT_SPEED` is the period the whole crowd shares**. **And the lives came forward from M6**, because the ramp is the cabinet's and the bound on it was missing. §19's M4 note |
-| M5 | Evil Otto | The timer arithmetic, walls ignored, robots eaten |
+| M5 | Evil Otto | **DONE 2026-08-31, read and played on a board. `fast`: HUD 24, FRAME 50-51, WORST 104, ROOM 25. Both judgements came back right and neither was tuned — the hop reads right and the nine seconds reads right — and two defects came back and are fixed** — [B78](bugs.md), Otto eating the maze as he walks, and [B79](bugs.md), a one-pixel trail because he spawns on the *man's* pixel and half the man's coordinates are half-pixels. `fast`: **HUD 24, FRAME 50, WORST 104, ROOM 25.** **FRAME 50 is the pad and not a speed-up** — `sync` pads a frame that fits to exactly the period, so 50 is this number's *floor* and means the body fit inside the budget; M5 only adds work, so the difference from M4's 56 is the scene and not the code (§19's M5 note). ROOM +1 is `place.otto` inside the build, which is the one figure that is M5's own. **And the hop reads right**, which was the judgement no measurement could supply. The timer arithmetic ($2ABC's three-number sum at 40 ticks a unit, +2 a kill), walls ignored, robots eaten — and **his sprite, which §7.5 had left as a gap**: the pattern table at $120B decodes big-endian into six frames of arrival and a ten-frame hop whose *height is an address offset*, so he is eight costume slots and not sixteen. 78 procedures, 129 host tests, `ctest` green at 84/84. Two findings, both mechanism rather than pixels: **he is a vector from the moment the room is built**, so [B75](bugs.md)'s denominator is one larger everywhere, and **his `TPRIME` is 2 and not `ROBOT_SPEED`**, so alone in a cleared room he is exactly the man's speed. The costume ceiling moved 23 → 25 and there are no spare slots left. §19's M5 note |
 | M6 | The campaign, the sound and the voice | Both difficulty tables, lives, bonus, the attract screen, the effects off the ROM, and §14.2's four fixed sentences spoken with `say` and captioned |
 | M7 | Polish | The taunts (spoken, over two `pick`s), the deaths and the play test. **The scroll came out of this row on 2026-08-31** — asked for, transcribed and built, and its note is below |
 
@@ -2622,6 +2688,240 @@ display cannot be copied anywhere else. The options it prices are unchanged —
 ten robots (−3 ms), 18 fps, an interpreter lever, or stop — and the bolts are the
 last thing that scales with `n`, since M5's Otto is a constant.
 
+### M5 — Evil Otto, and the gap §7.5 left (2026-08-31)
+
+**Built 2026-08-31, and it runs on a board the same day. 78 procedures (of
+100), 129 host tests, `ctest` green at 84/84, all three firmware presets
+link.**
+
+**ONE DEFECT CAME BACK, AND IT IS THE ONE THIS MILESTONE WAS ALWAYS GOING TO
+PRODUCE: [B78](bugs.md), *"OT erases walls as it moves"*.** The search that
+found the two findings below was aimed at *scheduling* — mechanisms read
+correctly out of the ROM and then assumed to run every tick, which is what B69,
+B73 and B75 all were — and it found both. What it was not aimed at is the thing
+a *new kind of figure* does to an invariant nobody had written down. **Otto is
+the first figure in this game that is meant to overlap the walls.** The man
+dies on one, a robot dies on one, a bolt dies on one; §3's whole erase-in-place
+decision stands on that, and §11 exempts Otto from all three in a single line
+("he walks through walls") without anyone noticing what the line cost. His
+eraser was correct — `test_the_erase_covers_every_pixel_otto_stamped` proves it
+covers his 8 × 8 exactly and nothing outside it — and correct is precisely the
+problem, because the walls are drawn once a room and nothing repaints them
+until the next doorway.
+
+**The cabinet has the same problem and never notices**, which is why there is
+no ROM code to copy: `$275B` writes sprites with `ld b,$90`, the **XOR** control
+byte, so drawing Otto a second time XORs him back out and whatever was
+underneath returns for free. `stamp` writes pixels. So the fix is to put back
+what he took, not to stop him taking it — `otto.walls`, at the end of his own
+eraser, redrawing all sixteen runs when his box was on ink. **All sixteen on
+purpose**: B69, B71, B72 and B73 were every one of them a figure and a wall
+clipped against each other a pixel wrong, and repainting just the run he stands
+on means deriving that run's extent a fourth time — past the four-pixel
+overhang where a `c = 1` segment reaches the border at −122 rather than
+stopping at the grid's −118, past `cell.at`'s clamp, and past the doorway gaps.
+`draw.walls` cannot disagree with what was drawn because it *is* what drew it.
+**The gate is what had to be cheap, and it is two questions**, for the reason
+§6.3 already gives: `cell.at` clamps, so a mask lookup can never see the outer
+wall. The interior is `on.wall?`; the border is a **position** test, which is
+this document's own doctrine for the border. That half is not hypothetical —
+$2A9D's clamp starts him at arcade x 2, turtle −124, with the border at −122,
+so **he bites the border on his first step**.
+
+**The lesson generalises past this game**: the invariant that makes
+erase-in-place safe is "no figure ever overlaps static ink", it was never
+written down anywhere, and the first figure to violate it did so *by design and
+in one sentence*. Anything later that walks through walls — a ghost, a
+teleport, a boss — inherits B78 the same way.
+
+**AND THE SECOND READING FOUND [B79](bugs.md), WHICH IS §3's OTHER HALF FOR THE
+THIRD TIME.** Reported as *"thought once Otto left behind a trail"* — the shape
+a board report takes when something is intermittent — and "once" is the clue.
+`stamp` places a costume at `round(centre) − w/2` while a pen stroke rounds its
+own endpoints, so a figure on a **half** pixel is drawn at one column and rubbed
+out at another. The man met this at B67 and was fixed there; a robot never
+meets it, because he spawns and moves in whole pixels. **Otto inherited a
+fraction without anybody noticing the inheritance**: `$2AB6` copies
+MAN_X/MAN_Y, our man moves 1.5 steps a frame, and **`$2A9D`'s clamps only
+replace one axis** — so a side doorway gives Otto a fractional y and the top or
+bottom a fractional x, while the clamped axis looks perfectly integral. Fixed
+in both places for one word each: `draw.otto` rounds before it stamps and
+records what it rounded to (`draw.man`'s own two lines, and the guarantee the
+test pins), and `place.otto` rounds at the source, because **the cabinet's Otto
+is a byte and is never anywhere but a whole pixel** — the fraction is an
+artefact of our scaling of the man's rate and should never have been copied
+into him.
+
+**The test that should have caught it existed, asserted exactly the right
+bound, and passed**, because it staged him at one whole-pixel position — which
+is B71's trap in a different costume. It now runs over six positions including
+three half ones, the way the man's has since B67. **Three for three now**, and
+worth stating as a rule: a draw/erase pair that agrees at integer positions is
+not tested until it is tested at half ones, and any figure whose position comes
+from another figure's inherits that figure's fractions.
+
+**THE FIGURES, AT `fast`: HUD 24, FRAME 50, WORST 104, ROOM 25** — and
+**FRAME 50-51 after B78's fix, which is the repaint priced.** Putting the maze
+back is sixteen strokes on the frames Otto stands on ink, and the body was
+close enough to the period that it occasionally tips a millisecond past it.
+That is the honest reading of a number whose floor is 50: one millisecond over,
+on a minority of frames, for a maze that stays drawn. The clock
+needs no naming — `clock` refuses to start the game unless the board takes 300
+MHz (§15.5), so every board reading in this document is at `fast` by
+construction. Against M4's HUD 26, FRAME 56, WORST 114, ROOM 24:
+
+**FRAME 50 IS THE PAD, AND READING IT AS A SIX-MILLISECOND SPEED-UP WOULD BE
+THE WORST MISTAKE AVAILABLE HERE.** `sync` pads a frame that fits its budget to
+exactly the period, so **50 is this number's floor**: it cannot read lower, and
+anything above it is the body overrunning. What it says is *the body fit inside
+50 ms in this run*, where M4's did not. What it cannot say is by how much. And
+M5 only ever adds work — one figure, one stamp, three erase strokes, twenty-odd
+statements — so there is no version of this in which the code got faster. **The
+difference is the scene.** M4's 56 was read explicitly at *eleven robots and
+bolts in the air*; M3's 53 was read *with nothing firing*. Whether this 50 was
+read at eleven with the sky full is what decides whether it means anything at
+all, and it is one glance at `ROB`.
+
+**ROOM 24 → 25 IS THE ONE FIGURE THAT IS M5'S OWN**, and it is the right size:
+`place.otto` is nine `make`s and three comparisons inside the build, which is
+about a millisecond, and it landed as about a millisecond. A cost that shows up
+exactly where the code was added and nowhere else is the cheapest possible
+confirmation that nothing else moved.
+
+**HUD 26 → 24 IS NOISE, AND IT IS USEFUL NOISE.** M5 touches nothing in the
+mask readout — same forty-five characters, same schedule, same code — so two
+milliseconds on an unchanged path is what this panel's variance looks like.
+That puts a floor of about ±2 ms under every other number in the row: ROOM's +1
+is at the edge of it, and FRAME's difference is well outside it.
+
+**WORST 114 → 104 IS STILL M4'S OPEN ITEM.** ROOM 25 plus a body of 50 is 75,
+which leaves ~29 unaccounted for where M4 left ~34 — it moved with FRAME, as it
+should, and it did not shrink on its own. The two things known to be in it are
+unchanged: a body carrying seven bolts rather than two, and `show.room` writing
+fourteen characters *inside* the build frame, which is M2's "one text job a
+frame" rule bypassed because `show.room` is called straight from `go.room`.
+
+**THE MILESTONE'S GATE IS THREE PHRASES and the game acquires a clock.**
+Everything else in Berzerk will wait for you: the crowd is slow *because* it is
+a crowd ([B75](bugs.md)) and the maze is the same maze however long you stand
+in it. Otto arrives on a timer, walks through walls, kills robots by touching
+them and cannot be shot, so from this milestone the game asks you to leave. The
+timer is on the readout as **`OT`**, counting down in units of two thirds of a
+second, which is the only way to read the arithmetic off a board.
+
+**AND THE MILESTONE'S OWN WORK WAS §7.5, WHICH WAS A GAP RATHER THAN A CHOICE
+AND IS NOW NEITHER.** That section left Otto a pen `arc` because his pattern
+table renders in the listing as Z80 instructions and "transcribing them out of
+a mis-decoded listing is error-prone" — which was right, and the fix is not
+care but a *decoding rule*. The sprite fetch at `$2765` reads the high byte
+first, so a pattern table is **big-endian**; read that way `$120B` is sixteen
+exact entries with a zero terminator at `$122B` and a loop back to its own
+seventh. Read the other way its first entry is `$2E12`, which is nowhere — the
+wrong reading does not look wrong, it looks like garbage, and that is the only
+reason the region was ever hard. **The whole of §7.5 is rewritten with the
+decode in it.**
+
+**THE HEIGHT OF THE BOUNCE IS NOT IN THE PIXELS, which is what makes him
+affordable.** Nine of his sixteen frames are the *same* face bitmap; what
+differs is a two-byte escape in front of the sprite data that `$2772` adds to
+the video RAM address before drawing. At a 32-byte row stride the five values
+in the table are 32, 16, 8, 4 and 2 rows **down**, so the animation is two
+columns — a slot and an offset — and Otto is **eight costumes** rather than
+sixteen. Three things fall out of it and none of them was designed: his stored
+position is the *top* of the arc and the ball hangs under it (which is what
+`$2AB4`'s y clamp is protecting); the collision follows the bounce, because the
+cabinet's intercept bit is set by the sprite draw itself, so **Otto at the top
+of his hop passes over your head**; and the six arrival frames are a ball
+inflating on the floor that plays once and never again, because the loop-back
+skips them.
+
+**TWO FINDINGS, AND BOTH ARE MECHANISM THAT NO READING OF §11 WOULD HAVE
+REACHED.**
+
+**He is a vector from the moment the room is built, which taxes the crowd
+before he ever appears.** `$2154` jumps to `$2A8E` as the *last act of placing
+the robots*, and `$2A8E`'s second instruction is `call $200E` — the same
+routine that links a robot's vector into the circular chain. His MOVE bit is
+not set until his timer expires ($2AEF), so the interrupt spends his turn on
+nothing; but it still spends it, because `$2704` walks `V.PTR` past him either
+way. So **B75's denominator is one larger than B75 said, everywhere**: a room
+of eleven robots is twelve things taking turns, and the last robot standing is
+sharing the room's step rate with Otto rather than having it to himself. This
+is the third time in this game that the object model was read correctly and the
+*scheduling* was not (B69, B73, B75, and now this), and it is the same shape
+every time — a mechanism that is right about what happens and wrong about how
+often.
+
+**And his `TPRIME` is 2 ($2AEB) and not `ROBOT_SPEED`, which is the player's
+own number.** So he is faster than a robot in the first three rooms, level in
+the fourth and slower after; and alone in a cleared room he moves at **exactly
+the man's thirty pixels a second**. That is the whole character of Berzerk's
+Otto stated as one byte: he does not outrun you, he corners you, and the only
+way he catches you is that walls do not slow him down.
+
+**THE COSTUME CEILING MOVED AGAIN, 23 → 25, and the arithmetic that set it at
+23 is why.** `LOGO_SHAPE_MAX_SLOT` was raised to 23 under B77 on a count that
+included the robot's four explosion frames — which take no slot at all, since
+M3 decided the explosion is drawn (§7.6) — and that **left Otto out of the
+inventory altogether**, because §7.5 had him as a pen figure rather than a
+number. Twenty-five is the honest total for the whole cabinet: nine of the man,
+eight of the robot, eight of Otto, and **no spare slots**. A slot is six bytes
+of table; the pool holds all twenty-five in 2,432 of its 8,192 bytes. M7's
+polish now has to buy its slots from something.
+
+**ONE DEPARTURE FROM THE ROM, and it is a readout rather than a mechanism.**
+`BLAM` increments `OTTO_TIME` twice on every robot death whether Otto has
+arrived or not ($2486); this port does it only while he is still counting down,
+because `OT` on the screen would otherwise climb after he was already in the
+room and the number would be lying about what it measures. Nothing reads it
+after he arrives in either machine.
+
+**WHAT THE HOST TESTS ADD, which is the half a board cannot see:** the sixteen
+pattern-table entries in both columns (nine of them wear the same slot, so the
+sequence is exactly the thing a person watching cannot check); the loop-back
+going to the seventh entry and never to the first; the timer as the sum of
+three named numbers at three different difficulties; forty ticks a unit,
+counted in frames; all three of $2A9D's entry clamps *at their boundaries*; a
+bolt flying straight through him; `rob.vecs` counting him in five rooms; and
+§18's fourth ceiling with him on the screen — six hundred frames, zero cells
+and zero word-table bytes. **And `in_room` now holds him in his countdown**,
+which is a staging decision and worth writing down: his placeholder `o.time` is
+zero, so a room the game never built put him on the screen fourteen frames in
+and walked him through walls into a man some other test was measuring. Two
+allocation tests found that the honest way — a death, a room rebuild and a
+crowd nobody asked for, showing up as five cells and forty word bytes.
+
+**THE HOP READS RIGHT, WHICH CLOSES THE JUDGEMENT THE FIGURES COULD NOT
+REACH** (2026-08-31, on a board). It is half a second here against the
+cabinet's third, because the pattern advances **once a rendered frame** rather
+than once a move — `step.robot`'s own decision, applied to the bounce, and
+taken there for a reason that had nothing to do with how a bounce looks: at
+three ticks a frame the cabinet's per-move advance renders a *fast* figure with
+its legs locked. It was the more suspect of the two transplants, since a hop is
+a physical thing a person has a strong prior about in a way a robot's gait is
+not, and a person watching says it is right. **So the rule now has two
+independent confirmations** and is worth stating as a rule: on this frame
+period, a ROM animation that advances per *move* should advance per *frame*.
+
+**AND THE NINE SECONDS READS RIGHT TOO** (2026-08-31, on a board), which closes
+the last of M5 and is worth one sentence about *why* it was ever in doubt. Nine
+seconds is not a number anybody chose: it is `ROBOT_SPEED + RSAVED + RBOLTS`
+units of forty ticks, three quantities picked for other reasons entirely, and
+the design's own comment on that sum is that it is **backwards** — a fast,
+crowded, well-armed room buys you *more* time. The arithmetic was ported because
+it is the cabinet's, not because it was expected to feel like anything, and the
+risk was precisely that a faithful formula would produce an unplayable interval.
+It does not. **So both of M5's judgements came back right and neither was
+tuned**, which is the outcome that says the transplant is sound rather than
+lucky.
+
+**And one number that is now worth watching, which M5 introduced.** Otto is in
+the round robin from the room build, so the crowd is one denominator slower
+than M4 was played at — eleven robots became twelve vectors. M4's board reading
+called the robots' speed right at eleven; whether it still is at twelve is the
+kind of thing only a person notices, and `ROB` on the readout is what it is
+read against.
+
 ### The scroll, taken out of M7 (2026-08-31)
 
 Asked for while M4's board reading was still warm, and worth having early for
@@ -2782,6 +3082,17 @@ repeating them.
   *leaving*, displaced by a whole screen and clear of the presented band, the
   room ahead not yet generated under it, and only a doorway reaching it: a
   death rebuilds in place and presents once a frame like any other.
+- **Evil Otto** (M5): the sixteen pattern-table entries in both columns and
+  the loop-back going to the *seventh* and never to the first; the timer as the
+  sum of three named numbers, at forty ticks a unit counted in frames, with two
+  put back per robot killed; all three of $2A9D's entry clamps at their
+  boundaries; walls ignored, checked by standing him on ink a robot would have
+  died on; a robot eaten and paid for; a bolt flying straight through him;
+  `rob.vecs` counting him from the room build; his speed alone and in a crowd;
+  the bounce in the collision, so the top of his hop passes over the man's
+  head; the stamp half a sprite below the top of the arc at all sixteen frames;
+  the eraser covering his 8 × 8 and nothing outside it *where he was drawn*;
+  and §18's fourth ceiling with him on the screen.
 - **The frame is drivable headless** — `init.game`, `setup.room`, `play.frame`
   — so `tests/test_bench_throughput.c` can take Berzerk as a third game
   subject, which is what [P14 §10](vector-direction-design.md) asked for when
