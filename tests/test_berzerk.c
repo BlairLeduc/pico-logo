@@ -634,138 +634,6 @@ void test_a_room_change_clears_the_last_room(void)
         "the room change put the refresh back to automatic");
 }
 
-//==========================================================================
-// The readout under the picture
-//==========================================================================
-
-// The fifteen masks go on the screen beside the maze, because two rooms can
-// look alike at a glance and their masks cannot.  That is what turns "walk out
-// and back" from an impression into a reading, and from M3 they are what the
-// robots consult.
-//
-// THEY ARE DRAWN ON THE FRAME AFTER THE DOORWAY, NOT IN IT.  Text is not part
-// of the graphics `sync`: `screen_putc` sends every character straight to the
-// panel (`lcd_putc_attr` plus two cursor calls, over SPI), so the readout
-// costs about a third of a millisecond a character wherever it runs.  Forty-
-// five of them on the frame that also generates a room, clears the canvas,
-// draws sixteen walls and presents the whole screen is what made a doorway a
-// dropped frame on a board.  So `show.room` only marks them due and the next
-// frame draws them -- 50 ms later, which nobody can see.
-void test_a_doorway_defers_the_masks_to_the_next_frame(void)
-{
-    run("setrefresh \"manual");
-    in_room(0, 0);
-    man_at(-5, 45);
-    run("make \"masks.due false");
-
-    mock_device_clear_output();
-    run("show.room");
-    const char *screen = mock_device_get_output();
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "ROOM"), screen);
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":masks.due"),
-        "the room change did not ask for the masks");
-
-    // Fifteen numbers are not on the screen yet: the room line is all of it.
-    TEST_ASSERT_TRUE_MESSAGE(strlen(screen) < 32,
-        "the doorway drew the masks in the frame it changed room in");
-
-    // The next frame draws them, in the order the table holds them, and stops
-    // asking.
-    float masks[15];
-    read_cell(masks);
-    mock_device_clear_output();
-    frame();
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":masks.due"),
-        "the masks were drawn twice");
-
-    screen = mock_device_get_output();
-    const char *at = screen;
-    for (int i = 0; i < 15; i++)
-    {
-        char want[8], msg[160];
-        snprintf(want, sizeof(want), "%d ", (int)masks[i]);
-        const char *found = strstr(at, want);
-        snprintf(msg, sizeof(msg), "mask %d (%d) is not on the screen in order: %s",
-                 i + 1, (int)masks[i], screen);
-        TEST_ASSERT_NOT_NULL_MESSAGE(found, msg);
-        at = found + strlen(want);
-    }
-
-    // And the frame after that draws nothing of them, so the readout is one
-    // frame's cost and not a standing charge.
-    mock_device_clear_output();
-    frame();
-    TEST_ASSERT_TRUE_MESSAGE(strlen(mock_device_get_output()) == 0,
-        "the masks are redrawn every frame");
-}
-
-// ONE TEXT JOB A FRAME, and it is the rule the deferral above depends on.
-// Text is not batched by `sync`, so the masks (45 characters) and the timing
-// rows (48) landing in the same frame is two frames' worth of panel time in
-// one -- and on a board that frame would be the new worst, worse than the
-// doorway the deferral was built to fix.  So the masks take the frame after a
-// doorway and the timing rows take the next free one.
-void test_a_frame_writes_at_most_one_block_of_text(void)
-{
-    run("setrefresh \"manual");
-    in_room(0, 0);
-    man_at(-5, 45);
-
-    // Force the collision the rule exists for: masks due AND the second's beat
-    // falling on the same frame.
-    run("make \"masks.due true  make \"frames 19");
-    mock_device_clear_output();
-    frame();
-    const char *screen = mock_device_get_output();
-    TEST_ASSERT_NULL_MESSAGE(strstr(screen, "FRAME"),
-        "the masks and the timing rows were written in the same frame");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":masks.due"),
-        "the masks did not take that frame");
-
-    // And the beat is not owed forever: the next multiple of the rate takes it.
-    run("make \"frames 19");
-    mock_device_clear_output();
-    frame();
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mock_device_get_output(), "FRAME"),
-        "the timing rows never came back");
-}
-
-// THE WORST FRAME IS MEASURED BEFORE `sync`, not across it.  A frame that fits
-// its budget is padded by `sync` to exactly the period, so a worst taken after
-// it can only ever say 50 -- a board read `WORST` 51 at `fast`, which is one
-// millisecond of clock granularity over the period and means only that nothing
-// overran.  The body says how much of the 50 was used, so the margin is
-// visible and an overrun still reads above 50.  Battlezone splits `body.ms`
-// from `frame.ms` for the same reason.
-void test_the_worst_frame_is_the_body_and_not_the_padded_period(void)
-{
-    run("setrefresh \"manual");
-    in_room(9, 9);
-    man_at(-5, 45);
-    run("make \"worst.fr 0  make \"body.ms 0  make \"frame.ms 0");
-    frame();
-
-    TEST_ASSERT_TRUE_MESSAGE(num(":worst.fr") <= num(":body.ms"),
-        "the worst frame is taken across `sync` and is therefore the period");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":body.ms"), num(":worst.fr"),
-        "the worst frame did not follow the body");
-}
-
-// The worst transition is kept rather than averaged away, because a hitch is
-// what a player notices and a mean is what hides it.
-void test_the_worst_transition_is_kept(void)
-{
-    run("make \"worst.ms 0  make \"room.ms 0");
-    in_room(0, 0);
-    run("make \"worst.ms 40  go.room 1 0");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(40.0f, num(":worst.ms"),
-        "a quick room change threw the worst one away");
-
-    run("make \"room.ms 0  make \"worst.ms 0  go.room 1 0");
-    TEST_ASSERT_TRUE_MESSAGE(num(":worst.ms") >= num(":room.ms"),
-        "the worst reading is below the last one");
-}
-
 
 //==========================================================================
 // The man is four costumes and not sixteen (design section 7.4)
@@ -1479,10 +1347,10 @@ void test_a_death_holds_for_the_arcades_45_ticks_and_then_respawns(void)
 // rob.left` on its first board run.
 //
 // Warm first: the frame's first pass mints whatever words it is going to mint.
-// Nineteen frames is deliberately one short of the readout's period --
-// `show.timing` DOES spend, about fifteen cells, and hands them straight back
-// with `recycle` -- so what is measured here is the frame the game spends
-// nineteen twentieths of its life in.
+// Nineteen frames is deliberately one short of the beat -- the twentieth is the
+// `recycle` `show.text` ends on, which is the only collector in the game now
+// that the readout is gone -- so what is measured here is the frame the game
+// spends nineteen twentieths of its life in.
 void test_an_ordinary_frame_spends_no_cells(void)
 {
     run("setrefresh \"manual");
@@ -1640,12 +1508,11 @@ void test_the_frame_cadence_is_seeded_before_the_loop(void)
              presents);
     TEST_ASSERT_TRUE_MESSAGE(presents >= 2, msg);
 
-    // And the first room's masks are drawn in `init.game`, not deferred into
-    // the frame that is also presenting a whole canvas for the first time.
-    // Deferring is for doorways, which happen while the loop is running.
+    // And the HUD is written in `init.game` rather than deferred into the frame
+    // that is also presenting a whole canvas for the first time.
     run("init.game");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":masks.due"),
-        "the first frame has to draw the masks as well as present the room");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":hud.due"),
+        "the first frame has to carry the HUD as well as present the room");
 }
 
 // The whole entry point, driven to its exit.  It has to put the screen back
@@ -1656,6 +1523,7 @@ void test_the_frame_cadence_is_seeded_before_the_loop(void)
 void test_berzerk_puts_the_screen_back(void)
 {
     press(K_ESC);
+    set_mock_input(" \x1b");   // space plays, escape leaves the attract screen
     run("berzerk");
     release(K_ESC);
 
@@ -1702,6 +1570,7 @@ void test_the_last_life_is_worth_a_card_and_esc_is_not(void)
     // ESC quits without one, and a fresh `berzerk` is a fresh game.
     press(K_ESC);
     mock_device_clear_output();
+    set_mock_input(" \x1b");
     run("berzerk");
     release(K_ESC);
     TEST_ASSERT_NULL_MESSAGE(strstr(mock_device_get_output(), "GAME OVER"),
@@ -2980,18 +2849,15 @@ void test_the_ramp_reaches_the_floor_in_four_room_builds(void)
 }
 
 
-// A FRAME THAT BUILDS A ROOM WRITES NO TEXT, which is M3's widening of M2's
-// "one text job a frame" and came off a board: `WORST` read 100 ms at `fast`
-// where an ordinary frame was 53 and ROOM was 23.  M2's rule serialised the
-// two text jobs against each other and stopped there, because a room build was
-// then 11 ms; `place.robots` put it at 23, which makes it a third job of the
-// same size -- and `show.text` used to run at the top of the frame, where
-// nothing yet knows a doorway is coming.
+// A DOORWAY OWES TWO TEXT JOBS AND PAYS THEM ONE FRAME AT A TIME, which is
+// M2's "one text job a frame" rule surviving the readout that motivated it.
+// Text is not batched by `sync`, so every character is an SPI write; the frame
+// that generates a room, cleans the canvas, draws sixteen walls and presents
+// the whole screen must not also write the score and a sentence.
 //
-// So it runs at the END of the body now, and a build claims the frame.  The
-// masks were already deferred and stay deferred; what is new is that the
-// once-a-second readout gives way too.
-void test_a_frame_that_builds_a_room_writes_no_other_text(void)
+// The order is the order a player needs them: the robots' sentence first,
+// because it is the only one with a deadline, and the cabinet's HUD behind it.
+void test_a_doorway_pays_for_its_text_one_frame_at_a_time(void)
 {
     run("setrefresh \"manual  init.game");
     man_at(119, 42);                 // one step from the right-hand doorway
@@ -3000,34 +2866,35 @@ void test_a_frame_that_builds_a_room_writes_no_other_text(void)
     // A game starts in a random room ($17D6), so the door is read as a step
     // rather than as a coordinate.
     float was = num(":room.x");
-    // Force the collision: the second's beat falls on the frame he leaves in.
-    run("make \"frames 19  make \"masks.due false");
     mock_device_clear_output();
     frame();
     release(K_RIGHT);
-    const char *screen = mock_device_get_output();
 
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(fmodf(was + 1.0f, 256.0f), num(":room.x"),
         "he did not go through the door");
-    TEST_ASSERT_NULL_MESSAGE(strstr(screen, "FRAME"),
-        "the timing rows were written in the frame that built a room");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":hud.due"),
+        "the doorway wrote its own HUD instead of deferring it");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":room.built"),
         "the build flag was not cleared, so the next frame is silent too");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":masks.due"),
-        "the doorway's masks were not deferred");
 
-    // And nothing is owed forever: the masks take the next frame and the
-    // timing rows the one after their next beat.
+    // The sentence.
     mock_device_clear_output();
     frame();
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":masks.due"),
-        "the masks never came back");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":cap.new"),
+        "the caption never went up");
+    const char *cap = mock_device_get_output();
+    TEST_ASSERT_TRUE_MESSAGE(strstr(cap, "ESCAPE") || strstr(cap, "CHICKEN"),
+        "the doorway's sentence was not captioned");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":hud.due"),
+        "the HUD was written in the same frame as the caption");
 
-    run("make \"frames 19");
+    // And then the score.
     mock_device_clear_output();
     frame();
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mock_device_get_output(), "FRAME"),
-        "the timing rows never came back");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":hud.due"),
+        "the HUD never came back");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mock_device_get_output(), "SCORE"),
+        "the frame that cleared the flag wrote no score");
 }
 
 
@@ -3498,7 +3365,7 @@ void test_a_diagonal_bolt_is_drawn_its_full_length(void)
     bolt_at(1, 2, 0.0f, 40.0f, 8, 0);       // right
     bolt_at(2, 10, 0.0f, 0.0f, 8, 0);       // down and right
     mock_device_clear_graphics();
-    run("mark.bolts :wall.pc");
+    run("mark.bolts :rob.pc");
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(2, mock_device_line_count(), "a bolt is not one stroke");
     const MockLine *a = mock_device_get_line(0);
@@ -3703,11 +3570,18 @@ void test_a_diagonal_bolt_misses_the_corner_of_its_own_bounding_box(void)
         "a diagonal bolt missed a robot standing on it");
 }
 
-// Section 13's below-10,000 table ($3794), at every threshold and either side
-// of it.  RBOLTS is 0 below 300 points, which is the manuals' "robots don't
-// shoot in the first maze", and the difficulty RESETS at 7,500 -- five bolts
-// drops back to one, with the modifier raised, which is the 2600 manual's
-// "their firing speeds remain equal to your man's" in the arcade's currency.
+// Section 13's TWO tables ($3794 and $37BC), at every threshold and either
+// side of it.  RBOLTS is 0 below 300 points, which is the manuals' "robots
+// don't shoot in the first maze", and the difficulty RESETS at 7,500 -- five
+// bolts drops back to one, with the modifier raised, which is the 2600
+// manual's "their firing speeds remain equal to your man's" in the arcade's
+// currency.
+//
+// M6 ADDS THE SECOND TABLE, and it is entered by a BCD comparison on the
+// ten-thousands and thousands digits ($36BC), so its thresholds are 10, 11,
+// 13, 15, 17 and 19 thousand.  The ROM's first row there is unreachable --
+// it is taken when the index is below $10 and the table is only read at
+// 10,000 or more -- so 10,000 itself lands on the row thresholded $11.
 //
 // RWAIT is set by the table and then decremented by ten, floor ten ($20FA's
 // `cp $14`), which does not accumulate because the table is read again every
@@ -3722,7 +3596,13 @@ void test_the_difficulty_table_at_every_threshold(void)
         {  4500, 4, 0, 10 }, {  5999, 4, 0, 10 },
         {  6000, 5, 0, 15 }, {  7499, 5, 0, 15 },
         {  7500, 1, 1, 50 }, {  8999, 1, 1, 50 },
-        {  9000, 1, 1, 40 }, { 99999, 1, 1, 40 },
+        {  9000, 1, 1, 40 }, {  9999, 1, 1, 40 },
+        { 10000, 2, 2, 25 }, { 10999, 2, 2, 25 },
+        { 11000, 3, 3, 15 }, { 12999, 3, 3, 15 },
+        { 13000, 4, 4, 10 }, { 14999, 4, 4, 10 },
+        { 15000, 5, 5, 15 }, { 16999, 5, 5, 15 },
+        { 17000, 5, 5, 10 }, { 18999, 5, 5, 10 },
+        { 19000, 5, 5,  5 }, { 99999, 5, 5,  5 },
     };
 
     for (size_t k = 0; k < sizeof(band) / sizeof(band[0]); k++)
@@ -4058,7 +3938,7 @@ void test_the_erase_retraces_the_stroke_the_bolt_drew(void)
     bolt_at(1, 2, -40.0f, 40.0f, 8, 0);
 
     mock_device_clear_graphics();
-    run("mark.bolts :wall.pc");
+    run("mark.bolts :rob.pc");
     const MockLine *drew = mock_device_get_line(0);
     float x1 = drew->x1, y1 = drew->y1, x2 = drew->x2, y2 = drew->y2;
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, drew->pen_size, "a bolt is not a one-pixel stroke");
@@ -4296,8 +4176,6 @@ void test_a_doorway_scrolls_and_a_death_does_not(void)
 
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2.0f, num(":room.x"),
         "he did not walk out of the left doorway");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":slid"),
-        "the frame that scrolled is not marked as one, so WORST is charged for it");
     char msg[160];
     snprintf(msg, sizeof(msg), "a doorway presented %d times, not 40 and a sync",
              refreshes() - before);
@@ -4308,8 +4186,6 @@ void test_a_doorway_scrolls_and_a_death_does_not(void)
     frame();
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, refreshes() - before,
         "an ordinary frame presented more than once");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":slid"),
-        "an ordinary frame is marked as a scroll");
 
     // A death rebuilds without scrolling: fifteen frames of electrocution and
     // the build at the end of them, and not one present beyond their own.  It
@@ -4322,8 +4198,6 @@ void test_a_doorway_scrolls_and_a_death_does_not(void)
     snprintf(msg, sizeof(msg), "a death presented %d times over sixteen frames",
              refreshes() - before);
     TEST_ASSERT_EQUAL_INT_MESSAGE(16, refreshes() - before, msg);
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":slid"),
-        "the death scrolled");
 }
 
 //==========================================================================
@@ -4951,7 +4825,7 @@ void test_otto_puts_back_the_wall_he_walked_over(void)
     frame();
 
     colour_coverage(erased, 255);
-    colour_coverage(painted, 254);
+    colour_coverage(painted, (int)num(":wall.pc"));
 
     // His box is x -50..-43 and y 71..78, so it straddles the wall at y = 74.
     int wall_row = SCR_Y(74.0f);
@@ -4997,7 +4871,7 @@ void test_otto_puts_back_the_border_he_starts_on(void)
     frame();
 
     colour_coverage(erased, 255);
-    colour_coverage(painted, 254);
+    colour_coverage(painted, (int)num(":wall.pc"));
 
     int wall_col = SCR_X(-122.0f);
     TEST_ASSERT_TRUE_MESSAGE(erased[SCR_Y(98.0f)][wall_col],
@@ -5037,7 +4911,7 @@ void test_otto_in_open_ground_does_not_redraw_the_maze(void)
     frame();
 
     static bool painted[240][320];
-    colour_coverage(painted, 254);
+    colour_coverage(painted, (int)num(":wall.pc"));
     int any = 0;
     for (int y = 0; y < 240 && !any; y++)
         for (int x = 0; x < 320 && !any; x++)
@@ -5047,6 +4921,569 @@ void test_otto_in_open_ground_does_not_redraw_the_maze(void)
         "strokes for nothing");
 }
 
+
+//==========================================================================
+// M6: the campaign, the sound and the voice (design sections 12, 13, 14)
+//==========================================================================
+
+// Section 13's fifth column, which section 13.1 decoded and left here because
+// it arrives with the score or not at all.  One byte is two identical nibbles
+// and a nibble is RGBI with the bit order pinned by the ROM's own test screens
+// ($077C fills with $11 for Red, $3640 with $CC for blue), so the I bit is the
+// only thing this palette cannot say exactly and it picks between the pure
+// primary and a mid shade of the same hue.
+void test_both_difficulty_tables_carry_the_colour(void)
+{
+    static const struct { int score, pc; const char *rom; } band[] = {
+        {     0,  44, "$33 yellow"        }, {   300, 248, "$99 bright red"     },
+        {  1500,  84, "$66 cyan"          }, {  3000, 249, "$AA bright green"   },
+        {  4500, 131, "$55 magenta"       }, {  6000, 251, "$BB bright yellow"  },
+        {  7500, 254, "$FF white"         }, {  9000, 254, "$FF white"          },
+        { 10000,  84, "$66 cyan"          }, { 11000, 253, "$DD bright magenta" },
+        { 13000, 165, "$77 grey"          }, { 15000,  44, "$33 yellow"         },
+        { 17000, 248, "$99 bright red"    }, { 19000, 252, "$EE bright cyan"    },
+    };
+
+    for (size_t k = 0; k < sizeof(band) / sizeof(band[0]); k++)
+    {
+        char cmd[64], msg[160];
+        snprintf(cmd, sizeof(cmd), "make \"score %d  place.bolts", band[k].score);
+        run(cmd);
+        snprintf(msg, sizeof(msg), "at %d points the figures are %g and the ROM says %s",
+                 band[k].score, (double)num(":rob.pc"), band[k].rom);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE((float)band[k].pc, num(":rob.pc"), msg);
+
+        // AND THE WALLS ARE NOT IN THE TABLE.  $3702 forces bit 2 -- blue -- in
+        // every attribute box that holds a wall pixel, and `~screen & c` is
+        // zero for exactly the bits the wall set, so a wall box is blue and
+        // only blue at every score in both tables.
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(98.0f, num(":wall.pc"),
+            "the difficulty band coloured the walls");
+    }
+}
+
+// The CROWD wears the band and the walls and the man do not.  $3702 forces
+// blue into every attribute box holding a wall pixel, so a wall is blue at
+// every score; $1FEE gives player one $AA whatever the difficulty is, so he is
+// bright green all game and is the one figure that can always be found in the
+// crowd.  Neither costs a costume slot, because every pixel of every costume in
+// this file is `fe`.
+void test_the_band_colours_the_crowd_and_not_the_walls_or_the_man(void)
+{
+    run("setrefresh \"manual  make \"room.x 0  make \"room.y 0  make \"score 3000");
+    mock_device_clear_graphics();
+    run("draw.room");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(249.0f, num(":rob.pc"),
+        "the figures did not take the band's colour");
+    int walls = 0, banded = 0;
+    for (int i = 0; i < mock_device_line_count(); i++)
+    {
+        int c = (int)mock_device_get_line(i)->colour;
+        if (c == 98) walls++;
+        if (c == 249) banded++;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(walls >= 16, "the walls were not drawn in blue");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, banded,
+        "the difficulty band reached the walls, which are blue in every room");
+
+    // And the crowd is: a robot's stamp wears it, and so does a bolt's stroke.
+    no_robots();
+    robot_at(1, 0.0f, 0.0f, 0, 1);
+    mock_device_clear_graphics();
+    run("draw.robots");
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_stamp_count() > 0, "no robot was drawn");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(249, mock_device_get_stamp(0)->colour,
+        "a robot did not wear the difficulty band");
+
+    no_bolts();
+    bolt_at(1, 2, 0.0f, 0.0f, 8, 0);
+    mock_device_clear_graphics();
+    run("mark.bolts :rob.pc");
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0, "no bolt was drawn");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(249, (int)mock_device_get_line(0)->colour,
+        "a bolt did not wear the difficulty band");
+
+    // AND THE MAN IS ASKED AT A DIFFERENT SCORE, because 3000 lands on the
+    // band whose own colour is 249 -- `dt.col`'s fourth row is $AA's green --
+    // and a man drawn in `rob.pc` would pass unnoticed there.  At 5000 the
+    // band is 131 and the two are distinguishable.
+    run("make \"score 5000  place.bolts");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(131.0f, num(":rob.pc"),
+        "the band is not distinct from the man's own colour");
+
+    man_at(-5, 45);
+    mock_device_clear_graphics();
+    run("draw.man");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, mock_device_stamp_count(), "the man is not one stamp");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(249, mock_device_get_stamp(0)->colour,
+        "the man wore the difficulty band instead of $AA");
+}
+
+// $27EB, and it is two instructions: `rlca` then `xor $11` on PLAYER_COLOUR
+// every step of the death animation.  From $AA that closes exactly after eight
+// -- $44, $99, $22, $55, $BB, $66, $DD, $AA -- so the electrocution is the man
+// running through the palette and not a flicker.
+void test_the_man_runs_the_roms_colour_cycle_while_he_dies(void)
+{
+    static const int cycle[8] = { 98, 248, 60, 131, 251, 84, 253, 249 };
+    static const char *rom[8] = { "$44 blue", "$99 bright red", "$22 green",
+                                  "$55 magenta", "$BB bright yellow", "$66 cyan",
+                                  "$DD bright magenta", "$AA bright green" };
+    in_room(0, 0);
+    man_at(-5, 45);
+
+    for (int k = 0; k < 8; k++)
+    {
+        char cmd[64], msg[160];
+        snprintf(cmd, sizeof(cmd), "make \"p.dying %d", 15 - 2 * k);
+        run(cmd);
+        mock_device_clear_graphics();
+        run("draw.man");
+        snprintf(msg, sizeof(msg), "death frame %d is colour %d and the ROM's is %s",
+                 k + 1, mock_device_get_stamp(0)->colour, rom[k]);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(cycle[k], mock_device_get_stamp(0)->colour, msg);
+    }
+}
+
+// $2491: the last robot in a room pays ten a robot AGAIN, and the count it uses
+// is RSAVED -- the crowd the room was BUILT with -- and not the one left
+// standing, which is zero by the time it is read.
+void test_a_cleared_room_pays_ten_for_every_robot_it_had(void)
+{
+    no_robots();
+    robot_at(1, 0.0f, 0.0f, 0, 1);
+    run("make \"score 0  make \"rob.live 1  make \"rob.saved 7  make \"bonus.n 0");
+    run("rob.dies 1");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(120.0f, num(":score"),
+        "fifty for the robot and ten a robot for the room is 120");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(70.0f, num(":bonus.n"),
+        "the bonus the cabinet prints is RSAVED times ten");
+
+    mock_device_clear_output();
+    run("show.hud");
+    const char *hud = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(hud, "BONUS"), hud);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(hud, "70"), hud);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(hud, "SCORE"), hud);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(hud, "120"), hud);
+
+    // And it goes out with the room it was earned in, which is the cabinet
+    // redrawing the whole bottom strip with the maze.
+    run("setrefresh \"manual  draw.room");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":bonus.n"),
+        "the bonus stayed on the screen into the next room");
+}
+
+// $2396 tests the THOUSANDS DIGIT for 5, not the score for 5,000, and $239B
+// refuses if XTRAMEN is already set -- so it is once a game and crossing 10,000,
+// where that digit goes back to 0, does not pay twice.
+void test_the_bonus_life_is_once_and_only_once(void)
+{
+    no_robots();
+    run("make \"score 4900  make \"lives 3  make \"xtramen false  make \"rob.saved 0");
+    run("make \"rob.live 9");
+
+    robot_at(1, 0.0f, 0.0f, 0, 1);
+    int mark = mock_sound_gate_count();
+    run("rob.dies 1");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4950.0f, num(":score"), "the kill was not worth fifty");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(3.0f, num(":lives"),
+        "a life was awarded below 5,000");
+
+    robot_at(2, 0.0f, 0.0f, 0, 1);
+    run("rob.dies 2");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4.0f, num(":lives"), "crossing 5,000 did not pay a life");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":xtramen"), "XTRAMEN did not latch");
+    TEST_ASSERT_TRUE_MESSAGE(mock_sound_gate_count() > mark,
+        "the extra life made no sound ($238B calls SXLIFE)");
+
+    // Every kill after it, all the way past 10,000, and there is never another.
+    for (int i = 3; i <= 11; i++)
+    {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "make \"score %d", 4950 + 700 * i);
+        run(cmd);
+        robot_at(i, 0.0f, 0.0f, 0, 1);
+        snprintf(cmd, sizeof(cmd), "rob.dies %d", i);
+        run(cmd);
+    }
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4.0f, num(":lives"), "the bonus paid more than once");
+}
+
+// Section 4: the score bottom right and the remaining lives as a row of little
+// men beside it, which is where the cabinet has them ($249F, $25B5) and the
+// reason this game is on a split screen at all.  The font stops at 127 and the
+// cabinet's man is character $80, so the lives are STAMPED -- into the
+// seventeen rows under the playfield, which are otherwise black.
+void test_the_lives_are_stamped_under_the_playfield(void)
+{
+    run("setrefresh \"manual  init.game  make \"lives 3  make \"men.due true");
+    mock_device_clear_graphics();
+    run("show.men");
+
+    int men = 0;
+    float lowest = 1000.0f, highest = -1000.0f;
+    for (int i = 0; i < mock_device_stamp_count(); i++)
+    {
+        const MockStamp *st = mock_device_get_stamp(i);
+        if (st->shape != 1)
+            continue;
+        men++;
+        if (st->y < lowest) lowest = st->y;
+        if (st->y > highest) highest = st->y;
+        TEST_ASSERT_EQUAL_INT_MESSAGE(249, st->colour, "a life is not the man's own colour");
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, men, "three lives are not three men");
+
+    // THE STRIP, and it is 16 rows in 17.  A costume is centred on the turtle,
+    // so a man stamped at y = -71 spans -63 to -78: the bottom wall is drawn at
+    // -62 and the last row the split screen presents is -79.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-71.0f, lowest, "the men are not in the strip under the maze");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-71.0f, highest, "the men are not all on one row");
+
+    run("make \"lives 1  make \"men.due true");
+    mock_device_clear_graphics();
+    run("show.men");
+    men = 0;
+    for (int i = 0; i < mock_device_stamp_count(); i++)
+        if (mock_device_get_stamp(i)->shape == 1)
+            men++;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, men, "a life lost did not come off the row");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":men.due"), "the row is owed forever");
+}
+
+//--------------------------------------------------------------------------
+// The sound, off the bytecode (section 14.1)
+//--------------------------------------------------------------------------
+
+// Every effect writes the same four pairs -- three tone and one noise, which is
+// the 6840's three channels and its noise mode -- and every one of them starts
+// with a gate, because `play` APPENDS and only `sound` flushes.  A queued sweep
+// behind a stale one is the running effect never being interrupted at all.
+void test_every_effect_gates_the_speaker_and_queues_its_sweep(void)
+{
+    static const char *name[5] = { "the player firing", "a robot firing",
+                                   "a robot exploding", "the electrocution",
+                                   "the extra life" };
+    for (int n = 1; n <= 5; n++)
+    {
+        char cmd[32], msg[160];
+        run("make \"sfx.t 0  make \"sfx.pri 0");
+        const MockDeviceState *st = mock_device_get_state();
+        int gmark = st->sound.gate_count;
+        int qmark = st->sound.queued_count;
+
+        snprintf(cmd, sizeof(cmd), "fx %d", n);
+        run(cmd);
+
+        // Four pairs is eight voices.
+        snprintf(msg, sizeof(msg), "%s did not flush all four pairs", name[n - 1]);
+        TEST_ASSERT_TRUE_MESSAGE(st->sound.gate_count - gmark >= 8, msg);
+        snprintf(msg, sizeof(msg), "%s queued no notes", name[n - 1]);
+        TEST_ASSERT_TRUE_MESSAGE(st->sound.queued_count - qmark > 0, msg);
+
+        // AND EVERY NOTE IS AUDIBLE.  A sweep transcribed off a divisor lands
+        // wherever the arithmetic puts it, and `sound` treats anything outside
+        // 20 Hz to 10 kHz as a REST -- so a wrong clock or a slipped octave is
+        // a silent effect rather than a wrong one.
+        for (int i = qmark; i < st->sound.queued_count; i++)
+        {
+            snprintf(msg, sizeof(msg), "%s queued %u Hz, which this synthesizer rests on",
+                     name[n - 1], st->sound.queued[i].freq_hz);
+            TEST_ASSERT_TRUE_MESSAGE(st->sound.queued[i].freq_hz >= 20 &&
+                                     st->sound.queued[i].freq_hz <= 10000, msg);
+        }
+    }
+}
+
+// THE PLAYER'S SHOT IS FOUR SWEEPS AND NOT ONE, which is $33D3's outer loop of
+// four over an inner fifty: timer 1 is put back to 50 at the end of every pass
+// while 2 and 3 keep descending past it.  Four falls that each start high again
+// is the sound; one long fall is a different effect entirely.
+void test_the_players_shot_is_the_roms_four_sweeps(void)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    run("make \"sfx.t 0  make \"sfx.pri 0");
+    int qmark = st->sound.queued_count;
+    run("fx 1");
+
+    // The first pair is voices 0 and 4, so the sixteen notes of channel one
+    // arrive twice over before channel two's eight.
+    int rises = 0, falls = 0;
+    for (int i = qmark + 1; i < qmark + 16; i++)
+    {
+        if (st->sound.queued[i].freq_hz > st->sound.queued[i - 1].freq_hz) rises++;
+        if (st->sound.queued[i].freq_hz < st->sound.queued[i - 1].freq_hz) falls++;
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, rises,
+        "channel one is not four falling sweeps; it never went back to the top");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(12, falls, "the sweeps do not fall");
+}
+
+// The six instructions every one of $33BD, $34E7, $348A, $3439 and $3538 opens
+// with: read the running effect's priority and go no further if it is HIGHER
+// than mine.  So an equal priority interrupts -- a second shot cuts the first,
+// which is the sound a player hears most -- and a lower one is dropped rather
+// than queued behind.
+void test_a_higher_priority_effect_holds_the_speaker(void)
+{
+    const MockDeviceState *st = mock_device_get_state();
+
+    run("make \"sfx.t 0  make \"sfx.pri 0");
+    run("fx 4");                       // the electrocution, priority 3
+    int mark = st->sound.gate_count;
+
+    run("fx 1");                       // the shot, priority 0
+    TEST_ASSERT_EQUAL_INT_MESSAGE(mark, st->sound.gate_count,
+        "a shot cut the player's own death short");
+
+    run("fx 5");                       // the extra life, priority 2
+    TEST_ASSERT_EQUAL_INT_MESSAGE(mark, st->sound.gate_count,
+        "priority 2 interrupted priority 3");
+
+    run("fx 4");                       // equal, and equal wins
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.gate_count > mark,
+        "an equal priority was dropped, so a second shot would be silent");
+
+    // And the hold is a countdown of frames, not a flag: it runs out.
+    run("make \"sfx.t 0");
+    mark = st->sound.gate_count;
+    run("fx 1");
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.gate_count > mark,
+        "the speaker was never given back");
+}
+
+// The five callers, at the five places the ROM calls them: TRY_FIRE, SHOOT,
+// BLAM and PLAYER_DEAD.  A sound wired to nothing is a table nobody hears.
+void test_the_shot_the_kill_and_the_death_reach_the_speaker(void)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    in_room(0, 0);
+    no_robots();
+    no_bolts();
+    man_at(-5, 45);
+
+    run("make \"sfx.t 0  make \"p.shoot 0  make \"p.fire 2  make \"p.fires \"true");
+    int mark = st->sound.gate_count;
+    run("fire.man");
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.gate_count > mark, "the player's shot is silent");
+
+    run("make \"sfx.t 0  make \"rob.live 1  make \"rob.saved 1");
+    robot_at(1, 0.0f, 0.0f, 0, 1);
+    mark = st->sound.gate_count;
+    run("rob.dies 1");
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.gate_count > mark, "a robot explodes silently");
+
+    run("make \"sfx.t 0  make \"p.dying 0");
+    mark = st->sound.gate_count;
+    run("man.dies");
+    TEST_ASSERT_TRUE_MESSAGE(st->sound.gate_count > mark, "the electrocution is silent");
+}
+
+//--------------------------------------------------------------------------
+// The voice (section 14.2)
+//--------------------------------------------------------------------------
+
+// Four sentences, five forms, spoken AND captioned -- which is the Vectrex's
+// own answer ("GOT YOU HUMANOID") and not a leftover from before `say` shipped:
+// the arcade's speech is famously hard to make out.
+void test_the_four_sentences_are_spoken_and_captioned(void)
+{
+    static const char *must[5] = { "INTRUDER ALERT", "THE HUMANOID MUST NOT ESCAPE",
+                                   "THE INTRUDER MUST NOT ESCAPE",
+                                   "CHICKEN! FIGHT LIKE A ROBOT!",
+                                   "GOT THE HUMANOID" };
+    const MockDeviceState *st = mock_device_get_state();
+
+    for (int n = 1; n <= 5; n++)
+    {
+        char cmd[32], msg[192];
+        int smark = st->speech.queued_count;
+        int vmark = st->speech.voice_count;
+        mock_speech_set_status(false, SPEECH_QUEUE_LEN);
+
+        snprintf(cmd, sizeof(cmd), "speak %d", n);
+        run(cmd);
+
+        snprintf(msg, sizeof(msg), "sentence %d reached no phoneme of the engine", n);
+        TEST_ASSERT_TRUE_MESSAGE(st->speech.queued_count > smark, msg);
+        snprintf(msg, sizeof(msg), "sentence %d did not set the robots' voice", n);
+        TEST_ASSERT_TRUE_MESSAGE(st->speech.voice_count > vmark, msg);
+
+        // The pitch is the ROM's byte laid on 24 upwards, which keeps all four
+        // inside the growl the reference calls a robot.
+        snprintf(msg, sizeof(msg), "sentence %d is spoken at pitch %d, which is not a robot",
+                 n, st->speech.voice_pitch);
+        TEST_ASSERT_TRUE_MESSAGE(st->speech.voice_pitch >= 24 && st->speech.voice_pitch <= 40, msg);
+
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":cap.new"),
+            "the sentence was said and not captioned");
+        mock_device_clear_output();
+        run("show.caption");
+        snprintf(msg, sizeof(msg), "the caption does not say \"%s\"", must[n - 1]);
+        TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mock_device_get_output(), must[n - 1]), msg);
+    }
+
+    // A SENTENCE THAT ARRIVES WHILE ONE IS BEING SAID IS DROPPED, and its
+    // CAPTION IS NOT.  The cabinet's TALK ($2C1B) writes over VOICE_PC and this
+    // interpreter cannot interrupt speech without `stopsound` taking the
+    // effects with it, so the choice is drop or queue -- and a queue leaves the
+    // game talking over itself for as long as the player keeps walking.
+    mock_speech_set_status(true, SPEECH_QUEUE_LEN);
+    int held = st->speech.queued_count;
+    run("speak 1");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(held, st->speech.queued_count,
+        "a second sentence was queued behind the one being said");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":cap.new"),
+        "the caption was dropped with the voice");
+
+    // A SECOND IS THE FLOOR AND NOT THE LENGTH.  §14.2's "about a second" was
+    // written before the voice had a speed; at 96 the longest of the five takes
+    // about three, and a caption that goes out mid-sentence is the one thing it
+    // exists to prevent.  So the countdown holds while the speaker is busy.
+    mock_speech_set_status(false, SPEECH_QUEUE_LEN);
+    run("speak 4  show.caption  make \"cap.t 1");
+    mock_speech_set_status(true, SPEECH_QUEUE_LEN);
+    mock_device_clear_output();
+    run("show.text");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":cap.t"),
+        "the caption expired while the sentence was still being said");
+
+    // And it rubs itself out when the speaker is done, which is the same
+    // statement with a blank in it.
+    mock_speech_set_status(false, SPEECH_QUEUE_LEN);
+    mock_device_clear_output();
+    run("show.text");
+    TEST_ASSERT_NULL_MESSAGE(strstr(mock_device_get_output(), "CHICKEN"),
+        "the caption wrote itself again instead of clearing");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, num(":cap.t"), "the caption never expired");
+}
+
+// $2BE4's own test, and it is RCOUNT rather than the crowd you can see: leave a
+// room you cleared and the robots warn each other, leave one you did not and
+// they call you a chicken.
+void test_leaving_a_cleared_room_is_a_warning_and_leaving_a_crowd_is_not(void)
+{
+    run("make \"rob.live 0  say.leaving");
+    const char *cleared = word_of(":cap.w");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(cleared, "MUST NOT ESCAPE"), cleared);
+
+    run("make \"rob.live 3  say.leaving");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("CHICKEN! FIGHT LIKE A ROBOT!", word_of(":cap.w"),
+        "a room left with robots in it is not a chicken");
+}
+
+// $2ADB, and it is the first thing that happens when OTTO_TIME runs out --
+// before his pattern table, his TPRIME or his status bits.
+void test_otto_announces_himself(void)
+{
+    in_room(0, 0);
+    no_robots();
+    run("make \"o.state 0  make \"o.time 1  make \"o.tk 1  make \"cap.w \"||");
+    run("step.otto");
+
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1.0f, num(":o.state"), "Otto did not arrive");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(word_of(":cap.w"), "INTRUDER ALERT"),
+        "Otto arrived without a word");
+}
+
+//--------------------------------------------------------------------------
+// The attract screen (section 21, risk 6)
+//--------------------------------------------------------------------------
+
+// The risk is the reason for the line about the clock: a board that will not
+// overclock cannot play this game, and a player told so on the way in does not
+// have to work it out from a game that will not start.  ESC here is the door
+// out of the session, and it is the reason the clock can ever be given back.
+void test_the_attract_screen_says_what_the_keys_do_and_esc_leaves(void)
+{
+    mock_device_clear_output();
+    set_mock_input("x ");            // a key it must ignore, then space
+    run("make \"quit \"false  attract");
+
+    const char *screen = mock_device_get_output();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "B E R Z E R K"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "ARROWS"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "SPACE"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "300 MHz"), screen);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(screen, "SPACE to play, ESC to quit"), screen);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", word_of(":quit"),
+        "space left the session instead of starting a game");
+
+    set_mock_input("\x1b");
+    run("make \"quit \"false  attract");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", word_of(":quit"),
+        "escape did not leave the attract screen");
+}
+
+// THE LAST SENTENCE FINISHES BEFORE THE CARD.  The man dies saying "GOT THE
+// HUMANOID, GOT THE INTRUDER" ($1FB3, the third instruction of PLAYER_DEAD) and
+// `stopsound` cuts speech as well as notes, so a card that arrives through it
+// ends him mid-word.
+//
+// READ OUT OF THE SOURCE, because `one.game` ends in a loop no test can call:
+// `play.game` paces on `sync` and the mock clock only moves when a test moves
+// it.  What is checkable is the ORDER, which is the whole of the fix -- and the
+// bound with it, because this is the one wait in the file with no frame under
+// it.
+void test_the_card_waits_for_the_last_sentence(void)
+{
+    FILE *f = fopen(BERZERK_SOURCE, "rb");
+    TEST_ASSERT_NOT_NULL(f);
+
+    char line[512];
+    bool in_body = false;
+    int speaking_at = 0, stop_at = 0, bound_at = 0, n = 0;
+    while (fgets(line, sizeof(line), f))
+    {
+        if (strncmp(line, "to one.game", 11) == 0) { in_body = true; continue; }
+        if (!in_body) continue;
+        if (strncmp(line, "end", 3) == 0) break;
+        n++;
+        if (strstr(line, "speaking?") && !speaking_at) speaking_at = n;
+        if (strstr(line, "stopsound") && !stop_at) stop_at = n;
+        if (strstr(line, "> 200") && !bound_at) bound_at = n;
+    }
+    fclose(f);
+
+    TEST_ASSERT_TRUE_MESSAGE(speaking_at > 0, "`one.game` does not wait on the voice");
+    TEST_ASSERT_TRUE_MESSAGE(stop_at > 0, "`one.game` does not silence the game");
+    TEST_ASSERT_TRUE_MESSAGE(speaking_at < stop_at,
+        "`stopsound` runs before the wait, so the death sentence is cut off");
+    TEST_ASSERT_TRUE_MESSAGE(bound_at > 0 && bound_at < stop_at,
+        "the wait on the voice is unbounded, so a stuck engine takes the session");
+}
+
+// §18's FOURTH CEILING, AND THE ONE M6 NEARLY SPENT.  A procedure body keeps
+// its comments -- four comment lines inside one cost 204 bytes of word table
+// and 59 cells, measured -- and this file is more comment than code, so the
+// commentary lives ABOVE each `to` where it costs nothing and only the pointers
+// stay inside.  M6 put its notes inside the bodies first and
+// `test_the_robot_count_is_a_five_room_cycle` ran the workspace out of cells
+// generating rooms, which is what this floor exists to catch before a board
+// does.  The load also hands back the ~1,300 cells the effect tables spend
+// building themselves with `se`.
+void test_the_load_leaves_the_workspace_room_to_play_in(void)
+{
+    // `load_file` has already run in setUp, `recycle` with it.
+    float free_cells = num("nodes");
+    float free_atoms = num("atoms");
+
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "the loaded game leaves %g free cells; a long run of room builds "
+             "needs the headroom and M6's first draft came within 2,000 of not "
+             "having it",
+             (double)free_cells);
+    TEST_ASSERT_TRUE_MESSAGE(free_cells >= 20000.0f, msg);
+
+    snprintf(msg, sizeof(msg),
+             "the loaded game leaves %g free bytes of word table (B25's other half)",
+             (double)free_atoms);
+    TEST_ASSERT_TRUE_MESSAGE(free_atoms >= 14000.0f, msg);
+}
 
 int main(void)
 {
@@ -5060,10 +5497,6 @@ int main(void)
     RUN_TEST(test_a_room_is_eight_border_runs_and_eight_interior_ones);
     RUN_TEST(test_every_wall_runs_from_one_grid_line_to_the_next);
     RUN_TEST(test_a_room_change_clears_the_last_room);
-    RUN_TEST(test_a_doorway_defers_the_masks_to_the_next_frame);
-    RUN_TEST(test_a_frame_writes_at_most_one_block_of_text);
-    RUN_TEST(test_the_worst_frame_is_the_body_and_not_the_padded_period);
-    RUN_TEST(test_the_worst_transition_is_kept);
     RUN_TEST(test_the_man_is_four_costumes_at_the_cabinets_size);
     RUN_TEST(test_both_sides_of_the_man_are_one_costume);
     RUN_TEST(test_the_man_stamps_half_a_sprite_from_his_stored_corner);
@@ -5129,7 +5562,7 @@ int main(void)
     RUN_TEST(test_a_death_sends_him_to_another_room_and_costs_him_a_life);
     RUN_TEST(test_three_deaths_end_the_game_and_a_new_one_starts_over);
     RUN_TEST(test_the_ramp_reaches_the_floor_in_four_room_builds);
-    RUN_TEST(test_a_frame_that_builds_a_room_writes_no_other_text);
+    RUN_TEST(test_a_doorway_pays_for_its_text_one_frame_at_a_time);
     RUN_TEST(test_the_game_asks_for_the_fast_clock_and_reads_it_back);
     RUN_TEST(test_the_game_gives_the_clock_back_when_it_exits);
     RUN_TEST(test_a_board_that_will_not_overclock_is_told_why_and_does_not_play);
@@ -5185,6 +5618,23 @@ int main(void)
     RUN_TEST(test_otto_puts_back_the_wall_he_walked_over);
     RUN_TEST(test_otto_puts_back_the_border_he_starts_on);
     RUN_TEST(test_otto_in_open_ground_does_not_redraw_the_maze);
+
+    RUN_TEST(test_both_difficulty_tables_carry_the_colour);
+    RUN_TEST(test_the_band_colours_the_crowd_and_not_the_walls_or_the_man);
+    RUN_TEST(test_the_man_runs_the_roms_colour_cycle_while_he_dies);
+    RUN_TEST(test_a_cleared_room_pays_ten_for_every_robot_it_had);
+    RUN_TEST(test_the_bonus_life_is_once_and_only_once);
+    RUN_TEST(test_the_lives_are_stamped_under_the_playfield);
+    RUN_TEST(test_every_effect_gates_the_speaker_and_queues_its_sweep);
+    RUN_TEST(test_the_players_shot_is_the_roms_four_sweeps);
+    RUN_TEST(test_a_higher_priority_effect_holds_the_speaker);
+    RUN_TEST(test_the_shot_the_kill_and_the_death_reach_the_speaker);
+    RUN_TEST(test_the_four_sentences_are_spoken_and_captioned);
+    RUN_TEST(test_leaving_a_cleared_room_is_a_warning_and_leaving_a_crowd_is_not);
+    RUN_TEST(test_otto_announces_himself);
+    RUN_TEST(test_the_attract_screen_says_what_the_keys_do_and_esc_leaves);
+    RUN_TEST(test_the_card_waits_for_the_last_sentence);
+    RUN_TEST(test_the_load_leaves_the_workspace_room_to_play_in);
 
     return UNITY_END();
 }

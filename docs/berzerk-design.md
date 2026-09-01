@@ -1376,13 +1376,37 @@ bit 3 = I** — and `$FF` is white, which `COLOUR_FILL_WHITE` agrees with.
 From 10,000 ($37BC): `$FF` white, `$66` cyan, `$DD` bright magenta, `$77` grey,
 `$33` yellow, `$99` bright red, `$EE` bright cyan.
 
-**`C.WALLS`' compositing does not port and does not need to.** It is
+~~**`C.WALLS`' compositing does not port and does not need to.** It is
 `attribute = (~screen & c) | (screen & $44)` — the difficulty colour laid into
 the boxes where no pixel is set, with bits 2 and 6 forced on where one is,
 which tints a box green-ward wherever a wall sprite's own columns land. That is
 a bitwise trick against 4-pixel-wide wall sprites and 4 × 4 attribute boxes,
 and this port has neither. **What ports is the sentence underneath it: each
-difficulty band has a colour, and it is worn by the robots and the walls.**
+difficulty band has a colour, and it is worn by the robots and the walls.**~~
+
+**CORRECTED FROM A BOARD, 2026-09-01: THE WALLS ARE BLUE, IN EVERY ROOM AT EVERY
+SCORE, AND THE BAND IS WORN BY THE FIGURES ALONE.** The compositing *does* port,
+because reading it a bit at a time says something the sentence above got
+backwards. An attribute byte is **two 4 × 4 boxes, one to a nibble** — the memory
+map's "Color look-up `(RGBI,RGBI)`" — and `$44` is **bit 2 of each nibble**,
+which by this section's own decoding is **B**. So for a box holding a wall
+pixel, `~screen & c` is zero for exactly the bits the wall set and `screen & $44`
+puts bit 2 back: the box is `$4`, **blue, and only blue**. A box with no wall
+pixel keeps `c` untouched. It is not a green-ward tint and it is not
+approximate: the wall sprite is 4 × 4 (`$269B`) and every wall coordinate is a
+multiple of four, so a wall lands on the attribute grid exactly.
+
+**What the fifth column colours is therefore everything drawn in an empty box —
+the robots, Otto and both kinds of bolt — and nothing else.** The port had it
+the other way round for a day and a board caught it in one look.
+
+**And a doorway is a plain gap.** `$25D4` draws 96 pixels of border, skips 48
+and draws 96 more; `$25CA` draws 72, skips 64 and draws 72. Nothing is drawn in
+the gap, so its boxes hold no wall pixel and carry the difficulty colour like
+any other empty ground — which is why the door you came in through looks the
+same colour as the robots. **It is not a mark and it is not a door that closes**:
+nothing in the ROM shuts an exit, and §6.1 says the room you walk back into is
+the same maze.
 
 **Two things gate it, and neither is a colour problem.** The table is indexed
 by the **score**, which is §12's and lands at M6 — the colour arrives with the
@@ -1393,6 +1417,23 @@ affordable only because the colour changes on a *score band* and not on a room
 — seven times below 10,000 — so it is a rare cost at a transition rather than a
 frame cost. The walls are free: one `setpc` before `draw.walls`, which already
 runs once a room.
+
+**BUILT AT M6, 2026-09-01, AND THE ~140 MS IS GONE.** The paragraph above was
+written when a costume baked its own pixels. The one-shape model landed on
+2026-08-31 — `putsh` and `getsh` take colour — and every pixel of every costume
+in this file is `fe`, *the wearing turtle's pen*, so a difficulty band is one
+`setpc` before the crowd: the robots, Otto and both kinds of bolt. The walls
+and the man are not in it and carry their own constants (`wall.pc` blue,
+`man.pc` the ROM's `$AA`) — see the board pass below, which is where that came
+out. The whole of this section is two `item`s and it costs nothing at all.
+
+**And the man is not in the band.** `$1FEE` gives player one `$AA` and player
+two `$DD` whatever the difficulty is, so he is bright green all game — the one
+figure that can always be found in the crowd. **He runs the palette while he
+dies**, which is `$27EB`: `rlca` then `xor $11` on `PLAYER_COLOUR` every step of
+the death animation, which from `$AA` closes exactly after eight — `$44`, `$99`,
+`$22`, `$55`, `$BB`, `$66`, `$DD`, `$AA`. The electrocution is not a flicker in
+the cabinet; it is the man running through the whole palette.
 
 **This whole section is a table and two lookups**, and it is the cheapest
 faithfulness in the document.
@@ -1412,9 +1453,9 @@ higher one:
 |---|---:|---|
 | player fires | 0 | `SFIRE` $33BD |
 | robot explodes | 1 | `SBLAM` $348A |
-| robot fires | — | `SRFIRE` $34E7 |
+| robot fires | 1 | `SRFIRE` $34E7 |
 | player electrocuted | 3 | `SFRY` $3439 |
-| extra life | — | `SXLIFE` $3866 |
+| extra life | 2 | `SXLIFE` $3538 (this table said $3866; `$238B` calls $3538) |
 
 Our PSG has eight voices, ADSR and stereo pairs, and this maps directly: three
 tone voices plus noise, with the priority rule as a single global holding the
@@ -1423,6 +1464,27 @@ disassembly at M6, not out of this document** — the bytecode has to be walked
 to read them, which is the method
 [Battlezone §16.14](battlezone-design.md#L3394) used and the reason its sound is
 right.
+
+**WALKED 2026-09-01 AND ALL FIVE PROGRAMS DECODE.** The chip is an **Exidy
+sound board** and `C.LOAD` ($1776) says so: two control bytes to ports $40/$41,
+the *high* byte of all three timers to $42 and their low bytes to $43, $45 and
+$47, then four values to $46 tagged in their top two bits — a **6840 triple
+timer behind a shared MSB latch**, plus a noise/volume latch whose offset 0 is
+the noise control and 1–3 are three-bit channel volumes. A 6840 channel toggles
+every `TMR + 1` clocks off 3.579545 MHz / 4, so
+
+```
+f = 447443 / (TMR + 1)
+```
+
+and every duration is a count of NMIs. **The priority test is six instructions
+and it is the same six in all five routines**: read $0889 and stop if it is
+*higher* than mine — so an equal priority interrupts and a lower one is dropped.
+**The one number not read off anything is the NMI rate**, which the ROM never
+states; it is pinned at **480 Hz (eight a video frame)** by the five durations,
+which at 60 Hz would make the robot's explosion five and a half seconds. §19's
+M6 note carries the five decoded programs, what each sounds like, and the three
+things that did not survive the range of `sound`.
 
 ### 14.2 The voice, which is the hard one
 
@@ -1451,8 +1513,41 @@ hard to make out, and a player who cannot hear the room should still be told
 they are a chicken. Either way the sentence *assembly* is preserved, which is
 the part that makes the taunts feel alive.
 
-The vocabulary is **one property list, not thirty procedures** — §18's
-procedure ceiling is why — and a sentence is a list of word names:
+~~**AND THE VOICE IS SLOWER THAN THE REFERENCE'S ROBOT.** `setvoice`'s second
+number is a speed where 128 is normal, and the reference's own robot —
+`[30 150 200 90]`, which is the timbre this game wants — is *faster* than
+normal. This cabinet is not: its robots are reading you a warning, not
+chattering. **96** is three-quarters of normal, so a sentence takes a third
+longer and the words come apart far enough to be made out. Read on a board
+2026-09-01 and it is the one number in this section a person had to choose.~~
+
+**CORRECTED FROM A BOARD, 2026-09-01: THE VOICE IS `[30 128 128 128]`, AND THE
+PITCH IS THE ONLY THING THIS GAME CHANGES.** Slowing the reference's robot down
+was the wrong half. **The timbre is what costs the words**: a big mouth and a
+small throat smear the consonants, and dropping the speed to 96 only gives a
+listener longer to fail to make them out. That is the arcade's own famous
+problem — faithfully reproduced, and not worth reproducing, because §14.2's
+whole reason for captioning is that a player should be *told* what the room
+said. Heard on a PicoCalc, an ordinary head at the ROM's own pitch is far
+easier to follow, and it is still a robot: the growl is the 48–70 Hz `say.p`
+lays out of `$70`–`$7F`, and that is untouched. So **mouth, throat and speed go
+back to the default 128** and the pitch carries the whole character. The
+caption's countdown is unaffected — it holds while `speaking?` is true either
+way, and a sentence a third shorter is still far longer than its floor.
+
+**SUPERSEDED AT M6, 2026-09-01: there is no property list.** `say` takes a word
+or a list, and its letter-to-sound rules get all thirteen words of the four
+fixed sentences right — each checked against `phonemes`, which is what that
+operation is for. So a sentence is a sentence and the vocabulary is five words
+of Logo; the `speak` below was written before `say` existed and is kept for
+M7's taunts to argue with. What did carry over is the *pitch*: every sentence in
+the ROM opens with a byte in `$70`–`$7F`, and since nothing maps an S14001A
+pitch code onto a formant synthesiser's half-hertz, the low nibble is laid on 24
+upwards — inside the growl the reference calls a robot, and in the ROM's own
+order.
+
+The vocabulary was to be **one property list, not thirty procedures** — §18's
+procedure ceiling is why — and a sentence a list of word names:
 
 ```logo
 to speak :words
@@ -1465,6 +1560,59 @@ end
 `GENERATE_ROBOT_SPEECH` ($2B97) is then `speak` over two `pick`s.
 [say-design.md](say-design.md) §11 is the long form, including why the words
 are stored as phoneme lists rather than as text.
+
+### 14.2.1 When they talk, and how often (read 2026-09-01)
+
+Asked from a board, and the ROM answers it exactly. **There are two schedules
+and they are not the same kind of thing.**
+
+**The four fixed sentences have no timer at all.** Each is one `call` at the
+event, and the event is the schedule:
+
+| Sentence | Where | When |
+|---|---|---|
+| INTRUDER ALERT! INTRUDER ALERT! | `$2ADB` | the instant `OTTO_TIME` reaches 0 — *before* Otto is given his pattern table, his `TPRIME` or his status bits |
+| THE HUMANOID / THE INTRUDER MUST NOT ESCAPE | `$22EB` → `$2BE4` | leaving a room whose `RCOUNT` is 0, i.e. one you cleared; the ROM picks between the two words at random |
+| CHICKEN! FIGHT LIKE A ROBOT! | `$2C13` | leaving a room whose `RCOUNT` is *not* 0, and it sets `IS_CHICKEN` |
+| GOT THE HUMANOID, GOT THE INTRUDER | `$1FB3` | the third instruction of `PLAYER_DEAD`, after the fry and before the death animation's timer |
+
+**The taunts have a timer, and it is a countdown of *silence* rather than of
+time.** `GENERATE_ROBOT_SPEECH` (`$2B97`) is called from `$21C3`, inside the
+player's own main loop, and three things set its rate:
+
+- **It is called once a second.** The loop reloads the head job's delay with
+  `$3B` = 59 (`$21B1`) and the timer list is decremented once a video frame
+  (`$27F5`, from the bottom-of-screen interrupt), so 59 frames ≈ 0.983 s. The
+  same block increments `CMOS_TOTAL_SECS_OF_PLAY` — the ROM's own name for that
+  counter is the proof.
+- **It returns at once if anything is being said** (`$2B9A`, `VOICE_PC` non-null),
+  so the countdown only advances while the speaker is idle. The gap is therefore
+  measured from the *end* of the previous utterance, fixed sentences included.
+- **`TALK_TIMER` reloads to 4, 8, 12 or 16** — `((RANDOM << 2) & $0C) + 4` at
+  `$2BA2`, with the disassembler's own note that the `+ 4` is there "otherwise
+  the robots will speak too often".
+
+So **a taunt every 4, 8, 12 or 16 seconds of silence, each equally likely,
+averaging ten** — and `$17E7` sets `TALK_TIMER` to **1** when a game starts, so
+the first one arrives a second in. Only outside demo mode (`$21BA`), and only
+while the man is alive, because the call sits in the player's job and a death
+runs `PLAYER_DEAD` instead.
+
+**The taunt itself is wider than the fixed sentences in two ways.** Its pitch is
+`(RANDOM & $1F) | $60` — `$60`–`$7F`, twice the range the four fixed ones use —
+and it is assembled from one first word of six (`GET CHARGE ATTACK DESTROY SHOOT
+KILL`) and one target of four (`THE CHICKEN`, `IT`, `THE HUMANOID`, `THE
+INTRUDER`). **Three, not four, unless you have run away**: `$2BCC` skips past
+`THE CHICKEN` and drops the count to three when `IS_CHICKEN` is clear, which is
+the flag's only reader and the reason it exists.
+
+**Otto never speaks.** The alert is the room's, on his arrival, and he has
+nothing else to say.
+
+**M6 ships the four fixed sentences; the taunts are M7's**, and this table is
+what M7 has to build: a once-a-second countdown that only runs while
+`speaking?` is false, a reload of 4/8/12/16, and `IS_CHICKEN` gating the fourth
+target.
 
 ### 14.3 Speech in the interpreter, priced
 
@@ -1919,7 +2067,7 @@ Each leaves `ctest --preset=tests` green, and each ends with a board reading.
 | M3 | The robots | **DONE 2026-08-30, read on a board, and the gate fails by three milliseconds — deferred to M4 with §22 Q2.** `fast`: HUD 24, FRAME 53, WORST 100 (a defect, fixed, ~76 predicted), ROOM 23; `normal` unplayable. An ordinary frame at eleven robots is **53 ms against 50 — 18.9 fps**, better than §15.3's 55–59 projection and still over. §15.5's clock precondition came forward from M6 with the reading. 51 procedures, 74 host tests. §19's M3 note Seek, `IQ` with §6.3's cell-crossing cache, the five-room count cycle, ROBOT_SPEED as the arcade's reload counter, robots killing robots and killing the man, and the explosion. 48 procedures, 70 host tests, `ctest` green at 84/84. Three decisions and one finding, all in §19's M3 note; [B68](bugs.md) fixed with it |
 | M4 | The bolts | **READ ON A BOARD 2026-08-30 — the frame rate is good and three defects came back, all fixed. Read again 2026-08-31 after [B77](bugs.md): the robots walk and the numbers held.** Both bolt kinds in the cabinet's one seven-slot array, the three firing windows at their boundaries, the shared `RWAIT` holdoff, the man's five shooting poses, §13's below-10,000 table and §12's first row. 72 procedures, 110 host tests, `ctest` green at 84/84. **HUD 26, FRAME 56, WORST 114, ROOM 24 at `fast`** — 17.9 fps with bolts in the air, called "very good", which **answers §22 Q2 at 18 fps with eleven robots**; `WORST` 114 is the one left open. **The alignment rule is corrected rather than confirmed** — the array is processed three times a tick, not twice (§10.2). Five defects: [B72](bugs.md), [B73](bugs.md), [B71](bugs.md), [B74](bugs.md) and **[B75](bugs.md), the robots running ten times too fast because `ROBOT_SPEED` is the period the whole crowd shares**. **And the lives came forward from M6**, because the ramp is the cabinet's and the bound on it was missing. §19's M4 note |
 | M5 | Evil Otto | **DONE 2026-08-31, read and played on a board. `fast`: HUD 24, FRAME 50-51, WORST 104, ROOM 25. Both judgements came back right and neither was tuned — the hop reads right and the nine seconds reads right — and two defects came back and are fixed** — [B78](bugs.md), Otto eating the maze as he walks, and [B79](bugs.md), a one-pixel trail because he spawns on the *man's* pixel and half the man's coordinates are half-pixels. `fast`: **HUD 24, FRAME 50, WORST 104, ROOM 25.** **FRAME 50 is the pad and not a speed-up** — `sync` pads a frame that fits to exactly the period, so 50 is this number's *floor* and means the body fit inside the budget; M5 only adds work, so the difference from M4's 56 is the scene and not the code (§19's M5 note). ROOM +1 is `place.otto` inside the build, which is the one figure that is M5's own. **And the hop reads right**, which was the judgement no measurement could supply. The timer arithmetic ($2ABC's three-number sum at 40 ticks a unit, +2 a kill), walls ignored, robots eaten — and **his sprite, which §7.5 had left as a gap**: the pattern table at $120B decodes big-endian into six frames of arrival and a ten-frame hop whose *height is an address offset*, so he is eight costume slots and not sixteen. 78 procedures, 129 host tests, `ctest` green at 84/84. Two findings, both mechanism rather than pixels: **he is a vector from the moment the room is built**, so [B75](bugs.md)'s denominator is one larger everywhere, and **his `TPRIME` is 2 and not `ROBOT_SPEED`**, so alone in a cleared room he is exactly the man's speed. The costume ceiling moved 23 → 25 and there are no spare slots left. §19's M5 note |
-| M6 | The campaign, the sound and the voice | Both difficulty tables, lives, bonus, the attract screen, the effects off the ROM, and §14.2's four fixed sentences spoken with `say` and captioned |
+| M6 | The campaign, the sound and the voice | **BUILT 2026-09-01; first board pass the same day, and the M2–M5 readout came out at the end of it — four procedures, thirteen globals and three `ticks` calls — leaving the cabinet's own HUD as the only text under the maze. `room.built` and the once-a-second `recycle` stay, because they are budget rules rather than measurements, and it corrected §13.1 — the walls are blue in every room and the difficulty band is worn by the robots, Otto and the bolts, because `$3702` forces bit 2 (B) into every attribute box holding a wall pixel. The door you entered is not a mark and nothing closes it. §14.2.1 reads the speech schedule: the four fixed sentences have no timer, and a taunt comes every 4, 8, 12 or 16 seconds of SILENCE. The voice is `[30 128 128 128]` — a second board listen took back the first pass's slowdown, because the reference robot's mouth and throat are what cost the words and the pitch alone carries the character — the caption holds until the speaker is done, and the game-over card waits for the last sentence. And a procedure body keeps its comments — 204 bytes of word table and 59 cells for four lines — which nearly spent §18's fourth ceiling.** Both tables (the second entered by a BCD digit pair, and its first row unreachable), §13.1's colour column, the bonus life as the latch it is, the cabinet's HUD with the lives stamped under the playfield, the attract screen, and §14.2's four sentences spoken and captioned. **The sound is the milestone**: §14.1's bytecode walks out of the interpreter at `$1D12` and all five programs decode, the chip is an Exidy 6840 at `f = 447443 / (TMR + 1)`, and **the one number not read off anything is the NMI rate** — 480 Hz, pinned by five durations that are absurd at 60. 84 procedures (of 100), 144 host tests, `ctest` green at 84/84 — 88 and 146 until the readout came out at the end of the milestone. **§13.1's ~140 ms colour cost is gone**: every costume pixel is `fe`, so a band is a `setpc`. **§14.2's property list is not needed**: `say` takes the sentence. **§21 risk 6 closes with the attract screen.** §19's M6 note |
 | M7 | Polish | The taunts (spoken, over two `pick`s), the deaths and the play test. **The scroll came out of this row on 2026-08-31** — asked for, transcribed and built, and its note is below |
 
 ### M0 — the harness, and what it must answer
@@ -3023,6 +3171,309 @@ cabinet's, and whether it is a breath or a wait is §22 Q4's remaining question.
 If it wants shortening, the knob is the pacing and not the step — the eight
 pixels are the transcription.
 
+### M6 — the campaign, the sound and the voice (2026-09-01)
+
+**BUILT 2026-09-01. 84 procedures (of 100), 144 host tests, `ctest` green at
+84/84, all three presets link. NOT YET READ ON A BOARD** — every number in this
+note is transcribed or projected, and the four things only a board can answer
+are listed at the end.
+
+**The milestone's own work was §14.1, which had been left as an address and a
+promise.** That section named the audio interpreter at `$1D12`, listed sixteen
+opcodes and said "the frequencies and envelopes come off the disassembly at M6,
+not out of this document". They do. The interpreter's opcodes are commented in
+[the disassembly](berzerk-source-arcade.asm) and **all five programs decode
+without a remainder** — `SFIRE` `$33D3`, `SRFIRE` `$34FD`, `SBLAM` `$34A0`,
+`SFRY` `$344F` and `SXLIFE` `$354E`, each one a straight line of stores, adds
+and two nested loop counters.
+
+**The chip is an Exidy sound board and the write routine says so.** `C.LOAD`
+(`$1776`) puts two control bytes on ports `$40`/`$41`, the **high** byte of all
+three timers on `$42` and their low bytes on `$43`, `$45` and `$47`, then four
+values on `$46` tagged in their top two bits. That is a **6840 triple timer
+behind a shared MSB latch**, plus a noise/volume latch whose offset 0 is the
+noise control and 1–3 are three-bit channel volumes. A 6840 channel toggles its
+output every `TMR + 1` clocks off a 3.579545 MHz crystal divided by four, so a
+channel sounds at
+
+```
+f = 447443 / (TMR + 1)
+```
+
+and every duration in the data is a count of NMIs. That is the whole of the
+sound hardware, and it is the same shape as POKEY's `27000 / (AUDF + 1)` in
+[Battlezone §16.14](battlezone-design.md#L3394).
+
+**THE ONE NUMBER THAT IS NOT READ OFF ANYTHING IS THE TICK, and it is pinned by
+the durations.** The ROM never says how often it is interrupted; it only says
+how many yields each effect lasts — 450, 320, 331, 400 and 800. At 60 Hz the
+robot's explosion is **5.5 seconds** and the extra life is **thirteen**, which
+are not sounds. At **480 Hz — eight NMIs a video frame** — they are 0.69 s and
+1.67, and all five land where a person would put them:
+
+| Effect | Priority | Yields | At 480 Hz | What it is |
+|---|---:|---:|---:|---|
+| `SFIRE` player fires | 0 | 450 | 0.94 s | four descending sweeps, 8.8 kHz → 559 Hz, over a detuned pair sliding into the bass |
+| `SRFIRE` robot fires | 1 | 320 | 0.67 s | one descent, never restarted — the player's shot slowed down |
+| `SBLAM` robot explodes | 1 | 331 | 0.69 s | the noise generator, its clock falling 224 kHz → 7.8 |
+| `SFRY` player electrocuted | 3 | 400 | 0.83 s | a rising tone under a sweep that reloads sixteen times |
+| `SXLIFE` extra life | 2 | 800 | 1.67 s | twenty warbles at twelve hertz |
+
+So the tick is **2.083 ms**, and it sits in this port exactly where `b.spd` sat
+at M4: one number, in one place, that an emulator can overturn in a line.
+**§14.1's `SXLIFE` address is corrected with it** — `$3866` in that table,
+`$3538` in the ROM, which is where `$238B` calls it from.
+
+**FIVE PRIORITIES AND ONE RULE, and the rule is six instructions.** All five
+routines open with the same ones: read the running effect's priority out of
+`$0889` and go no further if it is **higher** than mine. So an **equal**
+priority interrupts — a second shot cuts the first, which is the sound a player
+hears most — and a lower one is dropped rather than queued behind. `fx` is
+those six instructions and nothing else, over a countdown of frames.
+
+**And the gate is a rest**, which is this sequencer's shape rather than the
+cabinet's: `play` **appends** to a voice's queue and only `sound` flushes it, so
+an effect that wins opens with a one-millisecond rest on all four pairs — the
+cabinet writing a new program counter over the running one — and queues its own
+notes behind that.
+
+**THREE THINGS DID NOT SURVIVE THE TRANSCRIPTION AND ALL THREE ARE RANGE.**
+`SFIRE`'s tail — 250 more yields of a fifth descent after the four sweeps — is
+dropped, because in the cabinet it is a sub-bass drone the next event always
+cuts, and a player who fires five times a second never reaches it. `SFRY`'s
+third channel is dropped: its low byte is added to **without a carry**, so it
+wraps three times in 52 ms, which is a 57 Hz rasp and not a note. And `SBLAM`'s
+noise clock runs from 224 kHz down to 7.8, where `sound` stops at 10,000 — so
+the sweep is scaled to the top of our range and **keeps its ratio**, 28.5 to
+one, which is the part of it a person hears. Everything else is the ROM's
+counter sampled at the middle of each note's window and rounded to a semitone,
+which is worth at most 2.5 % of a hertz.
+
+**The volumes are the ROM's doubled**, and that is arithmetic rather than taste:
+the cabinet's are three bits and ours are four, both linear in amplitude, so
+×2 is the same scale and the ordering survives — `SFIRE`'s 5, 6, 6 stays under
+`SBLAM`'s 7, 7, 7.
+
+**§13.1'S COLOUR COLUMN COSTS NOTHING, AND THAT PARAGRAPH IS NOW WRONG IN THE
+BEST WAY.** It priced a band change at eight `snapsh` captures — ~140 ms — and
+called it affordable only because a band changes seven times below 10,000. That
+was true when a costume baked its own pixels. **The one-shape model landed on
+2026-08-31** (`putsh` and `getsh` take colour), and every pixel of every costume
+in this file is `fe`, the *wearing turtle's pen* — so a difficulty band is a
+`setpc`, and the whole of §13.1 is two `item`s. *(Which half of the screen wears
+it was got backwards here and corrected the same day — see the board pass
+below: the walls are blue and the band is the figures'.)*
+
+**And the man is not in the band either.** `$1FEE` gives player one `$AA` and
+player two `$DD` whatever the difficulty is, so he is **bright green all game**
+and is the one figure that can always be found in the crowd. **He also runs the
+palette while he dies**, which is `$27EB` and is two instructions — `rlca` then
+`xor $11` on `PLAYER_COLOUR` every step of the death animation. From `$AA` that
+closes exactly after eight: `$44`, `$99`, `$22`, `$55`, `$BB`, `$66`, `$DD`,
+`$AA`. The electrocution is the man running through the whole palette, and this
+port had him as a flicker; he now flickers **and** cycles, for one list and one
+`item`.
+
+**BOTH TABLES, AND THE SECOND ONE IS ENTERED BY A BCD COMPARISON.** `$36BC`
+builds its index out of two nibbles of the score — ten-thousands and thousands,
+in that order — and compares it against `$10`, `$11`, `$13`, `$15`, `$17` and
+`$19`. **The ROM's first row there is unreachable**: it is taken when the index
+is below `$10`, and the table is only consulted at 10,000 or more. So the
+from-10,000 table is **six** rows here where the disassembly shows seven, and
+10,000 itself lands on the row thresholded `$11`. The two are joined into one
+fourteen-row table and `diff.i` chooses which half to index, because every
+column but the threshold is read the same way on both sides.
+
+**THE BONUS IS A LATCH AND IT TESTS A DIGIT.** `$2396` compares the
+thousands-and-hundreds BCD byte against `$50` — the **thousands digit** for 5,
+not the score for 5,000 — and `$239B` refuses if `XTRAMEN` is already set. So it
+is once a game, and crossing 10,000, where that digit goes back to 0, does not
+pay twice. The cabinet has a DIP for 5,000 or 10,000 and the Vectrex chose
+5,000; so does this port, because it is the more generous of the two.
+
+**A cleared room pays ten a robot again** (`$2491`), and the count it uses is
+**`RSAVED` — the crowd the room was *built* with** — and not the one left
+standing, which is zero by the time it is read. `BONUS` and the number go
+bottom-left, and out again with the room they were earned in, because the
+cabinet redraws that strip with the maze.
+
+**THE HUD IS TEXT ROW 24 AND THE LIVES ARE STAMPED.** §4 chose the split screen
+for this: the score bottom-right, the bonus bottom-left, the lives as a row of
+little men beside them. Rows 25–29 were the timing block M2–M5 built and the
+roadmap reads its numbers off, so the HUD took the row above and the caption row
+30; both were empty. *(The readout came out at the end of this milestone and the
+caption moved back to row 26, which is the row §14.2 named.)* `SC` and `LIV` come **out** of the timing block, because
+a diagnostic that repeats the HUD is two text jobs for one number. The men
+cannot be typed — the cabinet's is character `$80` and this font stops at 127 —
+so they are the standing costume stamped into the **seventeen rows under the
+playfield**, which are black and otherwise unused and are exactly where the
+cabinet has them: a man at y = −71 spans −63 to −78, with the bottom wall drawn
+at −62 and the last presented row at −79. Their eraser is gated on `men.due`,
+because the only change to that strip that does not come with a `clean` is the
+bonus life.
+
+**§14.2's PROPERTY LIST IS NOT NEEDED AND THAT SECTION IS SUPERSEDED.** It wrote
+`speak` as a `gprop` per word — thirteen globals and a procedure — because it
+was written before `say` existed. `say` takes a **list or a word**, and its
+letter-to-sound rules get all thirteen words of the four sentences right; each
+one was checked against `phonemes`, which is what that operation is for. The
+only two worth arguing about are HUMANOID's second vowel (`ae` where `ax` would
+be kinder) and ROBOT's, and both are a shade rather than a mistake. So a
+sentence is a sentence, spoken and captioned, and the vocabulary is five words
+of Logo.
+
+**The pitch is the ROM's and the scale is ours.** Every sentence in the
+disassembly opens with a byte in `$70`–`$7F` that the speech chip reads as a
+pitch, and the four fixed ones use `$7B`, `$73`, `$7B` and — for the warning —
+`$70` with three random bits (`$2BED`). Nothing maps an S14001A pitch code onto
+a formant synthesiser's half-hertz, so the **low nibble is taken as written and
+laid on 24 upwards**, which keeps all four inside the growl the reference calls
+a robot and keeps the ROM's ordering between them.
+
+**And the caption is the Vectrex's answer, not a leftover.** §14.2 wrote it for
+the case where `say` slipped; it ships anyway, because the arcade's speech is
+famously hard to make out and a player who cannot hear the room should still be
+told they are a chicken. One text line of its own, centred, for a second, and it
+rubs itself out with the same statement that wrote it.
+
+**THE ONE DEPARTURE IN THIS SECTION IS WHAT HAPPENS WHEN TWO SENTENCES COLLIDE.**
+`TALK` (`$2C1B`) writes `VOICE_PC` over whatever was speaking, so in the cabinet
+a second sentence **cuts** the first; `say` **appends**, and the only interrupt
+this interpreter has is `stopsound`, which would take the effects with it.
+Neither available behaviour is the ROM's, and queueing is the worse of the two:
+three doorways in three seconds would leave the game talking over itself for
+six, with the caption saying one thing while the voice says another. So a
+sentence that arrives while one is being said is **dropped** — and **its caption
+is not**, because that costs a text row and nothing else, and telling a player
+they are a chicken is the whole reason the caption exists. A speech-only stop
+would close this exactly, and it is one primitive.
+
+**THE TEXT QUEUE IS NOW FOUR DEEP AND THE RULE IS UNCHANGED.** One text job a
+frame, in the order a player needs them: the sentence first, because it is the
+only one with a deadline; then the men; then the HUD; then the mask readout;
+then the timing block, which is a diagnostic and can miss a beat. A doorway
+therefore owes three jobs and takes three frames to pay them, where M5's owed
+one. Between the caption going up and coming down the queue falls straight
+through, so the frames in the middle of a caption are free.
+
+**§21 RISK 6 IS CLOSED WITH THE ATTRACT SCREEN.** The risk was that a board
+which will not overclock cannot play this game and would be left to work that
+out from a game that will not start; the card says so on the way in. The clock
+is asked for **once a session** and not once a game — Battlezone's own note,
+because it costs a bus teardown on a board with a radio up — so the attract
+screen lives inside the clock and **ESC there is the door that gives it back**.
+ESC in a room ends the game and comes back to the card; running out of men gets
+a card of its own first.
+
+**FIRST BOARD PASS, 2026-09-01, AND IT CORRECTED THE COLOUR BEFORE IT CORRECTED
+ANYTHING ELSE.** Four things came back and three of them are this note's own
+paragraphs being wrong.
+
+**THE WALLS ARE BLUE AND THE BAND IS THE FIGURES' ([§13.1](#131-the-colour-column-decoded-2026-08-30)).**
+This note said "a difficulty band is one `setpc` before the walls and another
+before the man", which is the fifth column applied to the wrong half of the
+screen. `$3702`'s `screen & $44` is **bit 2 of each nibble of a two-box
+attribute byte**, and bit 2 is **B**: a box holding a wall pixel comes out `$4`,
+blue and only blue, because `~screen & c` is zero for exactly the bits the wall
+set. So **the walls are blue in every room at every score** and the band is worn
+by the robots, Otto and both kinds of bolt — the things drawn in boxes with no
+wall pixel in them. The port now carries three colours where it carried two:
+`wall.pc` blue and constant, `rob.pc` the band, `man.pc` the ROM's `$AA`. The
+shade is Tailwind's blue-700, the nearest this palette comes to a
+non-intensified RGBI blue, and it is one number a board can move.
+
+**AND THE DOOR IS NOT A MARK.** Asked from the same look: the door you entered
+is the same colour as the robots, so is it shut? No. `$25D4` draws 96 pixels of
+border, skips 48 and draws 96 more; `$25CA` draws 72, skips 64, draws 72. A
+doorway is a **gap with nothing in it**, so its boxes hold no wall pixel and
+carry the difficulty colour like any other empty ground. Nothing in the ROM
+closes an exit, and §6.1 makes the room you walk back into the same maze.
+
+**THE VOICE IS THE PITCH ALONE, AND THE CAPTION OUTLASTS IT.** This went out and
+came back twice in a day. The first pass kept the reference robot's timbre and
+took `setvoice`'s speed from its 150 — which is *faster* than normal — down to
+**96**, on the argument that this cabinet's robots are deliberate: they are
+reading you a warning, not chattering. **The board said the slowdown was the
+wrong half.** A big mouth and a small throat smear the consonants, and slowing
+that shape down only lengthens the smear; what makes the sentence legible is
+losing the shape. So the voice is **`[30 128 128 128]`** — an ordinary head at
+the ROM's own pitch, everything else at the default — and the growl is still a
+robot because `say.p` still lays `$70`–`$7F` on 48–70 Hz. Either way the
+sentence outruns §14.2's "about a second" for the caption, and a caption that
+goes out mid-sentence is the one thing it exists to prevent. **A second is the
+floor and not the length**: the countdown holds while `speaking?` is true, and
+the frames it holds for cost no text job at all.
+
+**AND THE CARD WAITS FOR THE LAST SENTENCE.** The man dies saying "GOT THE
+HUMANOID, GOT THE INTRUDER" and `one.game` reached the game-over card through
+`stopsound`, which silences speech as well as notes and cut him off mid-word.
+The speaker is given the rest of it first, **bounded at four seconds**, because
+this is the one wait in the file with no frame under it.
+
+**AND M6 NEARLY SPENT §18'S FOURTH CEILING, which is the finding that will
+outlive this milestone.** `test_the_robot_count_is_a_five_room_cycle` began
+failing with **"Out of space"** — cells exhausted generating rooms — and the
+cause is not the code. **A procedure body keeps its comments.** Measured: four
+comment lines inside one body cost **204 bytes of word table and 59 cells**,
+about 1.4 bytes and 0.4 cells a character. This file is more comment than code
+and has always put its commentary *above* each `to`, where it costs nothing;
+M6's first draft put its notes *inside* the bodies, and a load arrived with
+**4,076 fewer free cells** than M5's. Moving the long blocks back out and
+**handing back the ~1,300 cells the effect tables spend building themselves with
+`se`** — one `recycle` at the end of the file, B25's floor used as a floor for
+the third time in this game — recovers most of it.
+`test_the_load_leaves_the_workspace_room_to_play_in` is the floor named, so the
+next milestone finds this before a board does.
+
+
+**AND THE INSTRUMENT CAME OUT, 2026-09-01, WHICH IS THE LAST THING M6 DID.**
+M2 to M5 carried a readout under the picture — the fifteen wall masks in their
+5 × 3 grid, and `HUD` / `FRAME` / `WORST` / `ROOM` / `SL` / `OT` / `ROB` once a
+second — and **every board reading this game has was read off it**. With the
+cabinet's own HUD in place there are two panels under the maze saying different
+things, and only one of them is the game. So the readout is gone: four
+procedures (`show.masks`, `draw.masks`, `show.timing`, `show.room`), thirteen
+globals, and a `ticks` call in each of `play.frame`, `draw.room` and
+`slide.room`. Rows 25 to 29 are free and the game's text is the cabinet's: the
+score, the bonus, the lives and what the robots are saying. **The caption moved
+back to row 26 with it**, which is where §14.2 asked for it and where the mask
+readout had been sitting.
+
+**Two things that came out of the instrument stay, because they are budget
+rules and not measurements.** `room.built` — *a frame that builds a room writes
+no text at all* — outlives the reading that found it, since a doorway already
+generates a room, cleans the canvas, draws sixteen walls and presents the whole
+screen, and text is not batched by `sync`. And **the once-a-second beat is now
+a bare `recycle`**: `show.hud` and `show.caption` cons, nothing in this
+interpreter collects on demand, and that collector used to ride on the readout.
+Losing it would have put §18's fourth ceiling back in front of the frame loop
+with nothing to catch it.
+
+**What it costs is that the next board reading has no instrument**, and the
+honest note is that putting it back is a *revert* rather than a rebuild — the
+whole of it is one contiguous section of the file plus three `ticks` calls. M4's
+open `WORST` 114 is the one number that wanted it, and two of the things known
+to be inside that number went out with the readout: the room number written
+*inside* the build frame, and the readout the build frame carried. It should be
+re-measured from a revert rather than reasoned about from here.
+
+
+**WHAT A BOARD MUST READ, AND FOUR OF THEM ARE JUDGEMENTS NO TEST CAN SUPPLY.**
+*Does it sound like Berzerk?* — the 480 Hz tick is inferred from durations, and
+if it is wrong every effect is the wrong length by the same factor, which is
+exactly the kind of error an ear catches in one shot and a host test never will.
+*Does the voice carry over the effects?* — `setsayvolume` is untouched at 15 and
+speech sits well below a square wave at the same number (§5.8), so the sentences
+may need ducking the music rather than raising the voice. *What the sound costs
+a frame* — `fx` is four gates and up to three `play`s of eight to forty notes,
+about 0.5 ms projected and never measured, and it lands in `fire.man`, which
+runs five times a second. And *what `say` costs a doorway* — the rules run
+synchronously and 200 calls of `phonemes` are under a millisecond on the host,
+which projects to about one on the board, inside a frame that is already
+building a room. **And there is no longer a readout to read them off** — see above; the numbers
+come back with a revert of one section, and `WORST` is still M4's open item.
+
+
 ## 20. Tests
 
 `tests/test_berzerk.c`, mirroring `tests/test_battlezone.c`: the game is pure
@@ -3112,9 +3563,12 @@ repeating them.
 5. **`say` (§14.3) is a separate project** and this game must not acquire a
    dependency on it. If it slips, Berzerk ships with captions, which is the
    Vectrex's own answer.
-6. **A board that will not overclock** (§15.5) cannot play this game. The
+6. ~~**A board that will not overclock** (§15.5) cannot play this game. The
    reference already documents that as a property of the chip; the attract
-   screen has to say it too.
+   screen has to say it too.~~ **CLOSED AT M6, 2026-09-01.** The card says it in
+   as many words, and the clock is asked for once a *session* rather than once a
+   game — so the attract screen lives inside the clock and ESC there is the door
+   that gives it back.
 
 ## 22. Open questions
 

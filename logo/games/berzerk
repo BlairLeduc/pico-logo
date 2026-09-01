@@ -4,6 +4,81 @@
 ;   load "berzerk
 ;   berzerk
 ;
+; M6 IS THE CAMPAIGN, THE SOUND AND THE
+; VOICE, and with them the game acquires
+; the two things a cabinet has that a
+; prototype does not: it tells you how
+; you are doing, and it makes a noise
+; while you do it.
+;
+; THE MILESTONE'S GATE is six items
+; (design section 19): both difficulty
+; tables, lives, the bonus, the attract
+; screen, the effects off the ROM, and
+; section 14.2's four fixed sentences
+; spoken and captioned. Lives arrived
+; early, at M4, because the ramp had
+; nothing else to stop it.
+;
+; FOUR THINGS M6 FOUND, each written out
+; where it is coded:
+;
+; THE SOUND IS A BYTECODE AND IT
+; DISASSEMBLES. Section 14.1 named the
+; interpreter at $1D12 and left the
+; frequencies "off the disassembly at
+; M6"; its sixteen opcodes are commented
+; in this tree and all five programs
+; walk straight out of them -- see
+; `fx`. The chip is the Exidy sound
+; board MAME gives this cabinet: a 6840
+; triple timer whose outputs are square
+; waves at f = 447443 / (TMR + 1), a
+; noise mode on channel one, and three
+; bits of volume a channel.
+;
+; THE ONE NUMBER THAT IS NOT READ IS THE
+; TICK. The interpreter runs once an
+; NMI and nothing in the ROM says how
+; often that is, so every effect's
+; LENGTH is a count of yields and
+; nothing else. At 60 Hz the robot's
+; explosion is five and a half seconds
+; and the extra life is thirteen, which
+; are not sounds. At 480 -- eight NMIs a
+; video frame -- they are 0.69 s and
+; 1.67, and all five effects land where
+; a person would put them. So the tick
+; is 2.083 ms, pinned by the five
+; durations rather than by a schematic.
+; This is `b.spd`'s position one
+; milestone later: one number, in one
+; place, that an emulator can overturn.
+;
+; THE COLOUR COLUMN COSTS NOTHING, and
+; section 13.1 had priced it at ~140 ms
+; a band. That paragraph was written
+; when a costume baked its own pixels
+; and a recolour meant eight `snapsh`
+; captures. Every pixel of every costume
+; in this file is `fe` -- the WEARING
+; TURTLE'S PEN -- so a difficulty band
+; is one `setpc` before the walls and
+; another before the man. See `dt.col`.
+;
+; AND THE VOCABULARY IS NOT A PROPERTY
+; LIST. Section 14.2 wrote `speak` as a
+; `gprop` per word, because it was
+; written before `say` existed. `say`
+; takes a LIST or a word, and its
+; letter-to-sound rules get all thirteen
+; words of the four sentences right --
+; checked one at a time with `phonemes`,
+; which is what that operation is for.
+; So a sentence is a sentence, and the
+; property list is thirteen globals and
+; a procedure this file does not spend.
+;
 ; M5 IS EVIL OTTO, and with him the room
 ; acquires a clock. Everything else in
 ; this game will wait for you: the crowd
@@ -151,21 +226,18 @@
 ; been tested. THE GATE IS 55 MS AND 18
 ; FPS AND ELEVEN ROBOTS STAY.
 ;
-; WORST 114 IS NOT ANSWERED and it is a
-; hitch you can see: two frame periods
+; WORST 114 WAS NOT ANSWERED and it was
+; a hitch you can see: two frame periods
 ; and a bit, on every doorway and every
-; death. ROOM 24 plus a 56 ms body is 80
-; and the rest wants splitting on a board
-; rather than guessing at here. Two
-; things are known to be in it and
-; neither is 34 ms: a body carrying seven
-; bolts rather than two, and `show.room`
-; writing fourteen characters INSIDE the
-; build frame -- which is M2's own "one
-; text job a frame" rule bypassed,
-; because `show.room` is called straight
-; from `go.room` and `step.death` instead
-; of through `show.text`.
+; death, against ROOM 24 plus a 56 ms
+; body. M6 took the instrument out and
+; two of the things known to be in that
+; number with it -- the room number
+; written INSIDE the build frame, and
+; the readout the build frame carried --
+; so it wants reading again from a
+; revert rather than reasoning about
+; from here.
 ;
 ; THREE DEFECTS CAME BACK WITH IT and all
 ; three are fixed, each beside the code
@@ -328,15 +400,6 @@
 ; storage, because the maze is thrown
 ; away at the doorway and generated
 ; again from the room's own coordinates.
-; The fifteen wall masks stay on the
-; screen under the picture for the same
-; reason they went there -- two rooms
-; can look alike at a glance and their
-; masks cannot -- and from M3 they are
-; what the robots consult, so a room
-; whose picture and whose table disagree
-; is a robot walking through a wall you
-; can see.
 ;
 ; THREE THINGS M2 DECIDED, each written
 ; out where it is coded:
@@ -394,76 +457,32 @@
 ; alternative would redraw sixteen wall
 ; runs to erase eight steps of man.
 ;
-; FOUR NUMBERS ARE ON THE SCREEN, once a
-; second, because a number that changes
-; twenty times a second cannot be read.
-; Read on a Pico 2 W on 2026-08-30:
-; FRAME is 50 at `fast` AND 50 at
-; `normal`, and 50 is the paced period
-; -- `sync` only stops waiting when a
-; frame overruns -- so the body fits in
-; the budget with the clock at half
-; speed.
+; THE INSTRUMENT IS GONE AT M6 and its
+; readings are in the roadmap, which is
+; where they always had to be copied by
+; hand anyway. M2 to M5 carried a
+; readout under the picture -- the
+; fifteen wall masks, and HUD / FRAME /
+; WORST / ROOM / SL / OT / ROB once a
+; second -- and every board reading this
+; game has was read off it: an ordinary
+; frame at eleven robots is 53 ms at M3,
+; 56 at M4 with bolts in the air, 50 at
+; M5, against a gate restated at 55
+; (design section 22, Q2). Rows 25 to 28
+; are the player's now, and what is left
+; on them is the cabinet's own: the
+; score, the bonus, the lives and what
+; the robots are saying.
 ;
-; WORST was 76 at `fast` and 123 at
-; `normal`, and that is the doorway: M1
-; read the room BUILD at 30 and 44, and
-; the 46 and 79 ms left over were the
-; READOUT, which nobody had ever timed.
-; Text is not batched by `sync` -- every
-; character is an `lcd_putc_attr` and
-; two cursor calls over SPI -- and the
-; frame was writing 141 of them. It now
-; writes fourteen: the help line is
-; drawn once, the timing rows keep their
-; own second, and the masks go to the
-; next frame. HUD is what the masks cost
-; where they now run, so ROOM plus a
-; present is the doorway and HUD plus a
-; frame is the one after it.
-;
-; M3'S BOARD READING, 2026-08-30, at
-; `fast`: HUD 24, FRAME 53, WORST 100,
-; ROOM 23. At `normal`: unplayable.
-;
-; FRAME IS THE NUMBER AND IT IS 53
-; AGAINST A 50 MS GATE. `sync` pads a
-; frame that fits to exactly the period,
-; so 50 means "inside budget" and
-; anything above it is the body -- and
-; `show.timing` prints the PREVIOUS
-; frame's period, which is an ordinary
-; one. So an ordinary frame with eleven
-; robots in it is 53 ms: 18.9 fps, three
-; milliseconds over. That is better than
-; design section 15.3 projected (55-59)
-; and a long way under what M0 measured
-; (77.35), and it is still over.
-;
-; ROOM WENT FROM 11 TO 23 because
-; `place.robots` is inside the build now
-; -- eleven passes of the sampler, and
-; the ones that place cost eight
-; `.setitem`s and two more draws.
-;
-; WORST WAS 100 AND IS THE REASON
-; `show.text` MOVED, which is written up
-; beside `room.built`: a doorway was
-; carrying the ordinary body, the room
-; build and the once-a-second readout in
-; one frame. It should now be about 76.
-;
-; AND `normal` IS NO LONGER A SECOND
-; COLUMN. Design section 15.5 called
-; 300 MHz a precondition rather than a
-; preference and this is that measured:
-; at half the clock the body roughly
-; doubles and there is nothing to read.
-;
-; A number on this display cannot be
-; copied anywhere else, so any new
-; reading goes into the roadmap by
-; hand, with the clock beside it.
+; It cost four procedures, thirteen
+; globals and a `ticks` call in each of
+; `play.frame`, `draw.room` and
+; `slide.room`. Putting it back is a
+; revert and not a rebuild, and the next
+; milestone that needs a number should
+; do exactly that rather than invent a
+; second instrument.
 
 ;=====================================
 ; The playfield, at 1:1 with the cabinet
@@ -484,9 +503,77 @@
 ; at turtle x = -70, -22, 26, 74 and row
 ; boundaries at turtle y = 74, 6.
 
-; White, as the cabinet's walls are at
-; difficulty 0.
-make "wall.pc 254
+; THREE COLOURS AND THE WALLS ARE NOT
+; ONE OF THE VARIABLE ONES, which is
+; $3702 read a bit at a time rather than
+; a sentence at a time.
+;
+; C.WALLS' compositing is
+;
+;   attribute = (~screen & c) | (screen & $44)
+;
+; over a byte that is TWO 4 x 4
+; attribute boxes, one to a nibble
+; ("Color look-up (RGBI,RGBI)"). $44 is
+; bit 2 of each nibble and bit 2 is
+; BLUE, so a box holding a wall pixel is
+; forced to $4 -- blue, and only blue,
+; because `~screen & c` is zero for
+; exactly the bits the wall set. A box
+; with NO wall pixel keeps the
+; difficulty colour `c`.
+;
+; SO THE WALLS ARE BLUE IN EVERY ROOM
+; AT EVERY SCORE, and what the fifth
+; column actually colours is everything
+; drawn in an empty box: the robots,
+; Otto and both kinds of bolt. The port
+; had this the other way round for a day
+; and a board caught it.
+;
+; The wall sprite is 4 x 4 ($269B) and
+; every wall coordinate is a multiple of
+; four, so a wall lands on the attribute
+; grid exactly and the trick is not
+; approximate the way a bitwise trick
+; over a bitmap usually is.
+;
+; A doorway is a plain gap -- $25D4
+; draws 96 pixels of border, skips 48
+; and draws 96 more -- so the boxes in
+; it hold no wall pixel and carry the
+; difficulty colour like any other empty
+; ground. That is not a mark on the door
+; and nothing in the ROM closes one: you
+; can always walk back, and section 6.1
+; says the room you walk back into is
+; the same maze.
+; 98 is Tailwind's blue-700, which is
+; the nearest this palette comes to a
+; non-intensified RGBI blue -- clearly
+; blue, clearly not bright. The exact
+; shade is a board call and it is one
+; number.
+make "wall.pc 98    ; $44, blue, always
+make "rob.pc  254   ; the difficulty band
+make "man.pc  249   ; $AA, bright green
+
+; AND HE CHANGES COLOUR WHILE HE DIES,
+; which is $27EB and is two
+; instructions: `rlca` then `xor $11` on
+; PLAYER_COLOUR every step of the death
+; animation. From $AA that is an
+; eight-colour cycle that closes exactly
+; -- $44, $99, $22, $55, $BB, $66, $DD
+; and back to $AA -- so the
+; electrocution is not a flicker in the
+; cabinet, it is the man running through
+; the whole palette. Held here in the
+; order the eight DRAWS want it, because
+; `p.dying` counts down: `1 + int
+; (p.dying / 2)` is 8 on the first drawn
+; frame and 1 on the last.
+make "fry.pc (list 249 253 84 251 131 60 248 98)
 
 ; WINDOW, not the default `wrap`. It
 ; costs nothing to set now and M2 cannot
@@ -1765,6 +1852,39 @@ make "start.lives 3
 make "lives 3
 make "over  false
 
+; XTRAMEN ($434F), and the whole of the
+; bonus life is this latch. $2396 tests
+; the THOUSANDS DIGIT of the score for 5
+; -- not the score for 5,000 -- and
+; $239B refuses if the flag is already
+; set, so it is once a game and never
+; again, and crossing 10,000 (where the
+; digit goes back to 0) does not pay
+; twice. The cabinet has a DIP for 5,000
+; or 10,000 and the Vectrex chose 5,000;
+; so does this port, because it is the
+; more generous of the two.
+make "xtramen false
+
+; RSAVED ($4372) is the crowd the room
+; was BUILT with, and it is not
+; `rob.live`: $2491 pays ten a robot for
+; a room you clear, RSAVED times, so the
+; bonus is for the ones you killed and
+; the count it uses is the one from
+; before you killed them.
+make "rob.saved 0
+
+; What the cabinet prints bottom left
+; when a room is cleared ($249F, "BONUS"
+; at (0x60, 0xD5) with the number beside
+; it). Cleared by the next room build,
+; which is when the cabinet redraws that
+; strip.
+make "bonus.n  0
+make "hud.due  false
+make "men.due  false
+
 make "paused false
 
 ;=====================================
@@ -1846,7 +1966,7 @@ to erase.man
   pu  setx :p.dx + 4  sety :p.dy - 1  pd  fd 13
   pu  setx :p.dx + 6  sety :p.dy - 1  pd  fd 13
   pu  setpensize 1
-  setpc :wall.pc
+  setpc :rob.pc
 end
 
 ; Standing is its own frame in the ROM
@@ -1873,6 +1993,11 @@ end
 ; re-arms it on exactly the frame it
 ; expires, which is why the pose does not
 ; blink between shots.
+; $1FEE's $AA, and $27EB's cycle while
+; he is being electrocuted. The pen goes
+; back to the figures' colour at the end
+; of the frame body, where `mark.bolts`
+; sets it.
 to draw.man
   pu
   if :p.shoot > 0 [
@@ -1882,6 +2007,8 @@ to draw.man
   if 0 = :p.shoot [
     ifelse 0 = :p.dir [setsh 1] [setsh item :p.step :man.cyc]
     seth :p.face]
+  ifelse 0 = :p.dying [setpc :man.pc] [
+    setpc item (1 + int (:p.dying / 2)) :fry.pc]
   make "p.dx round :p.x
   make "p.dy round :p.y
   setx :p.dx + 3.5
@@ -2105,13 +2232,30 @@ end
 ; 50 ms frame, so there is no need to
 ; spread the build over two frames; the
 ; frame's own `sync` presents it.
+; AND THE ROBOTS HAVE SOMETHING TO SAY
+; ABOUT IT ($22EB -> $2BE4, which is the
+; first thing a doorway does). The test
+; is RCOUNT: leave a room you cleared
+; and they warn each other, leave one
+; you did not and they call you a
+; chicken. Two sentences share the
+; cleared case and the cabinet picks
+; between them at random ($2BF7's two
+; word sequences), which is `2 + random
+; 2` here.
+;
+; THE IS_CHICKEN FLAG IS NOT KEPT, and
+; that is the one line of $2C18 this
+; milestone leaves out: nothing reads it
+; until M7's taunts, which are the only
+; sentence whose wording it changes.
 to leave.room
   if thru.side? :p.y [
-    if not :p.x > -130 [make "p.x 104   go.room -1 0  stop]
-    if not 120 > :p.x  [make "p.x -118  go.room 1 0  stop]]
+    if not :p.x > -130 [make "p.x 104   say.leaving  go.room -1 0  stop]
+    if not 120 > :p.x  [make "p.x -118  say.leaving  go.room 1 0  stop]]
   if thru.ends? :p.x [
-    if :p.y > 140      [make "p.y -43   go.room 0 -1  stop]
-    if not :p.y > -48  [make "p.y 136   go.room 0 1]]
+    if :p.y > 140      [make "p.y -43   say.leaving  go.room 0 -1  stop]
+    if not :p.y > -48  [make "p.y 136   say.leaving  go.room 0 1]]
 end
 
 ;=====================================
@@ -2139,6 +2283,8 @@ to man.dies
   make "p.dying 15
   make "p.dir 0
   make "p.shoot 0
+  fx 4
+  speak 5
 end
 
 ; AND A LIFE ENDS HERE. M3 restarted the
@@ -2197,7 +2343,6 @@ to step.death
   next.room
   reset.man
   draw.room
-  show.room
 end
 
 ; $2678 once, and its 16 bits ARE the
@@ -2279,6 +2424,13 @@ make "key.space 32
 make "key.pause 122
 
 make "leaving false
+
+; The session, where `leaving` is the
+; game. ESC in a room ends the game and
+; comes back to the attract screen; ESC
+; there ends the session and gives the
+; clock back.
+make "quit false
 
 to toggle.pause
   ifelse :paused [make "paused false] [make "paused true]
@@ -2639,6 +2791,7 @@ to place.robots
   ; the room with Otto rather than having
   ; it to himself.
   make "rob.vecs :rob.live + 1
+  make "rob.saved :rob.live
 end
 
 ; SEEK ($23EF) is the whole AI: two
@@ -2917,6 +3070,17 @@ to rob.dies :i
   .setitem :i :r.state 5
   make "rob.live :rob.live - 1
   make "score :score + 50
+  fx 3
+  if 0 = :rob.live [
+    make "score :score + (10 * :rob.saved)
+    make "bonus.n 10 * :rob.saved]
+  if not :xtramen [
+    if not 5000 > :score [
+      make "xtramen true
+      make "lives :lives + 1
+      make "men.due true
+      fx 5]]
+  make "hud.due true
   ; $2486, BLAM's two `inc (hl)` on
   ; OTTO_TIME -- "delay otto's appearance
   ; slightly". Only before he arrives:
@@ -3079,7 +3243,7 @@ to erase.robots
       pu  setx :s.x + 6  sety :s.y  pd  fd 9]
   ]
   pu  setpensize 1
-  setpc :wall.pc
+  setpc :rob.pc
 end
 
 ; THE FIVE FACING GROUPS ARE FOUR SLOTS
@@ -3380,6 +3544,7 @@ to step.otto
     make "o.time :o.time - 1
     if :o.time > 0 [stop]
     make "o.state 1
+    speak 1
     stop]
   ; SETDIR ($2B07-$2B2B), which is
   ; `seek` with the arcade's other
@@ -3451,7 +3616,7 @@ to erase.otto
   pu  setx :o.dx + 4  sety :o.dy - 1  pd  fd 5
   pu  setx :o.dx + 6  sety :o.dy - 1  pd  fd 5
   pu  setpensize 1
-  setpc :wall.pc
+  setpc :rob.pc
   otto.walls
   make "o.drawn false
 end
@@ -3531,15 +3696,23 @@ end
 ; too eager costs a redraw while a gate
 ; that is not eager enough costs a hole
 ; in the maze until the next doorway.
+; AND THE REPAINT IS THE WALL'S OWN
+; COLOUR, not the pen the eraser left:
+; from M6 the walls are blue and the
+; figures wear the difficulty band, so a
+; wall put back in the pen Otto is drawn
+; with would repaint the maze one stroke
+; at a time as he walks.
 to otto.walls
   make "o.hit on.wall? :o.dx :o.dy 8
   if not :o.dx > -122 [make "o.hit "true]
   if :o.dx > 114      [make "o.hit "true]
   if :o.dy > 141      [make "o.hit "true]
   if not :o.dy > -55  [make "o.hit "true]
-  ; The pen is already `wall.pc` and one
-  ; wide: the eraser above put it back.
-  if :o.hit [draw.walls 0 0]
+  if :o.hit [
+    setpc :wall.pc
+    draw.walls 0 0
+    setpc :rob.pc]
 end
 
 ; HEADING 90 AND NOT THE ROBOTS' LAST
@@ -3711,10 +3884,63 @@ make "bolt.hi   2   ; (mod + 2) and 7
 ; fire test, since one comparison a
 ; frame skips it for every robot at
 ; once.
+; BOTH TABLES FROM M6, AND THE SECOND
+; ONE IS ENTERED BY A BCD COMPARISON.
+; $36BC builds its index out of two
+; nibbles of the score -- ten-thousands
+; and thousands, in that order -- and
+; compares it against $10, $11, $13,
+; $15, $17 and $19, which as decimal
+; scores are 10,000 and then 11, 13, 15,
+; 17 and 19 thousand. THE ROM'S FIRST
+; ROW IS UNREACHABLE, because it is
+; taken when the index is BELOW $10 and
+; the table is only consulted at 10,000
+; or more; so the second table is six
+; rows here where the disassembly shows
+; seven, and the row that does the work
+; at 10,000 is the one thresholded $11.
+;
+; The two lists are joined into one
+; fourteen-row table and `diff.i`
+; chooses which half to index, because
+; every column but the threshold is read
+; the same way on both sides of 10,000.
+;
+; AND THE FIFTH COLUMN IS A COLOUR.
+; Section 13.1 decoded it and gated it
+; on two things: the score, which is
+; this milestone's, and a re-render of
+; eight costumes at ~18 ms each, which
+; the one-shape model has since made
+; free (see `wall.pc`). One byte is two
+; identical nibbles and a nibble is
+; RGBI, with the bit order pinned by the
+; ROM'S OWN TEST SCREENS -- $077C fills
+; with $11 and calls it Red, $3640 fills
+; with $CC for blue -- so bit 0 is R, 1
+; is G, 2 is B and 3 is intensity. The I
+; bit is the only thing our palette
+; cannot say exactly, and it is what
+; picks between the pure primary
+; (248-253, and 254 for white) and a mid
+; shade of the same hue.
+;
+;   $33 yellow      $99 bright red
+;   $66 cyan        $AA bright green
+;   $55 magenta     $BB bright yellow
+;   $FF white       $DD bright magenta
+;   $77 grey        $EE bright cyan
 make "dt.thr   (list 300 1500 3000 4500 6000 7500 9000)
+make "dt2.thr  (list 11000 13000 15000 17000 19000)
 make "dt.bolts (list 0 1 2 3 4 5 1 1)
+make "dt.bolts se :dt.bolts (list 2 3 4 5 5 5)
 make "dt.mod   (list 0 0 0 0 0 0 1 1)
+make "dt.mod   se :dt.mod (list 2 3 4 5 5 5)
 make "dt.wait  (list 80 80 20 10 10 15 60 50)
+make "dt.wait  se :dt.wait (list 35 25 20 15 10 5)
+make "dt.col   (list 44 248 84 249 131 251 254 254)
+make "dt.col   se :dt.col (list 84 253 165 44 248 252)
 
 make "rob.bolts 0
 make "rob.wait  80
@@ -3742,8 +3968,11 @@ make "t.lo 0  make "t.hi 0
 make "p.pose 1
 
 to diff.i
-  repeat 7 [if :score < item repcount :dt.thr [output repcount]]
-  output 8
+  if 10000 > :score [
+    repeat 7 [if :score < item repcount :dt.thr [output repcount]]
+    output 8]
+  repeat 5 [if :score < item repcount :dt2.thr [output 8 + repcount]]
+  output 14
 end
 
 ; The room's own bolt state, set where
@@ -3773,6 +4002,7 @@ to place.bolts
   if not 20 > :rob.wait0 [make "rob.wait0 :rob.wait0 - 10]
   make "rob.wait :rob.wait0
   make "bolt.hi bitand ((item :d :dt.mod) + 2) 7
+  make "rob.pc item :d :dt.col
   repeat 7 [
     make "k.i repcount
     .setitem :k.i :b.dir 0
@@ -3858,6 +4088,7 @@ to fire.man
   make "k.i free.bolt 1 2
   if 0 = :k.i [stop]
   make "p.shoot 12
+  fx 1
   (fire.bolt :k.i (item :p.pose :s.dir)
              (:p.x + (item :p.pose :sr.dx))
              (:p.y + (item :p.pose :sr.dy)) 0)
@@ -3923,6 +4154,7 @@ to robot.fires :i :rx :ry
              (:ry + (item :k.s :s.dy)) :i)
   make "rob.can "false
   make "rob.wait :rob.wait0
+  fx 2
   output "true
 end
 
@@ -4274,19 +4506,8 @@ end
 ; own `sync` presents it; a `refresh`
 ; here would present the same canvas
 ; twice and charge the transition for a
-; second full-canvas pass. `room.ms` is
-; therefore the BUILD alone from this
-; milestone on, where M1's 30 ms on a
-; board was the build and its present
-; together (13.2 ms of CPU and 16.8 of
-; SPI wire, split by the two clocks).
-
-make "room.ms  0    ; the last build
-make "worst.ms 0    ; and the worst
-
+; second full-canvas pass.
 to draw.room
-  local "t0
-  make "t0 ticks
   setup.room
   place.robots
   place.bolts
@@ -4294,10 +4515,11 @@ to draw.room
   clean
   setpc :wall.pc
   draw.walls 0 0
-  make "room.ms ticks - :t0
+  setpc :rob.pc
+  make "bonus.n 0
+  make "hud.due true
+  show.men
   make "room.built true
-  if :room.ms > :worst.ms [
-    make "worst.ms :room.ms]
 end
 
 ; Design question 3, taken at M1: the
@@ -4327,7 +4549,6 @@ to go.room :dx :dy
   make "room.x modulo (:room.x + :dx) 256
   make "room.y modulo (:room.y + :dy) 256
   draw.room
-  show.room
 end
 
 ;=====================================
@@ -4408,13 +4629,8 @@ end
 ; the room (B74) without ever being a
 ; journey. So this is called from
 ; `go.room` and nowhere else.
-make "slide.ms 0     ; the last slide
-make "slid     false ; is THIS a slide?
-
 to slide.room :dx :dy
-  local "n local "k local "t0
-  make "t0 ticks
-  make "slid true
+  local "n local "k
   ifelse 0 = :dx [make "n 30] [make "n 40]
   setpc :wall.pc
   repeat :n [
@@ -4423,243 +4639,494 @@ to slide.room :dx :dy
     draw.walls (0 - (:dx * :k)) (:dy * :k)
     sync
   ]
-  make "slide.ms ticks - :t0
 end
 
 ;=====================================
-; The readout under the picture
+; Sound (design section 14.1)
 ;
-; The fifteen masks in their 5 x 3
-; layout, each in a three-column field.
-; A mask is 0 to 15, so a number is one
-; digit or two and the trailing space is
-; the erase: "10 " covers three columns
-; and "9 " covers the first two of them,
-; leaving the third blank from last
-; time.
+; EVERY NUMBER BELOW IS THE CABINET'S,
+; walked out of the audio bytecode
+; rather than guessed at, which is the
+; method Battlezone section 16.14 used
+; and the reason its sound is right.
+; Section 14.1 named the interpreter at
+; $1D12 and stopped there; its sixteen
+; opcodes are commented in
+; docs/berzerk-source-arcade.asm and the
+; five programs decode without a
+; remainder.
 ;
-; They are M1's gate and they stay,
-; because they are what M3's robots will
-; consult: a room whose picture and
-; whose table disagree is a robot
-; walking through a wall you can see.
-; M6 owns the score, the lives and the
-; BONUS flash, which is what these eight
-; rows are for in the cabinet.
+; THE CHIP IS AN EXIDY SOUND BOARD, and
+; the write routine says so: C.LOAD
+; ($1776) puts two control bytes on
+; ports $40/$41, the HIGH byte of all
+; three timers on $42 and their low
+; bytes on $43, $45 and $47, then four
+; values on $46 tagged in their top two
+; bits. That is a 6840 triple timer
+; behind a shared MSB latch, plus a
+; noise/volume latch -- offset 0 is the
+; noise control and 1, 2, 3 are the
+; three channel volumes, three bits
+; each. A 6840 channel toggles its
+; output every TMR + 1 clocks off a
+; 3.579545 MHz crystal divided by four,
+; so a channel sounds at
 ;
-; BUT THEY ARE DRAWN ON THE FRAME AFTER
-; THE DOORWAY, NOT IN IT. Text is not
-; part of the graphics `sync`: every
-; character goes straight to the panel
-; as it is typed -- `screen_putc` calls
-; `lcd_putc_attr`, `lcd_set_cursor_char`
-; and `lcd_move_cursor` per character,
-; over SPI -- so the readout costs about
-; a third of a millisecond a character
-; wherever it runs. Forty-five of them
-; on the frame that also generates a
-; room, clears the canvas, draws sixteen
-; walls and presents the whole screen is
-; what made a doorway a dropped frame.
-; Deferred by one frame it costs the
-; same and lands in a frame that has 40
-; ms spare, and the player sees it 50 ms
-; later, which is not a thing anyone can
-; see.
-make "masks.due false
+;   f = 447443 / (TMR + 1)
+;
+; and every duration in the data is a
+; count of NMIs.
+;
+; AND THE NMI RATE IS THE ONE NUMBER NOT
+; READ OFF ANYTHING. The ROM never says
+; how often it is interrupted; it only
+; says how many yields each effect
+; lasts. At 60 Hz the robot's explosion
+; is 5.5 seconds and the extra life is
+; 13, which are not sounds; at 480 Hz --
+; eight NMIs a video frame -- they are
+; 0.69 s and 1.67 and every one of the
+; five lands where a person would put
+; it. So the tick is 2.083 ms, and it is
+; pinned by the durations rather than by
+; a schematic.
+;
+; FIVE EFFECTS, FIVE PRIORITIES, AND ONE
+; RULE. $33BD, $34E7, $348A, $3439 and
+; $3538 all open with the same six
+; instructions: read the running
+; effect's priority out of $0889 and go
+; no further if it is HIGHER than mine.
+; So an equal priority interrupts -- a
+; second shot cuts the first -- and a
+; lower one is dropped rather than
+; queued. `fx` is those six
+; instructions and nothing else.
+;
+;   1 fires    0  $33BD  SFIRE
+;   2 rfires   1  $34E7  SRFIRE
+;   3 blam     1  $348A  SBLAM
+;   4 fry      3  $3439  SFRY
+;   5 xlife    2  $3538  SXLIFE
+;
+; (Section 14.1 puts SXLIFE at $3866. It
+; is at $3538, which is where $238B
+; calls it from.)
+;
+; THREE TONE PAIRS AND A NOISE PAIR.
+; Voices 0-2 and 4-6 are the tone voices
+; and 3 and 7 the noise, so a 6840
+; channel is a PAIR here and comes out
+; centred; the cabinet is mono and has
+; nothing to say about stereo. The noise
+; pair is the cabinet's noise MODE --
+; SBLAM writes $03 to the noise latch
+; and clocks the generator from timer 1
+; -- and no other effect uses it.
+;
+; THE VOLUMES ARE THE ROM'S DOUBLED. The
+; cabinet's are three bits and ours are
+; four, both linear in amplitude, so
+; times two is the same scale and not a
+; taste: SFIRE's 5, 6, 6 stay under
+; SBLAM's 7, 7, 7.
+;
+; WHAT A SEQUENCER CANNOT DO. The
+; cabinet steps a frequency every 2 ms
+; and this frame is 50, so nothing gated
+; once a frame can sweep; `play` is what
+; buys the sweeps, and the shortest note
+; it will hold is 25 ms plus one block
+; of release. So every sweep below is
+; the ROM's counter sampled at the
+; MIDDLE of each note's window and
+; rounded to a semitone, which is worth
+; at most 2.5 % of a hertz and is
+; inaudible in a zap.
+;
+; THREE THINGS DID NOT SURVIVE THAT, and
+; all three are range rather than time.
+; SFIRE's tail -- 250 more yields of a
+; fifth descent after the four sweeps --
+; is dropped, because in the cabinet it
+; is a sub-bass drone that the next
+; event always cuts. SFRY's third
+; channel is dropped: its low byte is
+; added to WITHOUT a carry, so it wraps
+; three times in 52 ms, which is a 57 Hz
+; rasp and not a note. And SBLAM's noise
+; clock runs from 224 kHz down to 7.8,
+; where `sound` stops at 10,000 -- so
+; the sweep is scaled to the top of our
+; range and keeps its RATIO, 28.5 to
+; one, which is the part of it a person
+; hears.
+make "fx.pri (list 0 1 1 3 2)
+make "fx.len (list 9 14 14 18 30)
 
-; AND A FRAME THAT BUILT A ROOM WRITES
-; NO TEXT AT ALL, which is M3's widening
-; of M2's rule and came off a board on
-; 2026-08-30: `WORST` read 100 ms at
-; `fast` where ROOM was 23 and an
-; ordinary frame 53. M2's rule serialised
-; the masks against the timing rows and
-; stopped there, because in M2 a room
-; build was 11 ms and the two text jobs
-; were the big items. A room build is now
-; 23 -- `place.robots` is inside it -- so
-; it is a THIRD job of the same size, and
-; `show.text` used to run at the TOP of
-; the frame, where nothing yet knows a
-; doorway is coming. Ordinary body plus
-; room build plus the once-a-second
-; readout is 53 + 23 + ~20, which is the
-; 100.
-;
-; So the flag is set by the build and
-; read after it, and that is also why
-; `show.text` moved to the END of the
-; frame body: at the top it can only ask
-; what happened LAST frame.
-make "room.built false
+; SFIRE ($33D3). Timer 1 runs 50 to 800
+; four times over -- 8.8 kHz down to 559
+; -- while 2 and 3 keep descending past
+; it at 17 and 16 a tick, which is the
+; detuned pair under the zip. Four
+; sweeps of four notes, and the two
+; slow channels sampled eight times over
+; the same 417 ms.
+make "fx.f1 [t300 l32 v10]
+repeat 4 [make "fx.f1 se :fx.f1 [g7 e6 a5 d#5]]
 
-to show.masks
-  local "r local "c
-  repeat 3 [
-    make "r repcount
-    repeat 5 [
-      make "c repcount
-      setcursor list 3 * (:c - 1) 25 + :r
-      (type item (5 * (:r - 1)) + :c :cell "| |)
-    ]
+; SFRY ($344F), channel 2: timer 2 runs
+; 20 to 145 in 25 ticks and is reloaded,
+; sixteen times over. Two notes a sweep
+; is all 52 ms buys.
+make "fx.y2 [t300 l32 v14]
+repeat 16 [make "fx.y2 se :fx.y2 [b8 b7]]
+
+; SXLIFE ($354E): twenty warbles, timer
+; 1 between 2226 Hz and 745 and timer 2
+; between 7335 and 2472, up for twenty
+; ticks and down for twenty. A trill at
+; twelve hertz, which is the sound.
+make "fx.x1 [t300 l24 v14]
+repeat 20 [make "fx.x1 se :fx.x1 [c#7 f#5]]
+make "fx.x2 [t300 l24 v14]
+repeat 20 [make "fx.x2 se :fx.x2 [b8 d#7]]
+
+make "sfx.pri 0
+make "sfx.t   0
+
+; Square waves, because a 6840 output is
+; one, and no envelope at all: the
+; cabinet gates a channel by writing its
+; control register and there is nothing
+; between on and off. The release still
+; costs one refill block a note, which
+; is the 3.5 ms the sweeps above are
+; counted with.
+to setup.sound
+  setwave [0 4 1 5 2 6] "square
+  setenv [0 4 1 5 2 6] [0 0 15 0]
+  setwave [3 7] "white
+  setenv [3 7] [0 0 15 0]
+end
+
+; AND THE GATE IS A REST. `play` appends
+; to a voice's queue and `sound` flushes
+; it, so an effect that wins starts with
+; a one-millisecond rest on all four
+; pairs -- which is the cabinet writing
+; a new program counter over the running
+; one -- and then queues its own notes
+; behind it.
+; THE FIVE PROGRAMS, and what each one
+; is. SFIRE ($33D3) restarts timer 1 at
+; 50 four times over -- 8.8 kHz down to
+; 559 -- while 2 and 3 keep descending
+; past it at 17 and 16 a tick, which is
+; the detuned pair under the zip.
+; SRFIRE ($34FD) is one descent and not
+; four, 20/45/90 climbing by 8, 17 and
+; 47 for 320 ticks, so a robot's shot is
+; the player's slowed down and never
+; restarted. SBLAM ($34A0) is the noise
+; generator clocked by timer 1, stepped
+; once every six ticks for fifty-five
+; steps, and the top of it is the gate
+; because it is above what `play` can
+; spell. SFRY ($344F) climbs 2601 Hz to
+; 3960 in sixteen steps of four with a
+; fast reloading sweep underneath -- a
+; rising buzz, which is nothing like an
+; explosion. SXLIFE ($354E) is twenty
+; warbles at twelve hertz.
+to fx :n
+  if :sfx.t > 0 [
+    if :sfx.pri > item :n :fx.pri [stop]]
+  make "sfx.pri item :n :fx.pri
+  make "sfx.t item :n :fx.len
+  (sound [0 4] 0 1 0)
+  (sound [1 5] 0 1 0)
+  (sound [2 6] 0 1 0)
+  (sound [3 7] 0 1 0)
+  if 1 = :n [
+    (play [0 4] :fx.f1)
+    (play [1 5] [t300 l16 v12 g#6 e5 g4 d4 a#3 f#3 d#3 c#3])
+    (play [2 6] [t300 l16 v12 a6 f5 g#4 d#4 b3 g3 e3 d3])
+    stop]
+  if 2 = :n [
+    (play [0 4] [t300 l10 v12 d#7 a5 c#5 g4 d#4 b3 g#3 f#3])
+    (play [1 5] [t300 l10 v12 d6 g#4 c4 f#3 d3 a#2 g2 f2])
+    (play [2 6] [t300 l10 v14 a4 d#3 f#2 c2 g#1 f1 d1 c1])
+    stop]
+  if 3 = :n [
+    (sound [3 7] 10000 60 14)
+    (play [3 7] [t300 l16 v14 d8 c#7 f#6 c#6 a5 f#5 d#5 c#5 b4 a4 g4 f#4])
+    stop]
+  if 4 = :n [
+    (play [0 4] [t300 l16 v12 e7 e7 e7 f7 f7 f#7 f#7 g7 g7 g#7 g#7 a7 a7 a#7 a#7 b7])
+    (play [1 5] :fx.y2)
+    stop]
+  (play [0 4] :fx.x1)
+  (play [1 5] :fx.x2)
+end
+
+;=====================================
+; The voice (design section 14.2)
+;
+; FOUR FIXED SENTENCES AND FIVE FORMS OF
+; THEM, because the cleared-room warning
+; picks between HUMANOID and INTRUDER at
+; random ($2BF7 chooses one of two word
+; sequences). The taunts -- one first
+; word out of six and one target out of
+; four, on a countdown -- are M7's.
+;
+; `say` AND NOT A PROPERTY LIST. Section
+; 14.2 wrote a `speak` that walked a
+; list of word names through `gprop`,
+; and it was written before `say`
+; existed. `say` takes the sentence, and
+; the letter-to-sound rules get all
+; thirteen words right: the only two
+; worth arguing about are HUMANOID's
+; second vowel and ROBOT's, and both are
+; a shade rather than a mistake. So the
+; sentence is the caption, spoken.
+;
+; AND IT IS CAPTIONED, which is the
+; Vectrex's answer to the same problem
+; ("GOT YOU HUMANOID") and not a
+; leftover from before `say` shipped:
+; the arcade's speech is famously hard
+; to make out, and a player who cannot
+; hear the room should still be told
+; they are a chicken. One text line of
+; its own, centred, for a second.
+make "say.w [|INTRUDER ALERT! INTRUDER ALERT!|]
+make "say.w lput "|THE HUMANOID MUST NOT ESCAPE| :say.w
+make "say.w lput "|THE INTRUDER MUST NOT ESCAPE| :say.w
+make "say.w lput "|CHICKEN! FIGHT LIKE A ROBOT!| :say.w
+make "say.w lput "|GOT THE HUMANOID, GOT THE INTRUDER| :say.w
+
+; THE PITCH IS THE ROM'S AND THE SCALE
+; IS OURS. Every sentence in the
+; disassembly opens with a byte in
+; $70-$7F that the speech chip reads as
+; a pitch, and the four fixed ones use
+; $7B, $73, $7B and -- for the warning
+; -- $70 with three random bits ($2BED).
+; Nothing maps an S14001A pitch code
+; onto a formant synthesiser's half
+; hertz, so the LOW NIBBLE is taken as
+; written and laid on 24 upwards, which
+; keeps all four inside the growl the
+; reference calls a robot and keeps the
+; ROM's own ordering between them. Zero
+; here means "the cabinet rolled for
+; it".
+make "say.p (list 35 0 0 27 35)
+
+; [pitch speed mouth throat], and slot 1
+; is a placeholder: `speak` writes the
+; sentence's own pitch over it before
+; every `setvoice`, so the three that
+; are left are the whole voice.
+;
+; AND THE PITCH IS ALL OF IT, WHICH THE
+; BOARD HAD TO SAY. The reference's own
+; robot is [30 150 200 90] -- a big
+; mouth and a small throat, which is the
+; timbre -- and this section first kept
+; that shape and slowed it to 96 on the
+; argument that the arcade's robots are
+; deliberate: they are reading you a
+; warning, not chattering.
+;
+; Heard on a PicoCalc, the timbre is
+; what costs the words. A big mouth and
+; a small throat smear the consonants,
+; and slowing that down only gives you
+; longer to fail to make them out --
+; which is the arcade's own famous
+; problem, faithfully reproduced and
+; not worth reproducing. An ordinary
+; head is far easier to follow and it is
+; still a robot, because the pitch is
+; still the ROM's 48 to 70 hertz. So
+; mouth, throat and speed are the
+; default 128 and the pitch carries the
+; whole character.
+make "say.v (list 30 128 128 128)
+
+make "cap.w "||
+make "cap.p 35
+make "cap.c 0
+make "cap.t 0
+make "cap.new false
+make "cap.gap "|                                  |
+
+; THE CAPTION ALWAYS AND THE VOICE ONLY
+; IF IT IS FREE, and that is the one
+; departure from the cabinet in this
+; section. TALK ($2C1B) writes VOICE_PC
+; over whatever was speaking, so a
+; second sentence CUTS the first;
+; `say` APPENDS, and the only interrupt
+; this interpreter has is `stopsound`,
+; which would take the effects with it.
+; Queueing is the worse of the two
+; failures -- three doorways in three
+; seconds would leave the game talking
+; over itself for six -- so a sentence
+; that arrives while one is being said
+; is dropped.
+;
+; THE CAPTION IS NOT, because it costs a
+; text row and nothing else, and telling
+; a player they are a chicken is the
+; whole reason it exists. So the screen
+; is right even on the frames the
+; speaker is behind.
+to speak :n
+  make "cap.w item :n :say.w
+  make "cap.c int ((40 - count :cap.w) / 2)
+  make "cap.new true
+  make "cap.t 20
+  if speaking? [stop]
+  make "cap.p item :n :say.p
+  if 0 = :cap.p [make "cap.p 24 + random 8]
+  .setitem 1 :say.v :cap.p
+  setvoice :say.v
+  say :cap.w
+end
+
+; $2BE4's own test, and it is RCOUNT and
+; not the crowd you can see: a room with
+; a robot still exploding in it has
+; already been cleared.
+to say.leaving
+  ifelse 0 = :rob.live [speak 2 + random 2] [speak 4]
+end
+
+; Written when it is armed and rubbed
+; out when its second is up, and it is
+; one procedure because the erase is the
+; same statement with a blank in it. The
+; blank is one word wide enough for the
+; longest sentence rather than one
+; measured against this one, which costs
+; four spaces and no arithmetic.
+to show.caption
+  ifelse :cap.new [
+    make "cap.new false
+    setcursor list :cap.c 26
+    type :cap.w
+  ] [
+    setcursor [3 26]
+    type :cap.gap
   ]
-  recycle
 end
 
-; Once a second and not once a frame,
-; and the reason is storage rather than
-; time. `setcursor [20 26]` copies its
-; literal (two cells) and a `(type ...)`
-; of three things conses its arguments
-; (four more), so the readout spends
-; about fifteen cells every time it
-; runs -- and design section 18's fourth
-; ceiling says a FRAME must spend
-; nothing, because nothing in this
-; interpreter collects on demand.
+;=====================================
+; The cabinet's own HUD (section 4)
 ;
-; So it ends with `recycle`, which is
-; B25's floor used as a floor: the
-; readout hands back what it spent, in
-; the same breath, once a second. A
-; recycle measured ~4.3 ms in
-; Battlezone, which is a tenth of the 50
-; ms frame and is paid on one frame in
-; twenty. Unconditional rather than
-; gated on `atoms` the way Asteroids
-; gates its own, because the amount is
-; known and small and the frame it lands
-; in has room for it. An ordinary frame still spends
-; zero, and `show.room` puts this call
-; LAST so the room change's own fifteen
-; `setcursor list` conses are inside it.
-; WORST IS THE WORST *BODY*, TAKEN
-; BEFORE `sync`, and that is Battlezone's
-; split rather than a new idea. A frame
-; that fits its budget is padded by
-; `sync` to exactly the period, so a
-; worst-of-`frame.ms` can only ever say
-; 50 and cannot tell a 20 ms frame from
-; a 49 ms one -- which is what a board
-; read on 2026-08-30 (`WORST` 51 at
-; `fast`, one millisecond of clock
-; granularity over the period, meaning
-; nothing overran and nothing more).
-; The body says how much of the 50 was
-; actually used, so the margin is
-; visible and an overrun still shows as
-; a number above 50.
+; The score bottom right, the bonus
+; bottom left and the remaining lives as
+; a row of little men beside them --
+; which is where the cabinet puts all
+; three ($249F, $25B5) and why this
+; game is on a split screen at all.
 ;
-; AND A FRAME THAT SCROLLED IS NOT ONE.
-; The doorway slide is thirty or forty
-; PACED steps inside a single body, so
-; the frame carrying it measures a
-; second and a half of deliberate hold.
-; That is not an overrun and must not
-; read as one: it gets its own number --
-; `SL` on the readout, which should say
-; about 1500 going up or down and 2000
-; across -- and leaves WORST to say what
-; the game costs while it is being
-; played. `SL` above those two means a
-; step did not fit its frame.
-make "body.ms 0
-make "frame.ms 0
-make "worst.fr 0
-make "frames   0
-make "fr.t0    0
-make "hud.ms   0
-make "worst.hud 0
-
-; ROOM and HUD are the two halves of a
-; transition and WORST is the frame that
-; carries them both, so the four numbers
-; read against each other: if WORST is
-; ROOM plus HUD plus a present, nothing
-; else is hiding in the room change.
-; HUD is one transition behind, because
-; this procedure runs inside the region
-; it measures.
-; ROB IS M3'S GATE ON THE SCREEN, and it
-; is the number a person reads the count
-; cycle off: cross five doorways and the
-; crowd should go 7, 10, 5, 8, 11 and
-; round again, give or take the sampler.
+; TEXT ROW 24, immediately under the
+; picture, which is as close to the
+; cabinet's bottom-right as a split
+; screen gets. The caption is on row 26,
+; which is where design section 14.2
+; asked for it -- that row was M2 to
+; M5's mask readout and the caption sat
+; on row 30 until the readout came out.
 ;
-; AND `OT` IS M5'S, in the gap after
-; FRAME on row 26: OTTO_TIME counting
-; down in units of two thirds of a
-; second, which is the only way to read
-; the timer arithmetic off a board. It
-; stops at zero, because from there he
-; is on the screen and the number has
-; done its job.
-;
-; ROB SITS AT THE END OF THE HELP LINE
-; because that is the only gap left.
-; Rows 26 to 28 are the masks to column
-; 14 and the timing block from column
-; 20; row 25 is "ROOM x y", whose four
-; trailing spaces are the erase a room
-; number needs when it shrinks from 255
-; to 0 and which therefore reach column
-; 15. The help line is 33 characters and
-; is drawn once, so columns 33 to 39 of
-; row 29 belong to nobody.
-to show.timing
-  setcursor [33 29]
-  (type "|ROB | :rob.live "|  |)
-  setcursor [20 25]
-  (type "|HUD   | :worst.hud "|   |)
-  setcursor [32 25]
-  (type "|SL | :slide.ms "|  |)
-  setcursor [20 26]
-  (type "|FRAME | :frame.ms "|   |)
-  setcursor [33 26]
-  (type "|OT | :o.time "|  |)
-  setcursor [20 27]
-  (type "|WORST | :worst.fr "|   |)
-  setcursor [20 28]
-  (type "|ROOM  | :room.ms "|   |)
-  setcursor [33 27]
-  (type "|LIV | :lives "| |)
-  setcursor [31 28]
-  (type "|SC | :score "| |)
-  recycle
+; Column 28 and no trailing blank: six
+; digits is exactly columns 34 to 39 and
+; there is no fortieth, and a score only
+; ever grows inside a game -- a new one
+; arrives through `ct`.
+to show.hud
+  setcursor [0 24]
+  ifelse :bonus.n > 0 [
+    (type "|BONUS | :bonus.n "|   |)
+  ] [
+    type "|            |
+  ]
+  setcursor [28 24]
+  (type "|SCORE | :score)
+  make "hud.due false
 end
 
-; WHAT A DOORWAY WRITES, and it is now
-; fourteen characters rather than 141.
-; The help line never changes, so it is
-; drawn once in `init.game`; the timing
-; rows are on their own once-a-second
-; schedule and were being written twice
-; over on a transition; and the masks go
-; to the next frame. The room number
-; stays, because it names the room the
-; picture is of.
-to show.room
-  setcursor [0 25]
-  (type "|ROOM | :room.x "| | :room.y "|    |)
-  make "masks.due true
+; AND THE LIVES ARE STAMPED, NOT TYPED.
+; The cabinet draws them with character
+; $80, a little man, and this font stops
+; at 127 -- but the playfield is 204
+; rows of the 240 presented and the
+; seventeen under it are black and
+; otherwise unused, which is exactly
+; where the cabinet has them. So a life
+; is the standing costume at y = -71,
+; spanning rows -63 to -78 with the
+; bottom wall at -62 and the last
+; presented row at -79.
+;
+; Six slots and not three, because the
+; bonus makes four and the erase should
+; not have to know how many there were.
+; The eraser is `erase.man`'s three
+; strokes of pen 3 at a fixed y, which
+; is the arithmetic B67 settled: a pen 3
+; stroke is an exact rectangle three
+; wide and its length plus two.
+; AND THE ERASE IS GATED ON `men.due`,
+; which is not a tidy-up: the only time
+; this strip needs rubbing out is the
+; bonus life, because every other change
+; to it comes with a room build and a
+; `clean`. Eighteen strokes on a
+; transition would be eighteen strokes
+; that erase black.
+to show.men
+  if :men.due [
+    setpc :bg.pc
+    setpensize 3
+    seth 180
+    repeat 6 [
+      make "e.i 40 + (12 * repcount)
+      pu  setx :e.i + 1  sety -64  pd  fd 13
+      pu  setx :e.i + 4  sety -64  pd  fd 13
+      pu  setx :e.i + 6  sety -64  pd  fd 13
+    ]
+    pu  setpensize 1]
+  setpc :man.pc
+  setsh 1
+  seth 90
+  repeat :lives [
+    make "e.i 40 + (12 * repcount)
+    setx :e.i + 3.5
+    sety -71
+    stamp
+  ]
+  setpc :rob.pc
+  make "men.due false
 end
+
 
 ;=====================================
 ; The frame
 ;
-; `fr.t0` is taken before `poll.input`
-; and outside the paused guard, so
-; `frame.ms` is the real period and a
-; paused frame still measures itself.
 ; `sync` presents the frame and then
-; waits for the next boundary, so the
-; reading is the period while the game
-; is inside its budget and the BODY as
-; soon as it is not -- which is the
-; number a gate wants, because an
-; overrun is exactly when `sync` stops
-; waiting.
+; waits for the next boundary, so a
+; frame that fits its budget costs
+; exactly the period and one that does
+; not costs its body.
 ;
 ; THE BOLTS MOVE BEFORE ANYTHING ELSE
 ; DOES, which is the cabinet's order
@@ -4688,43 +5155,92 @@ end
 ; and redraws the walls, so the erase
 ; that has already run is simply
 ; redundant.
-; HUD is what the mask readout costs,
-; measured where it now runs. It is the
-; one number that says whether text on
-; this panel is affordable at all: 45
-; characters, unbuffered, against a 50
-; ms frame. ROOM plus a present is the
-; doorway, HUD is the frame after it,
-; and WORST should now be the larger of
-; the two rather than their sum.
-to draw.masks
-  local "t0
-  make "t0 ticks
-  show.masks
-  make "masks.due false
-  make "hud.ms ticks - :t0
-  if :hud.ms > :worst.hud [make "worst.hud :hud.ms]
-end
-
 ; ONE TEXT JOB A FRAME, and it is a rule
 ; rather than a coincidence: text is not
 ; batched by `sync`, so every character
 ; is an SPI write and two jobs in one
 ; frame is two frames' worth of panel
-; time in one. The masks take the frame
-; after a doorway and the timing rows
-; take the next free one; a second that
-; loses its beat to a doorway simply
+; time in one. So a doorway pays for its
+; sentence, its men and its score over
+; three frames rather than one.
+; M6 PUTS FOUR MORE JOBS IN THIS QUEUE
+; AND THE RULE IS UNCHANGED: one text
+; job a frame, in the order a player
+; needs them. The caption goes first
+; because it is the only one with a
+; deadline -- a sentence that arrives
+; after the speech has finished is not a
+; caption -- and the timing block goes
+; last because it is a diagnostic and a
+; second that loses its beat simply
 ; misses it.
+;
+; The caption is armed by `speak` and
+; disarmed by its own countdown, and
+; between the two this procedure falls
+; straight through: the frames in the
+; middle of a caption are free.
+;
+; AND THE BEAT AT THE END IS THE ONLY
+; COLLECTOR IN THE GAME. `show.hud` and
+; `show.caption` cons -- `(type ...)`
+; conses its arguments and `setcursor
+; list` its literal -- and nothing in
+; this interpreter collects on demand,
+; so a frame loop with no `recycle` in
+; it runs the workspace out (design
+; section 18's fourth ceiling). It used
+; to ride on the once-a-second readout;
+; with the readout gone it is the beat
+; itself, on the cheapest frame there
+; is. About 4.3 ms, once in twenty
+; frames, and an ordinary frame still
+; spends nothing.
+;
+; A SECOND IS THE FLOOR AND NOT THE
+; LENGTH, which section 14.2's "about a
+; second" was written before the voice
+; had a speed: at 96 the longest of the
+; five sentences takes about three, and
+; a caption that goes out while the
+; sentence is still being said is the
+; one thing it exists to prevent. So the
+; countdown holds while the speaker is
+; busy, and the frames it holds for cost
+; no text job at all.
+; The frame counter, and all it is for
+; now is the beat below: one frame in
+; `fps` is the `recycle`.
+make "frames 0
+
+; AND A FRAME THAT BUILDS A ROOM WRITES
+; NO TEXT AT ALL. This is a budget rule
+; and not an instrument, which is why it
+; outlived the readout that found it: a
+; doorway already generates a room,
+; cleans the canvas, draws sixteen walls
+; and presents the whole screen, and
+; text is not batched by `sync` -- every
+; character is an SPI write. The build
+; sets the flag and `show.text`, which
+; runs at the END of the body, reads it;
+; at the top of the frame it could only
+; ever ask what happened LAST frame.
+make "room.built false
+
 to show.text
   if :room.built [make "room.built false stop]
-  if :masks.due [draw.masks stop]
-  if 0 = modulo :frames :fps [show.timing]
+  if :cap.new [show.caption stop]
+  if :cap.t > 0 [
+    make "cap.t :cap.t - 1
+    if 0 = :cap.t [
+      ifelse speaking? [make "cap.t 1] [show.caption stop]]]
+  if :men.due [show.men stop]
+  if :hud.due [show.hud stop]
+  if 0 = modulo :frames :fps [recycle]
 end
 
 to play.frame
-  make "fr.t0 ticks
-  make "slid false
   poll.input
   if not :leaving [
     if not :paused [
@@ -4741,15 +5257,12 @@ to play.frame
       draw.otto
       if 0 = :p.dying [draw.man]
       if 1 = modulo :p.dying 2 [draw.man]
-      mark.bolts :wall.pc
+      mark.bolts :rob.pc
       show.text
     ]
   ]
-  make "body.ms ticks - :fr.t0
-  if not :slid [
-    if :body.ms > :worst.fr [make "worst.fr :body.ms]]
+  if :sfx.t > 0 [make "sfx.t :sfx.t - 1]
   sync
-  make "frame.ms ticks - :fr.t0
 end
 
 ; `init.game`, `setup.room` and
@@ -4797,15 +5310,19 @@ to init.game
   make "leaving false
   make "paused false
   make "frames 0
-  make "worst.fr 0
-  make "worst.ms 0
-  make "worst.hud 0
-  make "slide.ms 0
-  make "slid false
   make "rob.ti 1
   make "rob.tp 5
   make "score 0
   make "lives :start.lives
+  make "xtramen false
+  make "bonus.n 0
+  make "hud.due true
+  make "men.due false
+  make "cap.new false
+  make "cap.t 0
+  make "sfx.pri 0
+  make "sfx.t 0
+  setup.sound
   make "over false
   ; $17D6, and it is the same call a death
   ; makes: a game starts in a random room
@@ -4815,36 +5332,21 @@ to init.game
   setcursor [0 29]
   type "|ARROWS WALK, SPACE AIMS, ESC QUITS|
   draw.room
-  show.room
+  show.hud
   make "room.built false
-  ; And the first room's masks are drawn
-  ; HERE rather than deferred, because
-  ; the frame they would be deferred to
-  ; is also the one presenting a whole
-  ; canvas for the first time. Deferring
-  ; is for doorways, which happen while
-  ; the frame loop is already running and
-  ; has somewhere to put the work.
-  draw.masks
 end
 
 ; THE FIRST `sync` AFTER `setrefresh
-; "sync` ALWAYS WAITS A FULL PERIOD, and
-; it must not do that inside a measured
-; frame. `frame_sync_wait_ms` has no
-; baseline to pace from on its first
-; call, so it seeds the cadence at `now`
-; and puts the first boundary one period
-; out (`test_first_wait_seeds_full_
-; period` says so in as many words). A
-; frame timed across its own `sync` then
-; reads its work PLUS fifty, and that is
-; a measurement artefact and not a
-; hitch: a board read `WORST` at 98 ms
-; at `fast` and 118 at `normal` on
-; 2026-08-30, and both are the FIRST
-; frame -- 48 and 68 ms of real work
-; with the seed on top of them.
+; "sync` ALWAYS WAITS A FULL PERIOD.
+; `frame_sync_wait_ms` has no baseline
+; to pace from on its first call, so it
+; seeds the cadence at `now` and puts
+; the first boundary one period out
+; (`test_first_wait_seeds_full_period`
+; says so in as many words), and the
+; first frame of the loop would
+; otherwise open with fifty milliseconds
+; of nothing.
 ;
 ; So the cadence is seeded here, outside
 ; the loop, where the wait costs nothing
@@ -4874,14 +5376,13 @@ end
 ; command, and so does a turtle still
 ; wearing a costume and still flipping
 ; with its heading.
-; THE CARD IS THE GAME ENDING AND NOT
-; THE ATTRACT SCREEN, which is still M6's
-; (section 21, risk 6). ESC means "I am
-; done" and gets nothing; running out of
-; men is worth a card, which is
-; Battlezone's split. A new `berzerk`
-; starts a new game, and `init.game` is
-; where $187F's reset lives.
+; TWO CARDS AND THEY ARE A PAIR. ESC
+; means "I am done" and gets nothing;
+; running out of men is worth a card,
+; which is Battlezone's split -- and
+; from M6 both of them come back HERE,
+; to the attract screen, rather than
+; ending the session.
 to show.game.over
   setcursor [15 10]
   print [GAME OVER]
@@ -4890,17 +5391,130 @@ to show.game.over
   wait 3000
 end
 
+; THE ATTRACT SCREEN (section 21, risk
+; 6), and the risk is the reason for the
+; line about the clock: a board that
+; will not overclock cannot play this
+; game, and a player who is told so on
+; the way in does not have to work it
+; out from a game that will not start.
+;
+; `clock` is asked once a SESSION and
+; not once a game, which is Battlezone's
+; own note: it costs a bus teardown on a
+; board with a radio up, and a player
+; starting their fourth game should not
+; pay for it again. So this screen is
+; inside the clock rather than outside
+; it, and ESC here is the door that
+; gives the clock back.
+to attract
+  local "k
+  textscreen
+  ct
+  setcursor [13 2]
+  print "|B E R Z E R K|
+  setcursor [8 4]
+  print "|Stern Electronics, 1980|
+  setcursor [2 7]
+  print "|ARROWS   walk, two at once for a|
+  setcursor [2 8]
+  print "|         diagonal|
+  setcursor [2 9]
+  print "|SPACE    hold it with an arrow to|
+  setcursor [2 10]
+  print "|         stand and shoot that way|
+  setcursor [2 11]
+  print "|Z        pause|
+  setcursor [2 12]
+  print "|ESC      leave the maze|
+  setcursor [2 15]
+  print "|A wall kills you. Otto cannot be|
+  setcursor [2 16]
+  print "|shot, and he does not stop.|
+  setcursor [2 18]
+  print "|The rooms are a function of where|
+  setcursor [2 19]
+  print "|you are, so walk out and back and|
+  setcursor [2 20]
+  print "|it is the same room.|
+  setcursor [2 23]
+  print "|This game needs the 300 MHz clock.|
+  setcursor [5 27]
+  print "|SPACE to play, ESC to quit|
+  make "k 0
+  until [32 = :k] [
+    make "k 0
+    until [0 < :k] [if key? [make "k ascii readchar]]
+    if 27 = :k [make "quit true  stop]
+  ]
+end
+
+; AND THE LAST SENTENCE FINISHES. The
+; man dies saying "GOT THE HUMANOID, GOT
+; THE INTRUDER" -- $1FB3, the third
+; instruction of PLAYER_DEAD -- and the
+; card that follows him used to arrive
+; through `stopsound`, which cut it off
+; mid-word. So the speaker is given the
+; rest of it before anything is silenced.
+;
+; BOUNDED, because this is the one wait
+; in the file with no frame under it:
+; four seconds is longer than the
+; longest of the five sentences at the
+; slowest voice, and a speech engine
+; that never finishes must not take the
+; session with it.
+to one.game
+  local "w
+  attract
+  if :quit [stop]
+  play.game
+  setrefresh "auto
+  make "w 0
+  until [:w > 200] [
+    if not speaking? [make "w 999]
+    if 999 > :w [wait 20  make "w :w + 1]
+  ]
+  stopsound
+  textscreen
+  ct
+  if :over [show.game.over]
+end
+
+; ONE EXIT, and it puts the screen back
+; the way it found it. THE SAME FLAG
+; CARRIES THE REFUSAL: a session that
+; begins already quitting runs no game
+; and falls straight through to the
+; tail, where the only difference is
+; which of two things gets printed.
+; AND THE FILE HANDS BACK WHAT IT SPENT
+; LOADING, which is B25's floor used as
+; a floor for the third time in this
+; game. Building the five effects' note
+; lists with `se` allocates a fresh list
+; an iteration and orphans the last, so
+; a load arrives with about 1,300 cells
+; of garbage in a workspace section 18
+; already calls the tightest of its four
+; ceilings. One statement, once, before
+; anybody has typed anything.
+recycle
+
 to berzerk
-  if clock [play.game]
+  make "quit not clock
+  until [:quit] [one.game]
+  stopsound
   restore.clock
   setrefresh "auto
   setsh 0
   setrot "fixed
   setpensize 1
-  setpc :wall.pc
+  setpc 254
   st
   textscreen
   ct
-  if :over [show.game.over]
   if not "fast = :cpu.at [no.clock]
 end
