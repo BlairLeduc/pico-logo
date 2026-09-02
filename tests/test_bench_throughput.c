@@ -128,8 +128,11 @@ void test_bench_repeat_loop(void)
 // Scenario 2: user-procedure call cost at several workspace sizes.
 // The target is defined LAST, so the linear scan in find_procedure_index_n
 // pays its worst case -- the number M2's binding cache should flatten.
-// Sizes are 1 / 64 / 127: MAX_PROCEDURES is 128, so 127 fillers + target
-// is the fullest workspace a stock build allows.
+// Sizes are 1 / 64 / 127 fillers, so the largest workspace measured is 128
+// procedures. That was the whole table before P18 M0 raised MAX_PROCEDURES
+// to 192; the sizes stay put so the recorded series stays comparable, and
+// the point of the measurement -- that the scan does not scale -- is
+// unaffected by where the ceiling now sits.
 //==========================================================================
 
 // Define `count-1` empty filler procedures, then the call target.
@@ -260,7 +263,7 @@ static double time_game_frames_ms(const char *setup, int frames)
 // `play.frame` and `init.game` and are drivable headless on the mock device.
 // Kept as separate test functions, never merged: `test_scaffold_setUp` calls
 // `procedures_init()` before every RUN_TEST, and Battlezone alone defines all
-// 128 of MAX_PROCEDURES, so the two workspaces cannot share a table.
+// 128 procedures on its own, so the two workspaces cannot share a table.
 void test_bench_asteroids_play_frame(void)
 {
     double cal = calibrate_ns();

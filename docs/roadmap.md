@@ -79,8 +79,8 @@ Companion documents (everything in `docs/`):
 | `localmake` | UCB | done | Landed 2026-07-11; `local` + `make` in one step |
 | `tan`, two-input `(arctan x y)` | UCB | done | Landed 2026-07-11; two-input `arctan` is `atan2` |
 | `hw.cpu` / `hw.setcpu` | none (RP2350-specific) | done | Landed 2026-08-23 as `hw.frequency`/`hw.setfrequency` taking MHz, **renamed and narrowed to two named clocks the same day** once the sweep had shown there is no third worth having: `"normal` is the stock 150 MHz and `"fast` is 300. §12.3.1a is the reason — the LCD's SPI prescaler divides clk_peri by an even number, so only clocks reaching the panel's 75 MHz exactly keep the display at full speed (150 → /2, 300 → /4), while **200 gives 50 MHz and 250 gives 62.5**: both make the interpreter faster and the display slower, and 200 is worth 0.3 ms a frame against 300's 17.5. A number invited those; a word cannot express them, and the refuse-rather-than-round machinery the numeric form needed goes with it. `hw.cpu` still **reads the hardware** rather than remembering, so a change the board refused cannot read back as an overclock that bought nothing. **The device layer is unchanged and is still most of the work**: `set_cpu_khz` stays in kHz because that is the hardware's unit, and it is the layer that deals with the core rail, the LCD divisor (`clk_peri` does *not* follow `clk_sys` — `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK`), the sound engine's mix rate (`sound_reclock`) and the cyw43 PIO bus, which is torn down and rebuilt around the change so the radio may be up and stays up. Asked for by [P13](#p13--battlezone-design-first) M0, where the frame divides into a present that is wire-bound and a body that is nothing but interpretation. 9 primitive tests, 4 harness tests |
-| `(write text fg)` / `(write text fg bg)` | none (the parenthesised form is this dialect's own idiom) | todo | [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M1. Opaque text cells, so a program can draw a filled status bar and overwrite text in the picture. Asked for by [P17](#p17--dungeons-of-daggorath-design-first) §4.1b(i), which cannot draw the CoCo's inverse status row without it |
-| `setpendash` / `pendash` | FMSLogo (`setpenpattern`, richer) | todo | [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M2. Plot one pixel in every _n_ along a stroke; 1 is solid and the default. One decrement beside `screen_gfx_line`'s existing `PLOT_PIXEL` — literally `VECTOR.ASM`'s `VECT30`, which is what [P17](#p17--dungeons-of-daggorath-design-first) §8 is a port of. Makes a dotted stroke cost the same as a solid one, which turns P17's authentic dot fade from an expensive option into the default |
+| `(write text fg)` / `(write text fg bg)` | none (the parenthesised form is this dialect's own idiom) | done | Landed 2026-09-02 as [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M1. Opaque text cells, so a program can draw a filled status bar and overwrite text in the picture. Asked for by [P17](#p17--dungeons-of-daggorath-design-first) §4.1b(i), which cannot draw the CoCo's inverse status row without it. **The three predictions in the milestone all held**: the registration did not move (`primitive_register("write", 1, ...)` sets the arity for unparenthesised calls only), `screen_gfx_text` already walked every pixel of every cell so opaque is one `else` branch, and the dirty rectangle was already the whole cell extent and needed no change at all. Transparent stays the default; colours are `setpc`'s 0-255 with 255 the background slot, so `(write :old 255 255)` is the eraser for text in a picture and no new spelling was invented. `draw_text` grew `colour` and `background` as `int`s so that -1 can mean "this turtle's own pen colour" and "leave the cell alone" — the pen-colour sentinel is resolved in the **device**, which is what keeps a bare `tell [1 5] write` drawing in each turtle's own colour. 6 pixel tests in the new `test_screen_text.c` (the real `screen.c` against `fake_lcd.c`) and 7 primitive tests. **Confirmed on a Pico Plus 2 W 2026-09-02** (`tests/logo/p18`): no seams between the cells of an inverse bar, the hatching underneath still runs through the transparent form, and `(write :old 255 255)` takes a line of text back out of the picture — the eraser this dialect did not have |
+| `setpendash` / `pendash` | FMSLogo (`setpenpattern`, richer) | done | Landed 2026-09-02 as [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M2. Plot one pixel in every _n_ along a stroke; 1 is solid and the default. One decrement beside `screen_gfx_line`'s existing `PLOT_PIXEL` — literally `VECTOR.ASM`'s `VECT30`, which is what [P17](#p17--dungeons-of-daggorath-design-first) §8 is a port of. Makes a dotted stroke cost the same as a solid one, which turns P17's authentic dot fade from an expensive option into the default. **The estimate was right and the code is four lines**: the gate goes around the whole `STAMP`, not around `PLOT_PIXEL`, so a dashed thick pen puts its disc down at the same spacing rather than dotting the inside of one. The off-by-one is the compatibility claim and is taken from the ROM rather than chosen: `FADCNT` is loaded from `VCTFAD` at the head of each vector and `DEC`/`BNE` tests it *before* plotting, so the counter starts **full** and the first point plotted is index _n_ - 1 — a 21-point stroke at period 4 plots 5 dots and neither end. A stroke shorter than its period draws nothing, which is what `VCTFAD` = $FF meaning "invisible" rests on. Per-turtle state beside `pen_size`, clamped to [1, 255] because the device stores a `uint8_t` and that is `VCTFAD`'s own width. 6 pixel tests in `test_screen_pen.c` against hand-computed spans, 6 primitive tests. **Confirmed on a Pico Plus 2 W 2026-09-02**: the four periods read as a ramp, and 800 strokes of 120 px cost **157 µs each solid against 129 µs dashed** — 82 %, so the fade is cheaper than the picture it replaces rather than an addition to it |
 | `min`, `max` | UCB, FMSLogo | todo | Absent from the reference entirely. Clamping is three statements without them and one with, and every dialect has them. Raised by [P13](#p13--battlezone-design-first) §13 L1 as a user rather than as a reason — worth taking on its own merits |
 | `modulo` (floor-division sign) | UCB | done | Landed 2026-07-11; sign of divisor, distinct from `remainder` |
 | `runresult` | UCB | done | Landed 2026-07-11; new `OP_RUNRESULT` op; outputs `[value]` or `[]` |
@@ -115,7 +115,7 @@ Companion documents (everything in `docs/`):
 
 | Item | Status | Notes |
 |---|---|---|
-| `MAX_PROCEDURES` 128 → 192 | todo | [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M0. `logo/games/battlezone` defines exactly 128 and the ceiling has been hit repeatedly; overflow drops the **last** `to` in the file and points nowhere near the cause. Unlike `MAX_GLOBAL_VARIABLES` there is **no representation ceiling** — procedure indices are `int`, not a `uint8_t` hash slot — so this is a pure budget decision and revisitable. ~80 B a slot (64 of them `params[MAX_PROC_PARAMS]`), so 192 is +5 KB of `.bss`, about +1 SRAM point. The table is also the one name table with **no index**: `find_procedure_index_n` is a linear scan, where `find_global` has been a hash since [P10](#p10--interpreter-throughput) M3 |
+| `MAX_PROCEDURES` 128 → 192 | done | Landed 2026-09-02 as [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M0. `logo/games/battlezone` defines exactly 128 and the ceiling has been hit repeatedly; overflow drops the **last** `to` in the file and points nowhere near the cause. Unlike `MAX_GLOBAL_VARIABLES` there is **no representation ceiling** — procedure indices are `int`, not a `uint8_t` hash slot — so this is a pure budget decision and revisitable. ~80 B a slot (64 of them `params[MAX_PROC_PARAMS]`), so 192 is +5 KB of `.bss`, about +1 SRAM point. The table is also the one name table with **no index**: `find_procedure_index_n` is a linear scan, where `find_global` has been a hash since [P10](#p10--interpreter-throughput) M3 — **and it does not matter, which was confirmed rather than assumed** (see M0). **Measured cost, both directions, all three boards**: exactly 5,120 B of `.bss` each (64 slots x an 80-byte `UserProcedure`), taking RAM from 89.34/86.82/91.73 % to **90.31/87.80/92.71 %** — +0.97 points, against the predicted ~+1. All three link. **`repl_init` reached on a Pico Plus 2 W 2026-09-02**, which is the binding board: at 92.71 % it has the least headroom of the three. `tests/logo/p18` reads the ceiling back on a board the only way a program can, by filling the table until `define` fails |
 | LittleFS internal filesystem (root `/`) + `/sd` FAT32 mount | done | Landed 2026-06-29 (PR #83), before this roadmap existed; listed for completeness. Design: [`littlefs-filesystem-design.md`](littlefs-filesystem-design.md) |
 | On-chip temperature sensor (`hw.temperature`), `battery` renamed to `hw.battery` | done | Landed 2026-08-20 (user request). The first of a `hw.` family for reading the board itself, so `battery` was renamed with it — a breaking change taken deliberately while the surface is two primitives wide. The part-to-part difference the request flagged is real and the SDK already hides it: the sensor is ADC input 4 on the RP2350A (Pico 2, Pico 2 W) and input 8 on the RP2350B (Pico Plus 2 W), and `ADC_TEMPERATURE_CHANNEL_NUM` is `NUM_ADC_CHANNELS - 1`, which the board header sizes from `PICO_RP2350A` — so **no board conditional appears in this tree**, and the two disassemblies prove it resolved: the AINSEL write is `0x4000` on a `pico2` build and `0x8000` on a `pico+2w` one. The conversion is the datasheet's (§12.4.6) and is the same on both parts. Two things the sensor's own accuracy decided: the read **averages 16 conversions** (~0.24 C per LSB, noisy at that, ~32 us for the burst), and the primitive **rounds to a tenth** — the sensor is uncalibrated and reads the die rather than the room, so six significant digits of ADC noise would be a false precision the manual then has to walk back. A board with no sensor nulls the op and the primitive errors rather than inventing a reading, which is what the host build does. **RAM unchanged to the byte** on all three boards (`pico+2w` 478,532, 91.27 %); the cost is flash. 47 tests in `test_primitives_hardware.c`. **Hardware-accepted 2026-08-21 on both a Pico 2 W and a Pico Plus 2 W** — which is the whole of the gate, since the two boards are the two parts and the channel is the one thing no host test can reach. `tests/logo/hwtemp` stays in the tree as the check: it does not assert that a number came back, because a wrong channel returns a floating GPIO and that reads as a plausible number — it loads the processor for thirty seconds and requires the reading to **rise**, which only a sensor wired to the die does |
 | On-board status LED (`hw.light?`, `hw.setlight`) | done | Landed 2026-08-21 (user request). The second of the `hw.` family, and the same shape of problem as `hw.temperature`: **the pin differs on every board and the SDK already hides it.** On a Pico 2 the LED is `PICO_DEFAULT_LED_PIN` (GPIO 25) and a `gpio_put` reaches it; on a Pico 2 W and a Pico Plus 2 W there is **no such pin at all** — it is `CYW43_WL_GPIO_LED_PIN`, WL_GPIO 0 on the wireless module. That used to be hand-written special-case code; SDK 2.1's `pico_status_led` is the abstraction, so **no board conditional appears in this tree** and the disassemblies prove it resolved: `picocalc_set_status_led` is `movs r3, #25` plus the single-cycle-IO write in a `pico2` build and `bl cyw43_gpio_set` in a `pico2w` one. **The design decision the hardware forced** is that on a W board the LED is on the far side of the cyw43 driver, so lighting it **powers the radio** — the first `hw.setlight` costs the firmware upload, about a second — and there is no alternative, since the LED is physically on that chip. The driver is brought up through the existing `ensure_wifi_initialized` rather than by `status_led_init()`, which would build a *second* `async_context` and init the driver twice; `status_led_init_with_context(cyw43_arch_async_context())` keeps one context, one driver and one flag for both features. `hw.light?` **reads the pin** rather than remembering what was written, so on a W board it is a round trip through the module. A board with no LED nulls the ops and both primitives error rather than answering `false`, which would read as "the LED is off". **SRAM costs 72 bytes on the W boards** — `status_led_owned_context`, the context `pico_status_led` would have built for itself, dead in this build but in the same TU as the path that is used — and 4 bytes on a `pico2`; the rest (~1.2–1.9 KB) is flash. 13 tests in `test_primitives_hardware.c` (60 in the file), 80/80 green. **Hardware-accepted 2026-08-21 on both W boards**, a Pico 2 W and a Pico Plus 2 W, via `tests/logo/hwlight` — all four checks, which is the whole of the cyw43 half of the gate. That gate is two things no host test can reach: a human confirming the light actually *moved* (a driven pin that is not wired looks exactly like a pass from inside Logo), and the **two WiFi orderings** — LED then WiFi, WiFi then LED — which is the double-init this arrangement exists to prevent. **What is still unrun is a `pico2` build**, the GPIO 25 path and the only one that goes through `status_led_init()` rather than the with-context form. It is the trivial half and the disassembly shows it resolving to pin 25, but nothing has yet watched that LED light |
@@ -2551,33 +2551,69 @@ rule — down a hole or a ladder, up a ladder only — gives 1↔2 and 2↔3 by 
 and 4 → 5 by holes that cannot be climbed back up. None of it is a special case
 in the ROM, and none of it will be here.
 
-M0, M1, M1a (the dot fade, optional) and M2–M6, gates in the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) goes first** (decided 2026-09-02): its M0–M2 are the procedure table, the opaque `write` and the dashed pen, and P17 M1 wants all three — a status line it can invert, a file it can grow into, and a fade it can draw the way the ROM draws it. P18 M3 and M4 run the other way round and wait on P17's own M0 and M6. [B65](bugs.md) blocks `ZSAVE` to the internal
+M0, M1, M1a (the dot fade, optional) and M2–M6, gates in the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) goes first** (decided 2026-09-02): its M0–M2 are the procedure table, the opaque `write` and the dashed pen, and P17 M1 wants all three — a status line it can invert, a file it can grow into, and a fade it can draw the way the ROM draws it. **All three landed the same day**, so nothing here is waiting on the interpreter any more; §8's three fallbacks and the milestone gated on a photograph go with them, because the dotted fade is now what a plain `fd` does. P18 M3 and M4 run the other way round and wait on P17's own M0 and M6. [B65](bugs.md) blocks `ZSAVE` to the internal
 filesystem at M5, so it writes to `/sd` until that is fixed.
 
 
 ### P18 — interpreter work for Dungeons of Daggorath
 
-Status: **todo, and most of it goes before
-[P17](#p17--dungeons-of-daggorath-design-first) is implemented** (opened
-2026-09-02). Five items, all of them asked for by P17 and none of them
-P17-shaped: every one is a general capability that happens to have found its
-first customer. No design document — these are primitives and a constant, not a
-subsystem.
+Status: **M0, M1 and M2 done 2026-09-02** (opened the same day); M3 and M4
+still gated on P17's own milestones and not started. Five items, all of them
+asked for by P17 and none of them P17-shaped: every one is a general capability
+that happens to have found its first customer. No design document — these are
+primitives and a constant, not a subsystem.
+
+**What the first three cost, now they are built.** M0 is a constant and a
+comment. M1 is one `else` branch in `screen_gfx_text`, two `int`s on a device
+op and an argc fan in `prim_write`. M2 is four lines in `screen_gfx_line`, a
+`uint8_t` beside `pen_size` and a primitive pair. Between them they are under
+120 lines of interpreter and about 700 of test, which is the ratio these
+milestones were sized at. **Every prediction in M1 and M2 held**; the one thing
+found on the way was unrelated and is [B80](bugs.md) — `write`'s own reference
+example called `setxy`, which is not a primitive and never has been.
+
+**The board half is one script, `tests/logo/p18`**, and it ran 2026-09-02:
+that `repl_init` is reached at 192 slots (M0), that an inverse bar of text has
+no seams between its cells (M1), and that four dash periods side by side read
+as a ramp rather than a jump (M2). It counts the table by filling it, and it
+writes its numbers to `p18.txt` as well as the screen. **All three passed on a Pimoroni Pico Plus 2 W, 2026-09-02** — which
+is the board that matters for M0, because at 92.71 % it is the *tightest* of
+the three and not the loosest.
+
+**The board found two defects, both of them in the script and neither in the
+interpreter**, which is the useful kind of board run:
+
+- **`ticks` is milliseconds, and the script divided by 1000 as though it were
+  microseconds.** Copied from `p13m0`, where `/ 1000` is not a unit conversion
+  at all — that script repeats 500 times over two strokes, so its 1000 is its
+  own *stroke count*. The board reported `solid ms: 0.126` for what was 126 ms,
+  and a figure three orders out is only obviously wrong if you already know the
+  answer. It now outputs the elapsed total and the report divides by the stroke
+  count it actually drew.
+- **The M0 report assumed an empty workspace.** It printed `this file defines:
+  10` as a constant and derived the ceiling from it, so a run that skipped the
+  `erall` its own header calls REQUIRED reported 163 free and a ceiling of
+  **173** — nineteen short of 192, reading exactly like a failed raise when it
+  was nineteen other procedures already loaded. `pots` prints titles and hands
+  back no value, so a script genuinely cannot count the workspace; the report
+  now derives the residue (`others already loaded:`) and says plainly that this
+  number is not what pins the ceiling — three host tests do that — and that
+  booting at all is the whole of what only a board can show.
 
 **The order is not a straight line, and pretending otherwise would be wrong.**
-M0–M2 are needed before P17 M1 and depend on no measurement, so they go first.
-**M3 depends on P17's own M0**, which is the thing that measures whether a list
-walk is too slow — building arrays before that runs would be exactly the
+M0–M2 are needed before P17 M1 and depend on no measurement, so they went
+first. **M3 depends on P17's own M0**, which is the thing that measures whether
+a list walk is too slow — building arrays before that runs would be exactly the
 speculative primitive this tree keeps refusing. M4 waits on P17 M6 finding the
 sweeps awkward in practice.
 
     P18 M0, M1, M2  →  P17 M0  →  [P18 M3 if M0 asks]  →  P17 M1 …
-                                   [P18 M4 if P17 M6 asks]
+       (done)                      [P18 M4 if P17 M6 asks]
 
 ---
 
-**M0 — `MAX_PROCEDURES` 128 → 192.** *This tree has hit the ceiling repeatedly
-and it is time* (user, 2026-09-02). `logo/games/battlezone` defines **exactly
+**M0 — `MAX_PROCEDURES` 128 → 192. Done 2026-09-02.** *This tree has hit the
+ceiling repeatedly and it is time* (user, 2026-09-02). `logo/games/battlezone` defines **exactly
 128** and had to be held there; P17 sketches ~105 before a line is written, with
 fifteen command handlers, a parser, a scheduler, a renderer, creature AI and
 seventeen sound effects still to fit.
@@ -2615,6 +2651,39 @@ about **+1 point** and 254 about **+2**, on boards standing at 88.89 / 86.38 /
 number owns. If the Plus 2 W has room to spare, say so and leave 254 for
 whatever needs it.*
 
+**Outcome.** The cost is exactly the arithmetic: **5,120 B on every board**, to
+the byte, which is 64 slots at an 80-byte `UserProcedure` and confirms the
+struct size the estimate was built on. Measured both ways round rather than
+against the figures recorded above, which had drifted:
+
+| board | 128 | 192 | delta |
+|---|---|---|---|
+| Pico 2 | 468,388 B (89.34 %) | 473,508 B (**90.31 %**) | +0.97 |
+| Pico 2 W | 455,212 B (86.82 %) | 460,332 B (**87.80 %**) | +0.97 |
+| Pico Plus 2 W | 480,948 B (91.73 %) | 486,068 B (**92.71 %**) | +0.97 |
+
+All three link. **The Plus 2 W does not have room to spare** — it is the
+tightest of the three, not the loosest, and 254 would cost it another point on
+top, so 192 is the right number and the reason to have stopped there. Three
+host tests pin the table at its far end: it takes `MAX_PROCEDURES` definitions,
+the procedure in the **last** slot is still findable (the linear scan has to
+walk the whole table to answer, and a definition dropped on the way in looks
+exactly like a name that was never defined), and one more is `out of space`.
+**The comment fix is the other half of the milestone and is now written down
+where it belongs**, on `find_procedure_index_n` itself: the scan runs once per
+distinct interned word for the life of the workspace, hits *and* misses,
+because `resolve_word` memoises `ATOM_BIND_NONE` too.
+
+**Board half met 2026-09-02 on a Pico Plus 2 W**: the interpreter boots and
+runs at 192 slots, so `repl_init` survives the extra 5 KB — which is the entire
+failure mode this number owns, and the one thing no host test can reach. **The
+board tested is the binding one.** At 92.71 % the Plus 2 W has the least
+headroom of the three, so the other two clear the same bar with 2.4 and 4.9
+points more to spare; running `pico2` and `pico2w` on the other PicoCalc would
+be confirmation rather than risk. The table count in that
+same run reported 163 free rather than 182, which is not the raise failing but
+nineteen procedures already in the workspace; see the script defect above.
+
 **The lever not taken, named so it is not re-derived:** shrinking
 `MAX_PROC_PARAMS` from 16 to 8 would save 32 bytes a slot and pay for 254 at no
 net SRAM cost at all. It also bounds lambda arity and the argument-collection
@@ -2623,8 +2692,8 @@ clothes. Not now.
 
 ---
 
-**M1 — `(write text fg)` and `(write text fg bg)`.** Asked for by P17
-[§4.1b(i)](daggorath-design.md).
+**M1 — `(write text fg)` and `(write text fg bg)`. Done 2026-09-02.** Asked for
+by P17 [§4.1b(i)](daggorath-design.md).
 
 `write` draws text into the picture in the pen colour and sets **only the
 pixels a glyph lights**. `screen_gfx_text` does not clear behind them and
@@ -2671,10 +2740,34 @@ exactly and a run of them is a solid bar with no seam.
 cell and not merely the lit pixels; and an inverse bar of text on a board,
 which is the half no host test can reach.*
 
+**Outcome.** All three "already right" claims held, so the interpreter change
+is one `else` branch. The one thing the milestone did not foresee is **where
+the pen-colour default has to be resolved**: `write` fans out over the active
+set and each turtle carries its own pen colour, so a primitive that read
+`pencolor` once and passed a number would quietly make `tell [1 5] write` draw
+both in turtle 1's colour. So `draw_text` takes `colour` and `background` as
+`int`s and **-1 is a sentinel the device resolves** — "this turtle's own pen
+colour" and "leave the cell alone" — neither of them spellable from Logo,
+which is what keeps 0–255 clean for the colours. The pixel claims are made in
+the new `test_screen_text.c` against the real rasteriser rather than the mock,
+because "no seam between cells" and "the dirty rectangle covers the filled
+cell" are claims about pixels and about what reached the panel: an **opaque
+space** is the sharpest form of both, since it lights nothing, so a dirty
+rectangle derived from lit pixels would present nothing at all. 6 pixel tests,
+7 primitive tests. **Board half met 2026-09-02 on a Pico Plus 2 W**: the
+inverse bar has **no seams** between its cells, so the cells do tile exactly on
+real hardware, and the hatching underneath **runs through** the transparent
+form — which is the half that had to not move, checked against the same screen
+rather than against a memory. **And the erase was seen working**, which is the
+claim with no precedent in the language: `(write :old 255 255)` takes a line of
+text back out of a picture, and before M1 nothing short of `clean` could —
+`penerase` does not erase writing, and writing spaces over it erases nothing
+because a space lights no pixels at all.
+
 ---
 
-**M2 — `setpendash` / `pendash`.** The largest item here by value, and among the
-smallest by code.
+**M2 — `setpendash` / `pendash`. Done 2026-09-02.** The largest item here by
+value, and among the smallest by code.
 
 `screen_gfx_line` ([screen.c](../devices/picocalc/screen.c)) is a Bresenham DDA
 with a `PLOT_PIXEL` macro at each step. A dash counter is one decrement beside
@@ -2711,6 +2804,46 @@ same intervals.
 *Gate: a dashed line plots the pixels the ROM's fade table plots, checked
 against a hand-computed span; a solid line is unchanged; and the dashed stroke
 is no slower than the solid one it replaces.*
+
+**Outcome.** Four lines, and the two decisions in them are both taken from the
+ROM rather than chosen:
+
+- **The counter starts full**, so the first point plotted is index _n_ - 1 and
+  not index 0. `VECTOR.ASM` loads `FADCNT` from `VCTFAD` at the head of each
+  vector and `VECT30` does `DEC FADCNT / BNE VECT40` — the test *before* the
+  plot. y = 100 to 120 at period 4 is therefore 103, 107, 111, 115, 119: five
+  dots, and **neither end of the stroke**. Get it the other way round and the
+  fade is a pixel out of phase with the ROM's everywhere. A corollary worth
+  having: **a stroke shorter than its period draws nothing**, which is what
+  `VCTFAD` = $FF meaning "invisible" rests on.
+- **The gate goes around the whole stamp**, not around `PLOT_PIXEL`, so a
+  dashed thick pen puts its disc down at the same spacing rather than dotting
+  the inside of one disc. Pen 3 at period 8 over 21 points is exactly two 3 × 3
+  squares, which is what the test asserts.
+
+The counter restarts at each stroke, which is what "along every stroke" means
+and is also the ROM's behaviour. Clamped to [1, 255]: the device stores a
+`uint8_t`, which is `VCTFAD`'s own width. Six pixel tests in
+`test_screen_pen.c` — both Bresenham branches, since the X-driving and
+Y-driving loops are separate code and one could easily have got the counter and
+not the reset — and six primitive tests. **"No slower" is proved by counting
+stores rather than by timing**: the dashed 21-point stroke is 5 pixels against
+the solid one's 21, and a rasteriser that stores strictly fewer pixels cannot
+be slower. `tests/logo/p18` timed it on a board anyway, because that is where
+the claim is spent, and **the board says it is not merely no slower but
+faster**: 800 strokes of 120 px, pen 1, on 2026-09-02 —
+
+| pen | total | per stroke |
+|---|---|---|
+| solid (`setpendash 1`) | 126 ms | **157 µs** |
+| dashed (`setpendash 4`) | 103 ms | **129 µs** |
+
+so a dashed stroke costs **82 %** of the solid one it replaces, which is the
+whole argument for M2 stated as a measurement: P17 §8's fade was budgeted at
+58–85 ms *added* to a redraw and it now **subtracts**. **And the ramp reads as
+a ramp** — periods 1, 2, 3 and 4 side by side on a Plus 2 W, confirmed
+2026-09-02, so P17 §8's dot fade is now what a plain `fd` does and the section's
+three fallbacks are unneeded.
 
 ---
 

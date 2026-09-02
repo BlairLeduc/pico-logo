@@ -112,7 +112,7 @@
 ; reads zero and the frame figure is a Logo body with no present in it, which
 ; is the correction P9 had to make to its whole first series of numbers.
 ;
-; `erall` is not optional.  MAX_PROCEDURES is a hard 128; the game defines 65
+; `erall` is not optional.  MAX_PROCEDURES is a hard 192; the game defines 65
 ; and this file adds 15, but a workspace still holding another program can run
 ; out of procedure slots and `load` stops with `out of space` -- the procedure
 ; table talking, not memory.

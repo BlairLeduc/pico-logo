@@ -109,6 +109,14 @@ extern "C"
         void (*set_pen_size)(uint8_t size);
         uint8_t (*get_pen_size)(void);
 
+        // Pen dash period, in pixels along a stroke: the pen is put down on
+        // one point in every `n`, so 1 is solid and is the default. Applies
+        // to strokes (lines and `arc`), not to `dot`, `fill`, `write` or
+        // `stamp`, and composes with the pen size -- a dashed thick pen
+        // stamps its disc at the same intervals. P18 M2. Optional.
+        void (*set_pen_dash)(uint8_t n);
+        uint8_t (*get_pen_dash)(void);
+
         // Turtle visibility
         void (*set_visible)(bool visible);
         bool (*get_visible)(void);
@@ -123,10 +131,18 @@ extern "C"
         void (*fill)(void);
 
         // Draw text on the graphics screen at the selected turtle's current
-        // position, in the current pen colour, upright and left-to-right.
-        // The turtle does not move and its heading is ignored (this is the
-        // horizontal-only cousin of UCB `label`). Optional.
-        void (*draw_text)(const char *text);
+        // position, upright and left-to-right. The turtle does not move and
+        // its heading is ignored (this is the horizontal-only cousin of UCB
+        // `label`). Optional.
+        //
+        // `colour` < 0 means the selected turtle's own pen colour, which is
+        // what a bare `write` asks for and the only way the per-turtle pen
+        // colour survives a `tell` of several turtles. `background` < 0 means
+        // transparent -- store only the pixels a glyph lights -- and >= 0
+        // means fill the whole text cell with it, so a run of cells is a
+        // solid bar (P18 M1, backing `(write text fg)` and
+        // `(write text fg bg)`).
+        void (*draw_text)(const char *text, int colour, int background);
 
         // Boundary modes
         void (*set_fence)(void);    // Turtle stops at boundary

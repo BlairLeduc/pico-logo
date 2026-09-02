@@ -50,6 +50,7 @@ typedef struct
     uint8_t colour;         // Pen colour
     LogoPen pen_state;
     uint8_t pen_size;       // Pen width in pixels (setpensize)
+    uint8_t pen_dash;       // Pen dash period in pixels (setpendash); 1 = solid
     bool visible;
     uint8_t shape;          // Current shape number (0-23)
     uint8_t mag;            // Magnification 1 or 2 (setmag)
@@ -100,6 +101,7 @@ static void turtles_init(void)
         t->colour = TURTLE_DEFAULT_COLOUR;
         t->pen_state = LOGO_PEN_DOWN;
         t->pen_size = 1;
+        t->pen_dash = 1;
         t->visible = (i == 0) && TURTLE_DEFAULT_VISIBILITY;
         t->shape = 0;
         t->mag = 1;
@@ -716,15 +718,15 @@ static bool turtle_move(float distance)
     // Draw line if pen is down
     if (cur->pen_state == LOGO_PEN_DOWN)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false, cur->pen_size);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false, cur->pen_size, cur->pen_dash);
     }
     else if (cur->pen_state == LOGO_PEN_ERASE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false, cur->pen_size);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false, cur->pen_size, cur->pen_dash);
     }
     else if (cur->pen_state == LOGO_PEN_REVERSE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true, 1);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true, 1, cur->pen_dash);
     }
     // else if LOGO_PEN_UP: do not draw anything
 
@@ -756,15 +758,15 @@ static void turtle_home(void)
     // Draw line if pen is down
     if (cur->pen_state == LOGO_PEN_DOWN)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false, cur->pen_size);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false, cur->pen_size, cur->pen_dash);
     }
     else if (cur->pen_state == LOGO_PEN_ERASE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false, cur->pen_size);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false, cur->pen_size, cur->pen_dash);
     }
     else if (cur->pen_state == LOGO_PEN_REVERSE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true, 1);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true, 1, cur->pen_dash);
     }
     // else if LOGO_PEN_UP: do not draw anything
 
@@ -822,15 +824,15 @@ static bool turtle_set_position(float x, float y)
     // Draw line if pen is down
     if (cur->pen_state == LOGO_PEN_DOWN)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false, cur->pen_size);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, false, cur->pen_size, cur->pen_dash);
     }
     else if (cur->pen_state == LOGO_PEN_ERASE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false, cur->pen_size);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, GFX_DEFAULT_BACKGROUND, false, cur->pen_size, cur->pen_dash);
     }
     else if (cur->pen_state == LOGO_PEN_REVERSE)
     {
-        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true, 1);
+        screen_gfx_line(old_x, old_y, cur->x, cur->y, cur->colour, true, 1, cur->pen_dash);
     }
     // else if LOGO_PEN_UP: do not draw anything
 
@@ -940,6 +942,20 @@ static uint8_t turtle_get_pen_size(void)
     return cur->pen_size;
 }
 
+// Set the pen dash period: the pen is put down on one point in every `n`
+// along a stroke, so 1 is solid. Strokes only -- `dot` is a single stamp and
+// dashing it would just mean sometimes not drawing it at all.
+static void turtle_set_pen_dash(uint8_t n)
+{
+    cur->pen_dash = n;
+}
+
+// Get the current pen dash period
+static uint8_t turtle_get_pen_dash(void)
+{
+    return cur->pen_dash;
+}
+
 // Set the turtle visibility (visible or hidden)
 static void turtle_set_visibility(bool visible)
 {
@@ -971,7 +987,8 @@ static void turtle_dot(float x, float y)
     float screen_y = -y + SCREEN_HEIGHT / 2;
     // A dot is one stamp of the pen, so it is a zero-length line: a wide pen
     // puts down the same filled disc it would stamp along a stroke (B11).
-    screen_gfx_line(screen_x, screen_y, screen_x, screen_y, cur->colour, false, cur->pen_size);
+    // Dash period 1: `setpendash` applies to strokes, not to `dot`.
+    screen_gfx_line(screen_x, screen_y, screen_x, screen_y, cur->colour, false, cur->pen_size, 1);
     screen_gfx_update();
 }
 
@@ -1014,13 +1031,15 @@ static void turtle_fill(void)
     screen_gfx_update();
 }
 
-// Draw text on the graphics screen at the turtle's position, in the current
-// pen colour, upright and left-to-right. The text starts at the turtle's x
-// and is centred vertically on the turtle's y. The turtle does not move
-// (backs the `write` primitive).
-static void turtle_draw_text(const char *text)
+// Draw text on the graphics screen at the turtle's position, upright and
+// left-to-right. The text starts at the turtle's x and is centred vertically
+// on the turtle's y. The turtle does not move (backs the `write` primitive).
+// `colour` < 0 takes this turtle's own pen colour; `background` < 0 leaves
+// the cell alone and >= 0 fills it (see LogoConsoleTurtle::draw_text).
+static void turtle_draw_text(const char *text, int colour, int background)
 {
-    screen_gfx_text((int)(cur->x + 0.5f), (int)(cur->y + 0.5f) - GLYPH_HEIGHT / 2, text, cur->colour);
+    screen_gfx_text((int)(cur->x + 0.5f), (int)(cur->y + 0.5f) - GLYPH_HEIGHT / 2, text,
+                    colour < 0 ? cur->colour : (uint8_t)colour, background);
     screen_gfx_update();
 }
 
@@ -1382,6 +1401,8 @@ static const LogoConsoleTurtle picocalc_turtle_ops = {
     .get_pen_state = turtle_get_pen_state,
     .set_pen_size = turtle_set_pen_size,
     .get_pen_size = turtle_get_pen_size,
+    .set_pen_dash = turtle_set_pen_dash,
+    .get_pen_dash = turtle_get_pen_dash,
     .set_visible = turtle_set_visibility,
     .get_visible = turtle_get_visibility,
     .dot = turtle_dot,

@@ -747,6 +747,60 @@ static Result prim_pensize(Evaluator *eval, int argc, Value *args)
     return result_ok(value_number((float)size));
 }
 
+// setpendash n - Put the pen down on one point in every n along a stroke.
+// 1 is solid and is the default. A dotted stroke costs no more than the
+// solid one it replaces -- strictly fewer pixels are stored -- which is what
+// makes an authentic dot fade affordable at all (P18 M2). This is Dungeons
+// of Daggorath's `VECTOR.ASM:VECT30`; the ROM's fade table holds `VCTFAD`,
+// one less than this.
+static Result prim_setpendash(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval);
+    REQUIRE_ARGC(1);
+    REQUIRE_NUMBER(args[0], period);
+
+    // Rounded and clamped exactly as `setpensize` is, so the pair behaves the
+    // same way at both ends.
+    int n = (int)(period + 0.5f);
+    if (n < 1)
+    {
+        return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[0]));
+    }
+    if (n > MAX_PEN_DASH)
+    {
+        n = MAX_PEN_DASH;
+    }
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+    if (turtle && turtle->set_pen_dash)
+    {
+        for (int i = 0; i < active_count; i++)
+        {
+            select_turtle(turtle, active_set[i]);
+            turtle->set_pen_dash((uint8_t)n);
+        }
+        select_first_active(turtle);
+    }
+
+    return result_none();
+}
+
+// pendash - Output the current pen dash period
+static Result prim_pendash(Evaluator *eval, int argc, Value *args)
+{
+    UNUSED(eval); UNUSED(argc); UNUSED(args);
+
+    const LogoConsoleTurtle *turtle = get_turtle_ops();
+
+    uint8_t n = 1;
+    if (turtle && turtle->get_pen_dash)
+    {
+        n = turtle->get_pen_dash();
+    }
+
+    return result_ok(value_number((float)n));
+}
+
 // setbg - Set background color
 static Result prim_setbg(Evaluator *eval, int argc, Value *args)
 {
@@ -1537,14 +1591,61 @@ static Result prim_stamp(Evaluator *eval, int argc, Value *args)
     return result_none();
 }
 
-// write object - Draw text on the graphics screen at the turtle's position,
-// in the current pen colour, upright and left-to-right. The turtle does not
-// move (the horizontal-only cousin of UCB `label`). The argument is
-// formatted like `print`: lists lose their outer brackets.
+// write object              - draw in the pen colour, transparent
+// (write object fg)         - draw in `fg`, transparent
+// (write object fg bg)      - draw in `fg` on a cell filled with `bg`
+//
+// Draw text on the graphics screen at the turtle's position, upright and
+// left-to-right. The turtle does not move (the horizontal-only cousin of
+// UCB `label`). The argument is formatted like `print`: lists lose their
+// outer brackets.
+//
+// P18 M1 added the parenthesised forms. Transparent stays the default,
+// because `write`'s job is labelling a picture and an opaque default would
+// punch a rectangle through every existing use of it; the opaque form is
+// what lets a program draw a bar of text in inverse video, which is the
+// thing nothing else here can do (`pe write` does not erase, spaces erase
+// nothing, and `clean` is the only eraser for text in the picture).
+//
+// Colours follow `setpc`/`setbg` -- 0 to 255, with 255 the palette slot
+// holding the current background colour -- and not `settextcolor`'s 0-to-15
+// pair, because `write` is a graphics primitive. That makes "erase this
+// text" `(write :old 255 255)` with no new spelling invented.
+//
+// `primitive_register("write", 1, ...)` sets the arity for UNPARENTHESISED
+// calls only, so the registration does not move.
 static Result prim_write(Evaluator *eval, int argc, Value *args)
 {
     UNUSED(eval);
-    REQUIRE_ARGC(1);
+    if (argc < 1 || argc > 3)
+    {
+        return result_error_arg(argc < 1 ? ERR_NOT_ENOUGH_INPUTS : ERR_TOO_MANY_INPUTS,
+                                "write", NULL);
+    }
+
+    // A colour is a whole number in 0..255, checked the same way `over?`
+    // checks one. -1 stands for "the turtle's own pen colour" (fg) and "leave
+    // the cell alone" (bg); neither is spellable from Logo.
+    int fg = -1;
+    int bg = -1;
+    if (argc >= 2)
+    {
+        REQUIRE_NUMBER(args[1], fg_num);
+        if (fg_num < 0 || fg_num > 255 || fg_num != (float)(int)fg_num)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[1]));
+        }
+        fg = (int)fg_num;
+    }
+    if (argc == 3)
+    {
+        REQUIRE_NUMBER(args[2], bg_num);
+        if (bg_num < 0 || bg_num > 255 || bg_num != (float)(int)bg_num)
+        {
+            return result_error_arg(ERR_DOESNT_LIKE_INPUT, NULL, value_to_string(args[2]));
+        }
+        bg = (int)bg_num;
+    }
 
     // Format the argument like `print` into a fixed buffer. A word can be
     // blob-backed and longer than the buffer; format_value emits a word in a
@@ -1569,7 +1670,7 @@ static Result prim_write(Evaluator *eval, int argc, Value *args)
         for (int i = 0; i < active_count; i++)
         {
             select_turtle(turtle, active_set[i]);
-            turtle->draw_text(text);
+            turtle->draw_text(text, fg, bg);
         }
         select_first_active(turtle);
     }
@@ -2097,6 +2198,8 @@ void primitives_turtle_init(void)
     primitive_register("pc", 0, prim_pencolor);
     primitive_register("setpensize", 1, prim_setpensize);
     primitive_register("pensize", 0, prim_pensize);
+    primitive_register("setpendash", 1, prim_setpendash);
+    primitive_register("pendash", 0, prim_pendash);
     primitive_register("setbg", 1, prim_setbg);
     primitive_register("setbackground", 1, prim_setbg);
     primitive_register("background", 0, prim_background);

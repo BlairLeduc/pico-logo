@@ -602,10 +602,21 @@ void screen_gfx_set_point(float x, float y, uint8_t colour)
 }
 
 // Draw a string on the graphics canvas with its top-left at pixel (x, y),
-// upright and left-to-right, painting only each glyph's set pixels in
-// `colour` (the background shows through). Pixels that fall off-screen are
+// upright and left-to-right, in `colour`. Pixels that fall off-screen are
 // skipped. Backs the `write` primitive.
-void screen_gfx_text(int x, int y, const char *s, uint8_t colour)
+//
+// `background` chooses between the two cells this can paint (P18 M1):
+//   < 0  transparent -- only the pixels a glyph lights are stored, and the
+//        canvas shows through the rest. This is what `write` has always
+//        done and what a bare `write` still does.
+//   >= 0 opaque -- every pixel of the cell is stored, `colour` where the
+//        glyph bit is set and `background` where it is not, so a run of
+//        cells is a solid bar with no seam (the advance is GLYPH_WIDTH and
+//        the fill is GLYPH_HEIGHT rows, so cells tile exactly).
+// The dirty rectangle is the whole cell extent either way, which was
+// already true of the transparent path and is simply correct for the opaque
+// one.
+void screen_gfx_text(int x, int y, const char *s, uint8_t colour, int background)
 {
     if (!s || !*s)
     {
@@ -627,9 +638,18 @@ void screen_gfx_text(int x, int y, const char *s, uint8_t colour)
             for (int col = 0; col < GLYPH_WIDTH; col++)
             {
                 int px = x + col;
-                if ((bits & (0x80 >> col)) && px >= 0 && px < SCREEN_WIDTH)
+                if (px < 0 || px >= SCREEN_WIDTH)
+                {
+                    continue;
+                }
+                bool lit = (bits & (0x80 >> col)) != 0;
+                if (lit)
                 {
                     gfx_buffer[py * SCREEN_WIDTH + px] = colour;
+                }
+                else if (background >= 0)
+                {
+                    gfx_buffer[py * SCREEN_WIDTH + px] = (uint8_t)background;
                 }
             }
         }
@@ -700,7 +720,15 @@ void screen_gfx_reverse_point(float x, float y)
 
 // Draw a line in the graphics buffer using Bresenham's algorithm
 // This is a true integer-only Bresenham implementation for efficiency on the Pico
-void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse, int width)
+//
+// `dash` is the pen's dash period (P18 M2): the pen is put down on one point
+// in every `dash` along the stroke, so 1 is solid and is the default. This is
+// Dungeons of Daggorath's `VECTOR.ASM:VECT30` -- `DEC FADCNT / BNE VECT40`,
+// with FADCNT loaded from VCTFAD at the start of each vector -- so the
+// counter starts full and the FIRST point plotted is index `dash - 1`, then
+// every `dash` after it. A dashed stroke is never slower than the solid one
+// it replaces: it stores strictly fewer pixels.
+void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, bool reverse, int width, int dash)
 {
     // Convert float endpoints to integers (round to nearest)
     int ix1 = (int)(x1 + 0.5f);
@@ -763,7 +791,7 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
     // stroke is solid at every angle, with round caps and joins for free.
     const float pen_radius = width * 0.5f;
     const int pen_extent = (int)pen_radius;
-    #define STAMP(cx, cy) do { \
+    #define STAMP_NOW(cx, cy) do { \
         if (width <= 1) { \
             PLOT_PIXEL((cx), (cy)); \
         } else { \
@@ -771,6 +799,18 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
                 for (int _ox = -pen_extent; _ox <= pen_extent; ++_ox) \
                     if ((float)(_ox * _ox + _oy * _oy) <= pen_radius * pen_radius) \
                         PLOT_PIXEL((cx) + _ox, (cy) + _oy); \
+        } \
+    } while(0)
+
+    // The dash gate goes around the whole stamp, not around PLOT_PIXEL, so a
+    // dashed thick pen puts its disc down at the same intervals rather than
+    // dotting the inside of one.
+    const int dash_period = dash < 1 ? 1 : dash;
+    int dash_count = dash_period;
+    #define STAMP(cx, cy) do { \
+        if (--dash_count == 0) { \
+            dash_count = dash_period; \
+            STAMP_NOW((cx), (cy)); \
         } \
     } while(0)
 
@@ -808,6 +848,7 @@ void screen_gfx_line(float x1, float y1, float x2, float y2, uint8_t colour, boo
     }
 
     #undef STAMP
+    #undef STAMP_NOW
     #undef PLOT_PIXEL
 
     if (mark_x1 >= 0)

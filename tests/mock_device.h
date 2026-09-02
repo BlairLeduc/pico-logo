@@ -167,6 +167,7 @@ extern "C"
         float x2, y2;
         uint16_t colour;
         uint8_t pen_size;   // Pen width in pixels at the time the line was drawn
+        uint8_t pen_dash;   // Pen dash period at the time the line was drawn
     } MockLine;
 
     //
@@ -199,6 +200,7 @@ extern "C"
         LogoPen pen_state;
         uint16_t pen_colour;
         uint8_t pen_size;   // Pen width in pixels
+        uint8_t pen_dash;   // Pen dash period in pixels; 1 = solid
         bool visible;
         uint8_t shape;
         uint8_t rot_style;  // LogoRotationStyle
@@ -269,6 +271,7 @@ extern "C"
             LogoPen pen_state;               // Pen state (up/down/erase/reverse)
             uint16_t pen_colour;             // Current pen color
             uint8_t pen_size;                // Pen width in pixels
+            uint8_t pen_dash;                // Pen dash period; 1 = solid
             uint16_t bg_colour;              // Background color
             bool visible;                    // Is turtle visible?
             MockTurtleBoundaryMode boundary_mode;  // Fence/window/wrap
@@ -306,7 +309,11 @@ extern "C"
             int count;                 // Number of draw_text calls
             char last_text[WRITE_MAX_LEN]; // Last text drawn
             float last_x, last_y;      // Turtle position at draw time (Logo coords)
-            uint16_t last_colour;      // Pen colour at draw time
+            uint16_t last_colour;      // Glyph colour actually painted
+            // Cell background: -1 transparent (a bare `write` or
+            // `(write text fg)`), otherwise the colour the cell was filled
+            // with by `(write text fg bg)`. P18 M1.
+            int last_background;
             uint8_t last_turtle;       // Selected turtle at draw time
         } label;
 

@@ -2416,9 +2416,82 @@ void test_b32_body_of_600_lines_runs_each_line_once(void)
     b32_run_body_of_length(600, 600.0f);
 }
 
+//==========================================================================
+// P18 M0: the size of the procedure table.
+//
+// The ceiling has been hit repeatedly -- `logo/games/battlezone` defines
+// exactly 128, which was the whole table -- and the failure mode is what
+// makes it worth a test: `proc_define` returns false, the definition is
+// silently dropped, and the name that goes missing is the LAST `to` in the
+// file rather than the one that overflowed.
+//
+// The last slot is what these check.  A procedure defined into slot
+// MAX_PROCEDURES - 1 has to be findable, because `find_procedure_index_n`
+// is a linear scan and a table sized wrong by one is invisible until the
+// far end of it is asked for.
+//==========================================================================
+
+// Fill the table from empty with `count` procedures named fill.0 .. fill.N.
+// Returns the status of the last definition attempted.
+static Result fill_procedure_table(int count)
+{
+    Result r = run_string("erall");
+    TEST_ASSERT_TRUE(r.status == RESULT_NONE || r.status == RESULT_OK);
+
+    char text[64];
+    for (int i = 0; i < count; i++)
+    {
+        snprintf(text, sizeof(text), "to fill.%d\noutput %d\nend", i, i);
+        r = proc_define_from_text(text);
+        if (r.status == RESULT_ERROR)
+        {
+            break;
+        }
+    }
+    return r;
+}
+
+void test_the_procedure_table_holds_max_procedures_definitions(void)
+{
+    Result r = fill_procedure_table(MAX_PROCEDURES);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(RESULT_ERROR, r.status,
+        "the table refused a definition before MAX_PROCEDURES was reached");
+}
+
+void test_the_last_slot_in_the_procedure_table_is_reachable(void)
+{
+    fill_procedure_table(MAX_PROCEDURES);
+
+    // The linear scan has to walk the whole table to answer this one, and a
+    // procedure that was dropped on definition looks exactly like a name
+    // that was never defined.
+    char call[32];
+    snprintf(call, sizeof(call), "print fill.%d", MAX_PROCEDURES - 1);
+    reset_output();
+    Result r = run_string(call);
+    TEST_ASSERT_NOT_EQUAL(RESULT_ERROR, r.status);
+
+    char expected[16];
+    snprintf(expected, sizeof(expected), "%d\n", MAX_PROCEDURES - 1);
+    TEST_ASSERT_EQUAL_STRING(expected, output_buffer);
+}
+
+void test_one_procedure_past_the_table_is_out_of_space(void)
+{
+    Result r = fill_procedure_table(MAX_PROCEDURES + 1);
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_ERROR, r.status,
+        "the table accepted more than MAX_PROCEDURES definitions");
+    TEST_ASSERT_EQUAL(ERR_OUT_OF_SPACE, result_get_error_code(r));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
+
+    // P18 M0: the size of the procedure table
+    RUN_TEST(test_the_procedure_table_holds_max_procedures_definitions);
+    RUN_TEST(test_the_last_slot_in_the_procedure_table_is_reachable);
+    RUN_TEST(test_one_procedure_past_the_table_is_out_of_space);
 
     RUN_TEST(test_redefining_a_procedure_replaces_its_body);
 

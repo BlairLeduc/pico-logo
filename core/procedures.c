@@ -80,9 +80,16 @@ void procedures_init(void)
 }
 
 // Find procedure index, returns -1 if not found.
-// The table is small (MAX_PROCEDURES) but this runs for every unmatched
-// word token, so a cheap case-folded first-character check screens out
-// most slots before the full strcasecmp.
+// A linear scan over MAX_PROCEDURES slots, with a cheap case-folded
+// first-character check screening out most of them before the full
+// strcasecmp. It looks like a hot path and is not: `resolve_word`
+// (eval_expr.c) reaches it only on a memo miss and then calls
+// `remember_binding` -- including `remember_binding(memo, ATOM_BIND_NONE,
+// 0)` on the not-found path -- so the scan runs once per distinct interned
+// word for the life of the workspace, hits and misses alike, until a
+// mutator calls `invalidate_name_bindings`. That is why raising
+// MAX_PROCEDURES costs SRAM and nothing else, and why this needs no hash
+// where `find_global` has one.
 // `name` holds exactly `len` bytes and need not be NUL-terminated, so a
 // stored name matches only when it is `len` bytes long as well. Reading
 // `pname[len]` is in bounds for the same reason as in primitive_name_compare:

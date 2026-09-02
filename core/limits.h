@@ -23,10 +23,19 @@ extern "C" {
 
 // Maximum number of user-defined procedures (slots in `procedures[]`).
 //
+// COST: one slot is an 80-byte `UserProcedure` in .bss, 64 bytes of which
+// are `params[MAX_PROC_PARAMS]`, so this table is 15 KB on the target --
+// 5 KB more than the 128 it was, about +1 point of SRAM on all three
+// boards (P18 M0). Unlike `MAX_GLOBAL_VARIABLES` there is no
+// representation ceiling here -- a procedure index is a plain `int`, not
+// a `uint8_t` hash slot -- so this is purely a budget decision and can be
+// raised again. Lookup cost does not scale with it: see
+// `find_procedure_index_n`.
+//
 // OVERFLOW: `proc_define` returns `false` when no slot is available;
 // callers (`prim_define`, `proc_define_from_text`, the REPL `to ... end`
 // path) surface this as `ERR_OUT_OF_SPACE` via `error_context`.
-#define MAX_PROCEDURES 128
+#define MAX_PROCEDURES 192
 
 // Maximum parameters per procedure body. Bounds the per-procedure
 // `params[]` array and the per-call argument-collection arrays in
@@ -113,6 +122,12 @@ extern "C" {
 // a draw-time cap only (no persistent buffer). `setpensize` rounds its input
 // to an integer and clamps it to [1, MAX_PEN_SIZE].
 #define MAX_PEN_SIZE 32
+
+// Maximum pen dash period, in pixels along a stroke. `setpendash` rounds to
+// an integer and clamps to [1, MAX_PEN_DASH]; 1 is a solid pen. The ceiling
+// is the width of the `uint8_t` the device layer stores it in, which is also
+// what Dungeons of Daggorath's `VCTFAD` is.
+#define MAX_PEN_DASH 255
 
 // Maximum number of armed `when` demons. Each demon holds two node
 // references (a condition expression and an action list) plus a couple of
