@@ -17,7 +17,7 @@
 | Design | this document |
 | Measurement | `tests/logo/p17m0`, all board runs kept verbatim under [`measurements/`](measurements/). It writes its numbers **to a file**, because numbers on a display cannot be copied off it |
 | Generator | `scripts/gen_daggorath.py`, host-side, output written to `logo/games/daggdata` (§7.4, §11.2) |
-| Source of truth | `docs/DungeonsOfDaggorath/*.ASM` — the 1982 DynaMicro 6809 source, 9,866 lines, released with the grant of licence kept beside it as `grant_of_license.png`. **Every rule in this document cites the file and routine it came from.** Where this document and the ROM disagree, the ROM is right |
+| Source of truth | `docs/DungeonsOfDaggorath/*.ASM` — the 1982 DynaMicro 6809 source, 9,866 lines. **Every rule in this document cites the file and routine it came from.** Where this document and the ROM disagree, the ROM is right. Licensing is not a one-liner and an earlier draft of this row got it wrong: see [`PROVENANCE.md`](DungeonsOfDaggorath/PROVENANCE.md), which transcribes the 2002 grant verbatim and says plainly that it names an individual |
 
 | Depends on | **[P18](roadmap.md#p18--interpreter-work-for-dungeons-of-daggorath)** — five interpreter items this design asked for. Its M0–M2 (`MAX_PROCEDURES` 128 → 192, opaque `write`, `setpendash`) come **before** P17 M1; its M3 (arrays) and M4 (a sound glide) come **after** P17 M0 and M6 respectively, because those are the measurements that decide whether they are needed at all |
 
