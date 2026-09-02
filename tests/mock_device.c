@@ -146,6 +146,7 @@ static bool mock_turtle_move(float distance)
             line->y2 = new_y;
             line->colour = mock_state.turtle.pen_colour;
             line->pen_size = mock_state.turtle.pen_size;
+            line->pen_dash = mock_state.turtle.pen_dash;
         }
     }
     
@@ -168,6 +169,7 @@ static void turtle_slot_sync(void)
     t->visible = mock_state.turtle.visible;
     t->shape = mock_state.shape.current_shape;
     t->pen_size = mock_state.turtle.pen_size;
+    t->pen_dash = mock_state.turtle.pen_dash;
 }
 
 static void mock_turtle_select(uint8_t n)
@@ -188,6 +190,7 @@ static void mock_turtle_select(uint8_t n)
     mock_state.turtle.pen_state = t->pen_state;
     mock_state.turtle.pen_colour = t->pen_colour;
     mock_state.turtle.pen_size = t->pen_size;
+    mock_state.turtle.pen_dash = t->pen_dash;
     mock_state.turtle.visible = t->visible;
     mock_state.shape.current_shape = t->shape;
 }
@@ -206,6 +209,7 @@ static void mock_turtle_home(void)
             line->y2 = 0.0f;
             line->colour = mock_state.turtle.pen_colour;
             line->pen_size = mock_state.turtle.pen_size;
+            line->pen_dash = mock_state.turtle.pen_dash;
         }
     }
     
@@ -254,6 +258,7 @@ static bool mock_turtle_set_position(float x, float y)
             line->y2 = new_y;
             line->colour = mock_state.turtle.pen_colour;
             line->pen_size = mock_state.turtle.pen_size;
+            line->pen_dash = mock_state.turtle.pen_dash;
         }
     }
 
@@ -333,6 +338,16 @@ static void mock_turtle_set_pen_size(uint8_t size)
 static uint8_t mock_turtle_get_pen_size(void)
 {
     return mock_state.turtle.pen_size;
+}
+
+static void mock_turtle_set_pen_dash(uint8_t n)
+{
+    mock_state.turtle.pen_dash = n;
+}
+
+static uint8_t mock_turtle_get_pen_dash(void)
+{
+    return mock_state.turtle.pen_dash;
 }
 
 static void mock_turtle_set_visible(bool visible)
@@ -506,12 +521,18 @@ static void mock_turtle_stamp(void)
     }
 }
 
-static void mock_turtle_draw_text(const char *text)
+static void mock_turtle_draw_text(const char *text, int colour, int background)
 {
     mock_state.label.count++;
     mock_state.label.last_x = mock_state.turtle.x;
     mock_state.label.last_y = mock_state.turtle.y;
-    mock_state.label.last_colour = mock_state.turtle.pen_colour;
+    // The colour actually painted, with `write`'s "use the pen colour"
+    // sentinel already resolved -- the device is where that resolution
+    // happens, so this is what a test wants to read.
+    mock_state.label.last_colour = colour < 0
+        ? mock_state.turtle.pen_colour
+        : (uint16_t)colour;
+    mock_state.label.last_background = background;
     mock_state.label.last_turtle = mock_state.current_turtle;
     snprintf(mock_state.label.last_text, sizeof(mock_state.label.last_text), "%s", text ? text : "");
     record_command(MOCK_CMD_WRITE);
@@ -706,6 +727,8 @@ static const LogoConsoleTurtle mock_turtle_ops = {
     .get_pen_state = mock_turtle_get_pen_state,
     .set_pen_size = mock_turtle_set_pen_size,
     .get_pen_size = mock_turtle_get_pen_size,
+    .set_pen_dash = mock_turtle_set_pen_dash,
+    .get_pen_dash = mock_turtle_get_pen_dash,
     .set_visible = mock_turtle_set_visible,
     .get_visible = mock_turtle_get_visible,
     .dot = mock_turtle_dot,
@@ -1170,9 +1193,14 @@ void mock_device_reset(void)
     mock_state.turtle.pen_state = LOGO_PEN_DOWN;
     mock_state.turtle.pen_colour = 254;  // Default color (white)
     mock_state.turtle.pen_size = 1;    // Default single-pixel pen
+    mock_state.turtle.pen_dash = 1;    // Default solid pen
     mock_state.turtle.bg_colour = 0;   // Black background
     mock_state.turtle.visible = true;
     mock_state.turtle.boundary_mode = MOCK_BOUNDARY_WRAP;  // Default is wrap
+
+    // No `write` yet, so the cell background reads as transparent rather
+    // than as palette slot 0 (memset would leave it 0, a real colour).
+    mock_state.label.last_background = -1;
 
     mock_state.costume.snap_result = true;  // snap_costume succeeds by default
     costumes_clear();                       // Every shape slot starts empty
@@ -1187,6 +1215,7 @@ void mock_device_reset(void)
         mock_state.turtles[i].pen_state = LOGO_PEN_DOWN;
         mock_state.turtles[i].pen_colour = 254;
         mock_state.turtles[i].pen_size = 1;
+        mock_state.turtles[i].pen_dash = 1;
         mock_state.turtles[i].visible = (i == 0);
         mock_state.turtles[i].shape = 0;
         mock_state.turtles[i].rot_style = 0;  // LOGO_ROT_FIXED

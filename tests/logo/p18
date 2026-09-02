@@ -1,0 +1,237 @@
+; P18 -- the board half of M0, M1 and M2.
+;
+;   erall                   <-- REQUIRED, M0 counts the table
+;   load "p18
+;   p18
+;
+; The host tests prove the code: the table takes 192 definitions,
+; the opaque cell is filled to its edges, the dashed span is the
+; ROM's.  Three things they cannot prove, one per milestone, and
+; each is the reason its gate says "on a board":
+;
+;   M0  That the interpreter still STARTS.  192 procedure slots is
+;       5 KB more .bss, and the failure mode this number owns is
+;       an out-of-memory panic in `repl_init`, which no host test
+;       can reach because the host has no 512 KB of SRAM to run
+;       out of.  If you are reading this on a screen that half has
+;       already passed.  M0 then reads the ceiling back the only
+;       way a program can: by hitting it.
+;   M1  That an inverse bar of text LOOKS like one.  The cells
+;       tile with no seam in the buffer; whether the eye sees a
+;       bar or a row of boxes with hairlines between them is a
+;       photograph.
+;   M2  That the dashed pen reads as a fade.  The point of M2 is
+;       that Dungeons of Daggorath dims by dotting lines and not
+;       by greying them, so four periods side by side is the check
+;       that they ramp rather than jump.
+;
+; M0 GOES LAST ON PURPOSE.  Counting the table means filling it,
+; and a full table would stop everything after it from running.
+;
+; The numbers go to p18.txt as well as the screen, because numbers
+; on a display cannot be copied off it.
+
+
+; ------------------------------------------------------------------
+; M1 -- the inverse bar
+;
+; Draw something for the bar to cover, so "opaque" is a claim about
+; the picture rather than about an empty screen.
+; ------------------------------------------------------------------
+
+to p18.hatch
+  ; Strokes across the full width, so anything showing through a
+  ; text cell is obvious.
+  setpc 3
+  setpendash 1
+  repeat 17 [
+    pu (setpos -150 (100 - (repcount * 12))) pd
+    (setpos 150 (100 - (repcount * 12)))
+  ]
+end
+
+to p18.bar
+  cs
+  fullscreen
+  ht
+  p18.hatch
+
+  ; The transparent form over the hatching: the strokes must still
+  ; run between the letters.  This is what `write` has always done
+  ; and it has to be unchanged.
+  pu setpos [-150 40] pd
+  setpc 254
+  write [TRANSPARENT: hatching runs through]
+
+  ; The opaque form: a solid bar, black on white, with no hatching
+  ; left inside it and no hairline between one cell and the next.
+  pu setpos [-150 0] pd
+  (write [ INVERSE STATUS ROW. ANY SEAMS? ] 0 254)
+
+  ; And the eraser.  255 is the background colour, so fg and bg are
+  ; both it: the one way to take text out of a picture short of
+  ; `clean`.  What comes back must be background, not hatching --
+  ; the cell is filled, so what was inside it is gone for good.
+  pu setpos [-150 -40] pd
+  setpc 254
+  write [THIS LINE IS ABOUT TO GO]
+  wait 150
+  pu setpos [-150 -40] pd
+  (write [THIS LINE IS ABOUT TO GO] 255 255)
+end
+
+
+; ------------------------------------------------------------------
+; M2 -- the fade
+;
+; The same figure at four dash periods.  1 is the solid stroke every
+; existing program draws and has to be unchanged; 2, 3 and 4 are the
+; ramp.  Drawn as a row, so they are judged against each other and
+; not against a memory.
+; ------------------------------------------------------------------
+
+to p18.box :size
+  repeat 4 [fd :size rt 90]
+end
+
+to p18.fade
+  cs
+  fullscreen
+  ht
+  setpc 254
+  foreach [1 2 3 4] [[d]
+    setpendash :d
+    pu (setpos (-150 + ((:d - 1) * 76)) -30) pd
+    p18.box 60
+  ]
+  setpendash 1
+end
+
+
+; ------------------------------------------------------------------
+; M2 -- and the cost, which is the claim that made it worth building
+;
+; A dashed stroke stores strictly fewer pixels than the solid one it
+; replaces, so it must not be slower.  In Logo a dot is six
+; statements; this is one decrement in the rasteriser.  If the
+; dashed figure times SLOWER than the solid one the gate fails, and
+; the reason is in `screen_gfx_line` and not here.
+; ------------------------------------------------------------------
+
+; `ticks` is MILLISECONDS, so there is no unit to convert -- this outputs
+; the elapsed total and the report divides it by the stroke count.  (The
+; first draft of this copied p13m0's `/ 1000` believing it was us -> ms.
+; It is not: that script repeats 500 times over two strokes, so its 1000
+; is its own stroke count.  The board caught it, reporting 0.126 for what
+; was 126 ms.)
+to p18.time :d :reps
+  local "t
+  setpendash :d
+  pu setpos [-60 -60] pd
+  make "t ticks
+  repeat :reps [p18.box 120]
+  output ticks - :t
+end
+
+to p18.cost
+  cs
+  fullscreen
+  ht
+  setpc 254
+  setrefresh "manual
+  make "p18.reps 200
+  make "p18.strokes :p18.reps * 4
+  make "p18.solid p18.time 1 :p18.reps
+  clean
+  make "p18.dashed p18.time 4 :p18.reps
+  setpendash 1
+  setrefresh "auto
+  textscreen
+end
+
+
+; ------------------------------------------------------------------
+; M0 -- the table, read back by hitting it
+;
+; `define` a fresh name at a time until one fails; `catch "error`
+; makes the failure a value instead of a stop.
+;
+; WHAT THIS NUMBER IS AND IS NOT.  It is the slots that were FREE, so
+; it only adds up to the ceiling if this file is the only thing in the
+; workspace -- which is what the `erall` at the top is for, and the
+; first board run skipped it and reported 163 free, a ceiling 19 short
+; of 192 that read like a failure and was nineteen other procedures.
+; So the report derives that residue instead of assuming it away.
+;
+; The ceiling itself is NOT what this proves: three host tests pin it
+; against `MAX_PROCEDURES` directly.  What only a board can show is
+; that `repl_init` survives the extra 5 KB of .bss, and running at all
+; is the whole of that.
+; ------------------------------------------------------------------
+
+to p18.fill.loop :n
+  repeat :n [
+    define (word "p18.f repcount) [[] [output 1]]
+    make "made repcount
+  ]
+end
+
+to p18.count
+  local "made
+  make "made 0
+  catch "error [p18.fill.loop 300]
+  output :made
+end
+
+
+; ------------------------------------------------------------------
+; The report
+; ------------------------------------------------------------------
+
+to p18.report
+  pr [P18 M0 M1 M2 on a board]
+  pr []
+  pr se [free slots the table gave:] :p18.held
+  pr se [this file defines:] 10
+  pr se [others already loaded:] (182 - :p18.held)
+  pr [that last is 0 after a clean erall.]
+  pr [It is not the ceiling: 192 is pinned]
+  pr [by the host tests.  Booting at all is]
+  pr [what only a board can show.]
+  pr []
+  pr se [strokes timed, 120 px each:] :p18.strokes
+  pr se [solid total ms:] :p18.solid
+  pr se [dashed total ms:] :p18.dashed
+  pr se [solid us each:] ((:p18.solid * 1000) / :p18.strokes)
+  pr se [dashed us each:] ((:p18.dashed * 1000) / :p18.strokes)
+  pr [dashed must not exceed solid.]
+  pr []
+end
+
+to p18
+  cs
+  textscreen
+  pr [P18 M1: the inverse bar.]
+  pr [Look for seams between cells.]
+  wait 120
+  p18.bar
+  wait 400
+
+  pr [P18 M2: the fade, 1 2 3 4.]
+  wait 90
+  p18.fade
+  wait 400
+
+  p18.cost
+
+  ; Last: this fills the procedure table.
+  make "p18.held p18.count
+
+  open "p18.txt
+  setwrite "p18.txt
+  p18.report
+  setwrite []
+  close "p18.txt
+  p18.report
+  pr [Also written to p18.txt]
+end

@@ -1597,10 +1597,10 @@ void test_the_game_sets_up_in_window_mode_and_flips(void)
         "the turtle is showing, so the man is drawn twice");
 }
 
-// Section 18's first ceiling.  MAX_PROCEDURES is 128, Battlezone defines
-// exactly 128 and the overflow is SILENT -- the last `to` in the file goes
-// missing -- so this game's budget is 100 and the count is named rather than
-// discovered at M6.
+// Section 18's first ceiling.  MAX_PROCEDURES was 128 when this was written
+// (192 since P18 M0), Battlezone defines exactly 128 and the overflow is
+// SILENT -- the last `to` in the file goes missing -- so this game's budget is
+// 100 and the count is named rather than discovered at M6.
 void test_the_game_is_inside_the_procedure_ceiling(void)
 {
     // Counted out of the file rather than out of the workspace: there is no

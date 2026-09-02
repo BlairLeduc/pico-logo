@@ -1360,9 +1360,10 @@ void test_the_script_puts_the_screen_back(void)
 }
 
 // Section 18's first ceiling, named rather than discovered late: MAX_PROCEDURES
-// is a hard 128, Battlezone defines exactly 128, and the failure mode is
-// silent -- the LAST definition in the file goes missing. The game's budget is
-// 100; the harness has to leave room to be loaded beside nothing at all.
+// is a hard limit (128 when this was written, 192 since P18 M0), Battlezone
+// defines exactly 128, and the failure mode is silent -- the LAST definition in
+// the file goes missing. The game's budget is 100; the harness has to leave room
+// to be loaded beside nothing at all.
 void test_the_harness_is_inside_the_procedure_ceiling(void)
 {
     // Counted out of the file rather than out of the workspace: there is no

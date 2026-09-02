@@ -2297,6 +2297,157 @@ void test_write_fans_out_over_active_set(void)
     TEST_ASSERT_EQUAL(2, writes);
 }
 
+//==========================================================================
+// P18 M1: the parenthesised forms of `write`.
+//
+// The table the milestone was specified from:
+//
+//   write text            glyph in the pen colour, cell untouched
+//   (write text fg)       glyph in fg,             cell untouched
+//   (write text fg bg)    glyph in fg,             cell filled with bg
+//
+// Transparent stays the default because `write`'s job is labelling a picture;
+// an opaque default would punch a rectangle through every existing use of it.
+// What the cell actually looks like is a pixel claim and is made in
+// tests/test_screen_text.c against the real rasteriser; these check that the
+// primitive hands the device the right numbers.
+//==========================================================================
+
+void test_write_is_transparent_by_default(void)
+{
+    Result r = run_string("setpc 4 write \"hello");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_MESSAGE(-1, mock_device_get_state()->label.last_background,
+        "a bare `write` asked the device to fill the cell");
+}
+
+void test_write_with_a_colour_overrides_the_pen_and_stays_transparent(void)
+{
+    Result r = run_string("setpc 4 (write \"hello 7)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL_STRING("hello", state->label.last_text);
+    TEST_ASSERT_EQUAL(7, state->label.last_colour);
+    TEST_ASSERT_EQUAL_MESSAGE(-1, state->label.last_background,
+        "the two-input form filled the cell");
+    // And it is an override, not a `setpc`: the pen is where it was.
+    TEST_ASSERT_EQUAL_STRING("4", value_to_string(eval_string("pencolor").value));
+}
+
+void test_write_with_a_background_fills_the_cell(void)
+{
+    Result r = run_string("(write \"hello 0 254)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(0, state->label.last_colour);
+    TEST_ASSERT_EQUAL(254, state->label.last_background);
+}
+
+// 255 is the palette slot holding the current background colour, which is
+// what makes `(write :old 255 255)` the eraser for text in a picture -- no
+// new spelling invented.
+void test_write_accepts_the_background_colour_sentinel(void)
+{
+    Result r = run_string("(write \"hello 255 255)");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(255, state->label.last_colour);
+    TEST_ASSERT_EQUAL(255, state->label.last_background);
+}
+
+void test_write_rejects_a_colour_outside_the_palette(void)
+{
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("(write \"hello 256)").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("(write \"hello -1)").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("(write \"hello 4 300)").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("(write \"hello 1.5)").status);
+}
+
+void test_write_rejects_four_inputs(void)
+{
+    Result r = run_string("(write \"hello 1 2 3)");
+    TEST_ASSERT_EQUAL(RESULT_ERROR, r.status);
+    TEST_ASSERT_EQUAL(ERR_TOO_MANY_INPUTS, result_get_error_code(r));
+}
+
+// The colours are per call, not per turtle, but the transparent default still
+// has to take each turtle's OWN pen colour -- which is why the sentinel is
+// resolved in the device and not in the primitive.
+void test_a_bare_write_takes_each_turtles_own_pen_colour(void)
+{
+    run_string("tell 1 setpc 3");
+    run_string("tell 5 setpc 9");
+    Result r = run_string("tell [1 5] write \"x");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+
+    // The last of the two writes is turtle 5's, in turtle 5's colour.
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(5, state->label.last_turtle);
+    TEST_ASSERT_EQUAL(9, state->label.last_colour);
+}
+
+//==========================================================================
+// P18 M2: setpendash / pendash
+//==========================================================================
+
+void test_pendash_starts_solid(void)
+{
+    TEST_ASSERT_EQUAL_STRING("1", value_to_string(eval_string("pendash").value));
+}
+
+void test_setpendash_round_trips(void)
+{
+    Result r = run_string("setpendash 4");
+    TEST_ASSERT_EQUAL(RESULT_NONE, r.status);
+    TEST_ASSERT_EQUAL_STRING("4", value_to_string(eval_string("pendash").value));
+}
+
+// Rounded and clamped exactly as `setpensize` is, so the pair behaves the
+// same way at both ends.
+void test_setpendash_rounds_and_clamps(void)
+{
+    run_string("setpendash 3.6");
+    TEST_ASSERT_EQUAL_STRING("4", value_to_string(eval_string("pendash").value));
+
+    run_string("setpendash 1000");
+    TEST_ASSERT_EQUAL_STRING("255", value_to_string(eval_string("pendash").value));
+}
+
+void test_setpendash_rejects_less_than_one(void)
+{
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setpendash 0").status);
+    TEST_ASSERT_EQUAL(RESULT_ERROR, run_string("setpendash -2").status);
+}
+
+// The dash is pen state, so it follows the pen through `tell` the way the
+// colour and the size do.
+void test_setpendash_is_per_turtle(void)
+{
+    run_string("tell 1 setpendash 4");
+    run_string("tell 2 setpendash 9");
+
+    run_string("tell 1");
+    TEST_ASSERT_EQUAL_STRING("4", value_to_string(eval_string("pendash").value));
+    run_string("tell 2");
+    TEST_ASSERT_EQUAL_STRING("9", value_to_string(eval_string("pendash").value));
+}
+
+// And it reaches the stroke: the mock records the dash each line was drawn
+// with, so a change of pen shows up in the drawing rather than only in the
+// operation that reports it.
+void test_a_stroke_carries_the_dash_the_pen_had(void)
+{
+    run_string("setpendash 4 fd 10 setpendash 1 fd 10");
+
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL(2, state->graphics.line_count);
+    TEST_ASSERT_EQUAL(4, state->graphics.lines[0].pen_dash);
+    TEST_ASSERT_EQUAL(1, state->graphics.lines[1].pen_dash);
+}
+
 void test_snapsh_captures_for_first_active(void)
 {
     Result r = run_string("tell [2 5] snapsh 3 16 24");
@@ -2893,6 +3044,23 @@ int main(void)
     RUN_TEST(test_write_does_not_move_turtle);
     RUN_TEST(test_write_draws_max_length_word);
     RUN_TEST(test_write_fans_out_over_active_set);
+    // P18 M1: the parenthesised forms of `write`
+    RUN_TEST(test_write_is_transparent_by_default);
+    RUN_TEST(test_write_with_a_colour_overrides_the_pen_and_stays_transparent);
+    RUN_TEST(test_write_with_a_background_fills_the_cell);
+    RUN_TEST(test_write_accepts_the_background_colour_sentinel);
+    RUN_TEST(test_write_rejects_a_colour_outside_the_palette);
+    RUN_TEST(test_write_rejects_four_inputs);
+    RUN_TEST(test_a_bare_write_takes_each_turtles_own_pen_colour);
+
+    // P18 M2: setpendash / pendash
+    RUN_TEST(test_pendash_starts_solid);
+    RUN_TEST(test_setpendash_round_trips);
+    RUN_TEST(test_setpendash_rounds_and_clamps);
+    RUN_TEST(test_setpendash_rejects_less_than_one);
+    RUN_TEST(test_setpendash_is_per_turtle);
+    RUN_TEST(test_a_stroke_carries_the_dash_the_pen_had);
+
     RUN_TEST(test_snapsh_captures_for_first_active);
     RUN_TEST(test_snapsh_validates_inputs);
     RUN_TEST(test_snapsh_reports_full_pool);

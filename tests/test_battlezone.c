@@ -5835,20 +5835,21 @@ void test_a_frame_with_each_kind_runs(void)
 // table, so leaving slots free is the point rather than slack to be spent.
 #define GLOBAL_HEADROOM 16
 
-// AND THE OTHER TABLE, WHICH HAS NO MARGIN LEFT AT ALL.  `procedures[]` is
-// `MAX_PROCEDURES` slots and this file defines exactly that many, which was
-// found the way these things are always found: a 129th `to` was added during
-// the polish pass and the test suite failed on the LAST procedure in the file
-// rather than on the new one.  That is what overflow looks like from the
-// outside -- `proc_define` returns false, the definition is dropped, and the
-// name that goes missing is whichever one happened to be at the end.
+// AND THE OTHER TABLE, WHICH THIS FILE ONCE FILLED EXACTLY.  `procedures[]`
+// is `MAX_PROCEDURES` slots and this file defines 128, which was the whole
+// table when it was written, and it was found the way these things are always
+// found: a 129th `to` was added during the polish pass and the test suite
+// failed on the LAST procedure in the file rather than on the new one.  That
+// is what overflow looks like from the outside -- `proc_define` returns false,
+// the definition is dropped, and the name that goes missing is whichever one
+// happened to be at the end.
 //
-// So the guard reads the source rather than the workspace, and it names the
-// count in its message: the next person to want a procedure here has to take
-// one back or raise the cap, and raising it costs SRAM on a board where SRAM
-// is the scarce thing.  Folding a switch into arithmetic, the way
-// `hud.every`'s `15 - :hud.every` does, is the cheap way out and it is the
-// one this file took.
+// P18 M0 raised the cap to 192 -- this game hitting it repeatedly is what
+// asked for the raise -- so there is margin again, and it cost SRAM on a
+// board where SRAM is the scarce thing.  The guard stays symbolic and reads
+// the source rather than the workspace, so it moves with the cap.  Folding a
+// switch into arithmetic, the way `hud.every`'s `15 - :hud.every` does, is
+// still the cheap way out and it is the one this file took.
 void test_the_game_fits_the_procedure_table(void)
 {
     FILE *f = fopen(BATTLEZONE_SOURCE, "rb");

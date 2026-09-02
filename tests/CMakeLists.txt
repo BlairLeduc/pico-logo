@@ -246,6 +246,27 @@ target_include_directories(test_screen_pen PRIVATE
 target_link_libraries(test_screen_pen PRIVATE m)
 add_test(NAME test_screen_pen COMMAND test_screen_pen)
 
+# What `write` puts on the canvas, transparent and opaque (P18 M1). Same shape
+# as test_screen_pen: the real screen.c against fake_lcd.c, so the test reads
+# the pixels screen_gfx_text actually wrote and the pixels that reached the
+# panel, which is the only way to check the dirty rectangle.
+add_executable(test_screen_text
+    test_screen_text.c
+    fake_lcd.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/screen.c
+    ${CMAKE_SOURCE_DIR}/devices/picocalc/dirty_tiles.c
+    ${CMAKE_SOURCE_DIR}/devices/stream.c
+    unity.c
+)
+target_include_directories(test_screen_text PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+target_link_libraries(test_screen_text PRIVATE m)
+add_test(NAME test_screen_text COMMAND test_screen_text)
+
 # Where the text screen's lines are in split mode (B49). Same shape as
 # test_screen_refresh: the real screen.c against fake_lcd.c, which records the
 # text plane so a test can see which LCD row a write landed on.

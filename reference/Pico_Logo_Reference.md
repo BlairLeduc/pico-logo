@@ -1655,6 +1655,28 @@ A pen wider than one pixel draws by stamping a filled disc at each point along t
 ```
 
 
+## setpendash
+
+setpendash _period_  
+
+`command`
+
+The `setpendash` command makes the pen dashed: it puts the pen down on one point in every _period_ along a line, where _period_ is a whole number of 1 or more. The value is rounded to the nearest whole number and clamped to a maximum of 255. When you start up Logo, the pen dash is 1, which puts the pen down at every point and draws a solid line.
+
+A dashed line is not slower than a solid one - it puts fewer pixels on the screen, not more - so drawing with a dashed pen is a way to make a picture look faint that costs nothing. The counter starts again at the beginning of each line, so the first dot of a line is _period_ points along it.
+
+The dash applies to lines the turtle draws as it moves and to [`arc`](#arc). It does not apply to [`dot`](#dot), [`fill`](#fill), [`write`](#write) or [`stamp`](#stamp), which put the pen down once rather than draw along a line. It works together with [`setpensize`](#setpensize): a wide dashed pen stamps its disc at the same spacing.
+
+**Example**:
+
+```logo
+; A faint square, drawn with one dot in every four
+?setpendash 4
+?repeat 4 [fd 60 rt 90]
+?setpendash 1              ; solid again
+```
+
+
 ## settextcolor (settc)
 
 settextcolor [_foreground_ _background_]  
@@ -1862,6 +1884,23 @@ pensize
 ```
 
 
+## pendash
+
+pendash  
+
+`operation`
+
+`pendash` outputs a number representing the current dash period of the pen, in points along a line. When the turtle first starts up, `pendash` outputs 1, which is a solid pen.
+
+**Example**:
+
+```logo
+?setpendash 4
+?pr pendash
+4
+```
+
+
 ## textcolor (tc)
 
 textcolor  
@@ -1958,19 +1997,27 @@ stamp
 
 ## write
 
-write _object_
+write _object_  
+(write _object_ _colour_)  
+(write _object_ _colour_ _background_)
 
 `command`
 
 `write` draws _object_ as text on the graphics screen at the turtle's position, in the current pen colour. The text is always upright and reads left to right: it begins at the turtle's x and is centred vertically on the turtle's y, so the turtle sits at the middle of the first letter's left edge. The turtle does not move and its heading is ignored. The letters become part of the drawing: they stay when the turtle walks away, and [`savepic`](#savepic) saves them. _object_ is written the same way [`print`](#print-pr) writes it, so a list loses its outer brackets and numbers appear in their usual form. Each turtle you are talking to writes at its own position.
+
+Ordinarily `write` lights only the pixels the letters themselves are made of, and whatever was already on the screen shows through between them. Given a _background_, it fills the whole of each letter's cell instead: the letter in _colour_ and the rest of the cell in _background_. The cells sit side by side with no gap, so a line of text written this way is a solid bar - which is how you draw a status line in inverse video, and the only way to cover something already drawn with text.
+
+_colour_ and _background_ are colour numbers between 0 and 255, the same numbers [`setpc`](#setpc-setpencolor) uses, where 255 is the current background colour. So `(write :old 255 255)` erases text you wrote earlier, which nothing else but [`clean`](#clean) can do: [`penerase`](#penerase-pe) does not erase writing, and writing spaces over it erases nothing.
 
 **Example**:
 
 ```logo
 ?setpc 2
 ?write [Score: 100]        ; label the picture
-?pu setxy 0 60 pd
+?pu setpos [0 60] pd
 ?write count [a b c]       ; writes 3
+?pu setpos [-100 -80] pd
+?(write [ PAUSED ] 0 254)  ; black on white: an inverse bar
 ```
 
 

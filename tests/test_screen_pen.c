@@ -79,7 +79,7 @@ static int cap_width_above(int cx, int top, int k)
 void test_a_wide_pens_cap_is_round_and_does_not_square_off_the_stroke(void)
 {
     const int cx = 100, top = 100, bottom = 120;
-    screen_gfx_line((float)cx, (float)top, (float)cx, (float)bottom, INK, false, 8);
+    screen_gfx_line((float)cx, (float)top, (float)cx, (float)bottom, INK, false, 8, 1);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(9, cap_width_above(cx, top, 0),
         "an 8-wide pen is not nine pixels across its own stroke");
@@ -103,7 +103,7 @@ void test_a_wide_pens_cap_is_round_and_does_not_square_off_the_stroke(void)
 void test_pen_3_is_an_exact_square_brush(void)
 {
     const int cx = 100, top = 100, bottom = 113;
-    screen_gfx_line((float)cx, (float)top, (float)cx, (float)bottom, INK, false, 3);
+    screen_gfx_line((float)cx, (float)top, (float)cx, (float)bottom, INK, false, 3, 1);
 
     for (int y = top - 1; y <= bottom + 1; y++)
     {
@@ -139,7 +139,7 @@ void test_three_pen_3_strokes_cover_an_8_by_16_exactly(void)
     for (int i = 0; i < 3; i++)
     {
         float cx = (float)(x0 + at[i]);
-        screen_gfx_line(cx, (float)(y0 + 1), cx, (float)(y0 + 14), INK, false, 3);
+        screen_gfx_line(cx, (float)(y0 + 1), cx, (float)(y0 + 14), INK, false, 3, 1);
     }
 
     for (int y = y0; y < y0 + 16; y++)
@@ -163,9 +163,160 @@ void test_three_pen_3_strokes_cover_an_8_by_16_exactly(void)
         }
 }
 
+//==========================================================================
+// P18 M2: the dashed pen.
+//
+// `setpendash n` puts the pen down on one point in every n along a stroke.
+// This is Dungeons of Daggorath's `VECTOR.ASM:VECT30` -- `DEC FADCNT / BNE
+// VECT40`, with FADCNT loaded from VCTFAD at the head of each vector -- so
+// the counter starts FULL and the first point plotted is index n - 1, not
+// index 0.  That off-by-one is the whole of the compatibility claim: get it
+// backwards and the fade is a pixel out of phase with the ROM's everywhere.
+//
+// The spans below are hand-computed from that rule rather than read off the
+// implementation.
+//==========================================================================
+
+// Count the inked pixels in a box, so "fewer pixels than solid" is a number.
+static int inked_in(int x0, int y0, int x1, int y1)
+{
+    int n = 0;
+    for (int y = y0; y <= y1; y++)
+        for (int x = x0; x <= x1; x++)
+            if (inked(x, y))
+                n++;
+    return n;
+}
+
+// A DASH OF 1 IS SOLID AND IS THE DEFAULT.  The stroke every existing program
+// draws has to be byte-for-byte what it was.
+void test_a_dash_of_one_is_a_solid_stroke(void)
+{
+    const int cx = 100, top = 100, bottom = 120;
+    screen_gfx_line((float)cx, (float)top, (float)cx, (float)bottom, INK, false, 1, 1);
+
+    for (int y = top; y <= bottom; y++)
+    {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "a solid pen skipped %d,%d", cx, y);
+        TEST_ASSERT_TRUE_MESSAGE(inked(cx, y), msg);
+    }
+}
+
+// THE HAND-COMPUTED SPAN, on the Y-driving branch.  y = 100 to 120 is 21
+// points, indices 0..20.  With a period of 4 the counter reaches zero at
+// indices 3, 7, 11, 15 and 19 -- so y = 103, 107, 111, 115, 119, and nothing
+// else.  Note that neither end of the stroke is plotted: the ROM does not
+// special-case them and nor does this.
+void test_a_dashed_vertical_stroke_plots_the_roms_span(void)
+{
+    const int cx = 100, top = 100, bottom = 120;
+    screen_gfx_line((float)cx, (float)top, (float)cx, (float)bottom, INK, false, 1, 4);
+
+    static const int expect[5] = { 103, 107, 111, 115, 119 };
+    for (int y = top; y <= bottom; y++)
+    {
+        bool want = false;
+        for (int i = 0; i < 5; i++)
+            if (expect[i] == y)
+                want = true;
+
+        char msg[80];
+        snprintf(msg, sizeof(msg), "dash 4 got %d,%d wrong", cx, y);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(want ? 1 : 0, inked(cx, y) ? 1 : 0, msg);
+    }
+}
+
+// THE SAME RULE ON THE X-DRIVING BRANCH, which is a separate loop in
+// screen_gfx_line and could easily have been given the counter and not the
+// reset, or neither.
+void test_a_dashed_horizontal_stroke_plots_the_roms_span(void)
+{
+    const int cy = 100, left = 200, right = 220;
+    screen_gfx_line((float)left, (float)cy, (float)right, (float)cy, INK, false, 1, 4);
+
+    static const int expect[5] = { 203, 207, 211, 215, 219 };
+    for (int x = left; x <= right; x++)
+    {
+        bool want = false;
+        for (int i = 0; i < 5; i++)
+            if (expect[i] == x)
+                want = true;
+
+        char msg[80];
+        snprintf(msg, sizeof(msg), "dash 4 got %d,%d wrong", x, cy);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(want ? 1 : 0, inked(x, cy) ? 1 : 0, msg);
+    }
+}
+
+// THE COUNTER STARTS AGAIN AT EACH STROKE, so a dashed figure is drawn the
+// same way whichever order its sides go down -- and, less obviously, so a
+// stroke of fewer than `dash` points draws nothing at all.  That is the ROM's
+// behaviour and it is what makes VCTFAD == $FF mean "invisible".
+void test_a_stroke_shorter_than_the_dash_period_draws_nothing(void)
+{
+    const int cx = 100, top = 100, bottom = 102;   // three points
+    screen_gfx_line((float)cx, (float)top, (float)cx, (float)bottom, INK, false, 1, 8);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, inked_in(cx - 2, top - 2, cx + 2, bottom + 2),
+        "a stroke shorter than its dash period put pixels on the screen");
+}
+
+// A DASHED STROKE IS NOT SLOWER THAN THE SOLID ONE IT REPLACES: it stores
+// strictly fewer pixels.  That is the whole reason this is worth having --
+// dotting a line in Logo costs six statements a dot, and dotting it in the
+// rasteriser costs one decrement.
+void test_a_dashed_stroke_stores_fewer_pixels_than_a_solid_one(void)
+{
+    const int cx = 100, top = 100, bottom = 120;
+
+    screen_gfx_line((float)cx, (float)top, (float)cx, (float)bottom, INK, false, 1, 1);
+    int solid = inked_in(cx - 1, top - 1, cx + 1, bottom + 1);
+
+    screen_gfx_clear();
+    screen_gfx_line((float)cx, (float)top, (float)cx, (float)bottom, INK, false, 1, 4);
+    int dashed = inked_in(cx - 1, top - 1, cx + 1, bottom + 1);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(21, solid, "the solid stroke is not 21 points long");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, dashed, "the dashed stroke is not five dots");
+}
+
+// AND IT COMPOSES WITH THE PEN SIZE: the gate is around the whole stamp, so a
+// wide dashed pen puts its disc down at the same spacing rather than dotting
+// the inside of one disc.  Pen 3 is the exact 3 x 3 square (above), so each
+// dot of it is nine pixels and they are far enough apart not to touch.
+void test_a_wide_dashed_pen_stamps_whole_discs(void)
+{
+    const int cx = 100, top = 100, bottom = 120;
+    screen_gfx_line((float)cx, (float)top, (float)cx, (float)bottom, INK, false, 3, 8);
+
+    // Indices 7 and 15 of 0..20, so y = 107 and 115, each a full 3 x 3.
+    static const int centres[2] = { 107, 115 };
+    for (int i = 0; i < 2; i++)
+        for (int y = centres[i] - 1; y <= centres[i] + 1; y++)
+            for (int x = cx - 1; x <= cx + 1; x++)
+            {
+                char msg[80];
+                snprintf(msg, sizeof(msg), "the disc at y=%d is missing %d,%d",
+                         centres[i], x, y);
+                TEST_ASSERT_TRUE_MESSAGE(inked(x, y), msg);
+            }
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2 * 9, inked_in(cx - 2, top - 2, cx + 2, bottom + 2),
+        "a pen-3 dashed stroke is not exactly two 3 x 3 discs");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
+
+    // P18 M2: the dashed pen
+    RUN_TEST(test_a_dash_of_one_is_a_solid_stroke);
+    RUN_TEST(test_a_dashed_vertical_stroke_plots_the_roms_span);
+    RUN_TEST(test_a_dashed_horizontal_stroke_plots_the_roms_span);
+    RUN_TEST(test_a_stroke_shorter_than_the_dash_period_draws_nothing);
+    RUN_TEST(test_a_dashed_stroke_stores_fewer_pixels_than_a_solid_one);
+    RUN_TEST(test_a_wide_dashed_pen_stamps_whole_discs);
     RUN_TEST(test_a_wide_pens_cap_is_round_and_does_not_square_off_the_stroke);
     RUN_TEST(test_pen_3_is_an_exact_square_brush);
     RUN_TEST(test_three_pen_3_strokes_cover_an_8_by_16_exactly);
