@@ -44,6 +44,11 @@ Companion documents (everything in `docs/`):
   tree whose *cabinet* was a raster machine (design drafted 2026-08-28, gated
   on its own M0 measurement). It also carries the adoption of `say`, moved here
   from P16's M4 on 2026-08-29, since the game is where that work happens.
+- [`daggorath-design.md`](daggorath-design.md) — P17 Dungeons of Daggorath, a
+  faithful port from the 1982 6809 source kept in `docs/DungeonsOfDaggorath/`
+  (design drafted 2026-09-02, gated on its own M0 measurement). The first game
+  in the tree that is *turn driven* rather than a frame loop, and the first
+  whose renderer is 2D outlines scaled by distance rather than a projection.
 - [`say-design.md`](say-design.md) — P16 `say`, a formant speech synthesizer
   and the six primitives over it (**done 2026-08-29**: M0–M3 built, all four
   gates passed). Asked for by P15 §14.3, which deliberately did not block on
@@ -74,6 +79,8 @@ Companion documents (everything in `docs/`):
 | `localmake` | UCB | done | Landed 2026-07-11; `local` + `make` in one step |
 | `tan`, two-input `(arctan x y)` | UCB | done | Landed 2026-07-11; two-input `arctan` is `atan2` |
 | `hw.cpu` / `hw.setcpu` | none (RP2350-specific) | done | Landed 2026-08-23 as `hw.frequency`/`hw.setfrequency` taking MHz, **renamed and narrowed to two named clocks the same day** once the sweep had shown there is no third worth having: `"normal` is the stock 150 MHz and `"fast` is 300. §12.3.1a is the reason — the LCD's SPI prescaler divides clk_peri by an even number, so only clocks reaching the panel's 75 MHz exactly keep the display at full speed (150 → /2, 300 → /4), while **200 gives 50 MHz and 250 gives 62.5**: both make the interpreter faster and the display slower, and 200 is worth 0.3 ms a frame against 300's 17.5. A number invited those; a word cannot express them, and the refuse-rather-than-round machinery the numeric form needed goes with it. `hw.cpu` still **reads the hardware** rather than remembering, so a change the board refused cannot read back as an overclock that bought nothing. **The device layer is unchanged and is still most of the work**: `set_cpu_khz` stays in kHz because that is the hardware's unit, and it is the layer that deals with the core rail, the LCD divisor (`clk_peri` does *not* follow `clk_sys` — `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK`), the sound engine's mix rate (`sound_reclock`) and the cyw43 PIO bus, which is torn down and rebuilt around the change so the radio may be up and stays up. Asked for by [P13](#p13--battlezone-design-first) M0, where the frame divides into a present that is wire-bound and a body that is nothing but interpretation. 9 primitive tests, 4 harness tests |
+| `(write text fg)` / `(write text fg bg)` | none (the parenthesised form is this dialect's own idiom) | todo | [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M1. Opaque text cells, so a program can draw a filled status bar and overwrite text in the picture. Asked for by [P17](#p17--dungeons-of-daggorath-design-first) §4.1b(i), which cannot draw the CoCo's inverse status row without it |
+| `setpendash` / `pendash` | FMSLogo (`setpenpattern`, richer) | todo | [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M2. Plot one pixel in every _n_ along a stroke; 1 is solid and the default. One decrement beside `screen_gfx_line`'s existing `PLOT_PIXEL` — literally `VECTOR.ASM`'s `VECT30`, which is what [P17](#p17--dungeons-of-daggorath-design-first) §8 is a port of. Makes a dotted stroke cost the same as a solid one, which turns P17's authentic dot fade from an expensive option into the default |
 | `min`, `max` | UCB, FMSLogo | todo | Absent from the reference entirely. Clamping is three statements without them and one with, and every dialect has them. Raised by [P13](#p13--battlezone-design-first) §13 L1 as a user rather than as a reason — worth taking on its own merits |
 | `modulo` (floor-division sign) | UCB | done | Landed 2026-07-11; sign of divisor, distinct from `remainder` |
 | `runresult` | UCB | done | Landed 2026-07-11; new `OP_RUNRESULT` op; outputs `[value]` or `[]` |
@@ -98,7 +105,7 @@ Companion documents (everything in `docs/`):
 | Non-blocking `wifi.start` + `wifi.status` | done | Landed 2026-07-21; a startup file reaches the prompt immediately and a `when [wifi?] [network.ntp ...]` demon does the follow-up. Independent of P6 — `launch-design.md` never cited WiFi as a motivating case |
 | HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | done | M0–M5 implemented, merged to `main` (#108, 2026-07-16): mDNS + `wifi.hostname`/`wifi.sethostname`, TCP server ops, demon-driven pump/parser, handler surface + `http.element`, `webturtle` example, file transfer. Browser + mDNS hardware-validated; `curl -T` upload validation pending. Design: [P7](#p7--http-server-implemented) |
 | Key state for games (`pollkeys`, `keydown?`, `keyhit?`) | done | Landed 2026-08-14, out of B28's keyboard work. `readchar` is a buffered character **stream** at the southbridge's typing cadence — nothing for 300 ms after a press, then one repeat per 100 ms, queued — and a frame loop reading one character a frame consumes slower than the firmware produces, so the backlog grows and the game acts on input the player has already finished giving. One character a frame also means two keys can never be held at once, a constraint all three shipped games had to design around (`asteroids` §Input). The FIFO already carries what a game wants: every entry names a key code and a state, so a press sets a bit and a release clears it, and the game reads a **level** instead of replaying history. `keyboard_poll_keys()` drains the FIFO into a 256-bit down bitmap plus a press-edge latch (64 bytes total) and discards the characters the same events buffered, so no backlog can rebuild; `keydown?`/`keyhit?` are then pure memory reads, and a frame costs one visit to the 10 kHz bus however many controls it checks. `keyhit?` latches only a press that finds the key up, so the firmware's repeats do not read as auto-fire, and it catches a tap too short to still be down at the poll. NULL-able hardware ops, so boards without key releases (the host) simply output `false`. **Asteroids is converted**: every branch of `poll.input` used to end in `stop` because only one control could act per frame, and steering, thrust and fire are independent `if`s now — level (`keydown?`) for the controls that hold, edge (`keyhit?`) for pause, quit, hyperspace and the trigger, which also ends a held `p` toggling the pause ten times a second. `play.level` takes a baseline `pollkeys` so the press that leaves the attract screen is not delivered to the first frame as a hit. **All four games are converted**; Galaxian and Invaders share one `poll.input` shape and both gained move-and-fire-together. Turtle Trails needed it for a different reason: its `while [key?]` drain never built a backlog, but a character stream cannot tell *held* from *pressed*, so a direction held through several junctions was latched once and, after `try.turn` spent it, the next junction saw an empty latch with the key still down. Its latch is set from `(or (keydown? c) (keyhit? c))` — `keydown?` for the held direction, `keyhit?` for a flick shorter than a frame, which the character queue did catch because the press was queued rather than sampled — and each half has a test that fails without it. `poll.input` there had no coverage at all before this (every steering test writes `:a.next` directly), so it gained six tests. Space Invaders' design doc had named this exact change in its own limitations table — "`readchar` gives presses, not held-key state; a held-key device query would smooth this but is out of scope" — so §9 there is now closed rather than open. Menus, attract screens and name entry stay on `readchar`, which is the right shape for them. **The load-bearing assumption is confirmed on hardware** (2026-08-14, Pico Plus 2 W): the whole design rests on the southbridge reporting `RELEASED` for ordinary keys and not only for modifiers — which is all the driver handled before this change, and therefore all the source could prove — and the host tests cannot settle it, since they drive a FIFO this project wrote. `tests/logo/keystate` runs the real bus; DOWN followed the finger and released cleanly, and HIT appeared once per press rather than once per firmware repeat. It stays in the tree as the regression check for any future driver change |
-| Arrays (`array`/`setitem`) | deferred | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need. **[P13](#p13--battlezone-design-first) looked like that need and measured out as not being it** (design §13 L2): `item` costs ~16 µs fixed plus ~0.73 µs an element on a board, so a 3D frame's 44 walks over lists of 8–32 cost ~1.1 ms and arrays would return ~0.7 of it. The pre-P10-M5 figure of "~115 µs for a twelve-element walk" that P11 §12 quotes no longer holds — the interpreter got much faster underneath it. Arrays become this game's lever only if its model tables grow past ~64 entries. **P13 M0 confirmed it on a board** (2026-08-23): `draw.box` reads forty `item`s and they are 0.72 ms of a measured 3.82 ms box -- 19 % -- but the cost is the ~16 us *fixed* charge of an `item` call and not the walk, because the lists are four elements long. O(1) indexing removes the part that is already almost nothing |
+| Arrays (`array`/`setitem`) | deferred; re-asked by [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M3, **gated on [P17](#p17--dungeons-of-daggorath-design-first) M0** | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need. **[P13](#p13--battlezone-design-first) looked like that need and measured out as not being it** (design §13 L2): `item` costs ~16 µs fixed plus ~0.73 µs an element on a board, so a 3D frame's 44 walks over lists of 8–32 cost ~1.1 ms and arrays would return ~0.7 of it. The pre-P10-M5 figure of "~115 µs for a twelve-element walk" that P11 §12 quotes no longer holds — the interpreter got much faster underneath it. Arrays become this game's lever only if its model tables grow past ~64 entries. **P13 M0 confirmed it on a board** (2026-08-23): `draw.box` reads forty `item`s and they are 0.72 ms of a measured 3.82 ms box -- 19 % -- but the cost is the ~16 us *fixed* charge of an `item` call and not the walk, because the lists are four elements long. O(1) indexing removes the part that is already almost nothing |
 | Atom reclamation / `erall` soft reset | done / deferred | Atom reclamation landed 2026-07-23; `erall` soft reset remains deferred. See `memory-reclamation-design.md` |
 | Tile maps + smooth scrolling (accelerated tile games) | **removed 2026-08-28, see [P14](#p14--the-vector-direction-removing-tiles-and-the-sprite-games-plan-first)**; was: bake half done, scrolling half open | Design drafted 2026-07-29 ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md)); M0 measured 2026-08-01 and the gate **failed** — the interpreter, not the wire, was the bottleneck, which opened [P10](#p10--interpreter-throughput) and split the item (§3.4). **The bake half shipped**: `newtiles`/`snaptile`/`newmap`/`settile`/`tile`/`stampmap`/`stamptile` over `core/tilemap.c` (M1+M2, hardware-accepted 2026-08-02), and M3 revamped Turtle Trails in place — the board is the C map and `draw.board` is a `stampmap`, replacing a **5,916 ms** pen-carved build with a **7.6 ms** bake. Two findings came out of it: **B11** (`dot` ignored the pen size on the PicoCalc — the blank maze was that, not the tile system), and that **the C map does not move the frame**, contradicting §3.4's and P10 §7's expectation that it would close Trails. **The scrolling half's gate was measured 2026-08-04** (§13.6–§13.7), on one board before and after, settling the Plus-2-W-vs-Pico-2 mismatch §13.5 flagged: the frame is **73.6 → 42.55 ms (1.73×)** and the body **73.35 → 40.15**, essentially at the 40 ms gate. But **the gate omitted the present it was meant to leave room for** — a scroll dirties the whole viewport, so a scrolled frame is 61–66 ms and the real budget is a body under 14–19 ms. So **M4 is unblocked only for a new, simpler scroller** sized to that (~300–400 statements, ~540 under §15's half-rate lever), and **M5 (Checkpoint Run) is closed** at ~150 ms against a ~19 ms need. Whether to design such a game is the open question. All boards, tiered capacity. See [P9](#p9--tile-maps-and-smooth-scrolling-design-first) |
 | Interpreter throughput (games hit their frame budgets) | done; `pico2` joined the tiering 2026-08-23 and **confirmed it with a control group** -- 1.65x on the frame, both controls unmoved | Opened 2026-08-01 by P9's failed M0 gate, design drafted ([`interpreter-throughput-design.md`](interpreter-throughput-design.md)): the display was never the bottleneck — both shipped games run at ~9 fps and ~4 fps against a designed 25, and ~48 % of interpreter runtime is spent re-deriving facts that cannot change (word class re-lexed every evaluation, names resolved by `strncasecmp` every call). Memoise them on the interned atom. Target: Turtle Trails' `play.frame` under 40 ms, from 87.3 ms. M0–M3 done 2026-08-01, M4 declined. M1 (word class) delivered all of it on hardware — Trails 87.3 → **73.4 ms**, Checkpoint Run 258.6 → **232.6 ms**. M2 (name binding) flattened the workspace-scan cliff (**128.3 → 24.0 µs** per call) and returned 9 KB of SRAM, but moved neither game and regressed the profiled loop 1.64× on the board. **§1's 40 ms is not met**, and P9's C map — named here as what would close Trails — landed on 2026-08-02 and moved the frame by 0.2 ms (73.4 → 73.6). That expectation is **disproved** (P9 design §13.4): it misread P9 M0, which measured `step.bugs` at 59 % of a frame rather than the `tile.at` walk inside it. **M5 profiled the frame on 2026-08-02 (design §11.1) and found one.** There is no hot spot — 791 operations on the board against 787 predicted from the host, every slot proportional to its statement count — but a `make "x (:x + 1)` costs **102.5 µs against a procedure call's 24 µs, 4.3×, where the host ratio is 2.5×**. Calls scale host→board at 75×, a `make` with arithmetic at 129×. M2 made calls cheap; the statement itself is what is left, and the hot slots are almost nothing but `make` statements. The uncached piece inside it is **variable resolution**, which §3.2/§7 set aside as dynamically scoped — a reason it cannot use M2's mechanism, not a reason it must stay slow. Before M5, the target had no named lever, and M4 and the bytecode body — the only candidates then left — had both been rejected partly on the strength of the disproved claim. **M5 (design §11) is therefore to re-profile before choosing**: `tests/logo/p10prof` splits a frame into its thirteen parts on a board and reports each in *operations* as well as milliseconds, so "no hot spot exists" is a result the profile can actually return. **It returned exactly that, and the answer was the flash.** The board:host ratios were 60× for a bare loop and 67× for a call against 132× for an arithmetic statement and 212× for the parenthesised-call path -- the RP2350 executes the interpreter from flash through a 16 KB XIP cache, and the code entered once per statement pays for it. Four tiers of `__not_in_flash_func` (design §11.2–§11.6) took the frame **81.0 → 47.0 ms, 1.72×, for 13.6 KB of SRAM**, `sync` flat at 1.6-1.8 ms throughout as the control. Returns halved every tier — 1.24×, 1.23×, 1.105×, 1.024× — so the tiering is done. **§1's 40 ms is still not met**, by 1.17×, but it is now a game-side number: `step.bugs` and `place.all` are 65 % of the frame and are nothing but statements. Enabled on the `pico2w` and `pico+2w` presets. See [P10](#p10--interpreter-throughput) |
@@ -108,6 +115,7 @@ Companion documents (everything in `docs/`):
 
 | Item | Status | Notes |
 |---|---|---|
+| `MAX_PROCEDURES` 128 → 192 | todo | [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M0. `logo/games/battlezone` defines exactly 128 and the ceiling has been hit repeatedly; overflow drops the **last** `to` in the file and points nowhere near the cause. Unlike `MAX_GLOBAL_VARIABLES` there is **no representation ceiling** — procedure indices are `int`, not a `uint8_t` hash slot — so this is a pure budget decision and revisitable. ~80 B a slot (64 of them `params[MAX_PROC_PARAMS]`), so 192 is +5 KB of `.bss`, about +1 SRAM point. The table is also the one name table with **no index**: `find_procedure_index_n` is a linear scan, where `find_global` has been a hash since [P10](#p10--interpreter-throughput) M3 |
 | LittleFS internal filesystem (root `/`) + `/sd` FAT32 mount | done | Landed 2026-06-29 (PR #83), before this roadmap existed; listed for completeness. Design: [`littlefs-filesystem-design.md`](littlefs-filesystem-design.md) |
 | On-chip temperature sensor (`hw.temperature`), `battery` renamed to `hw.battery` | done | Landed 2026-08-20 (user request). The first of a `hw.` family for reading the board itself, so `battery` was renamed with it — a breaking change taken deliberately while the surface is two primitives wide. The part-to-part difference the request flagged is real and the SDK already hides it: the sensor is ADC input 4 on the RP2350A (Pico 2, Pico 2 W) and input 8 on the RP2350B (Pico Plus 2 W), and `ADC_TEMPERATURE_CHANNEL_NUM` is `NUM_ADC_CHANNELS - 1`, which the board header sizes from `PICO_RP2350A` — so **no board conditional appears in this tree**, and the two disassemblies prove it resolved: the AINSEL write is `0x4000` on a `pico2` build and `0x8000` on a `pico+2w` one. The conversion is the datasheet's (§12.4.6) and is the same on both parts. Two things the sensor's own accuracy decided: the read **averages 16 conversions** (~0.24 C per LSB, noisy at that, ~32 us for the burst), and the primitive **rounds to a tenth** — the sensor is uncalibrated and reads the die rather than the room, so six significant digits of ADC noise would be a false precision the manual then has to walk back. A board with no sensor nulls the op and the primitive errors rather than inventing a reading, which is what the host build does. **RAM unchanged to the byte** on all three boards (`pico+2w` 478,532, 91.27 %); the cost is flash. 47 tests in `test_primitives_hardware.c`. **Hardware-accepted 2026-08-21 on both a Pico 2 W and a Pico Plus 2 W** — which is the whole of the gate, since the two boards are the two parts and the channel is the one thing no host test can reach. `tests/logo/hwtemp` stays in the tree as the check: it does not assert that a number came back, because a wrong channel returns a floating GPIO and that reads as a plausible number — it loads the processor for thirty seconds and requires the reading to **rise**, which only a sensor wired to the die does |
 | On-board status LED (`hw.light?`, `hw.setlight`) | done | Landed 2026-08-21 (user request). The second of the `hw.` family, and the same shape of problem as `hw.temperature`: **the pin differs on every board and the SDK already hides it.** On a Pico 2 the LED is `PICO_DEFAULT_LED_PIN` (GPIO 25) and a `gpio_put` reaches it; on a Pico 2 W and a Pico Plus 2 W there is **no such pin at all** — it is `CYW43_WL_GPIO_LED_PIN`, WL_GPIO 0 on the wireless module. That used to be hand-written special-case code; SDK 2.1's `pico_status_led` is the abstraction, so **no board conditional appears in this tree** and the disassemblies prove it resolved: `picocalc_set_status_led` is `movs r3, #25` plus the single-cycle-IO write in a `pico2` build and `bl cyw43_gpio_set` in a `pico2w` one. **The design decision the hardware forced** is that on a W board the LED is on the far side of the cyw43 driver, so lighting it **powers the radio** — the first `hw.setlight` costs the firmware upload, about a second — and there is no alternative, since the LED is physically on that chip. The driver is brought up through the existing `ensure_wifi_initialized` rather than by `status_led_init()`, which would build a *second* `async_context` and init the driver twice; `status_led_init_with_context(cyw43_arch_async_context())` keeps one context, one driver and one flag for both features. `hw.light?` **reads the pin** rather than remembering what was written, so on a W board it is a round trip through the module. A board with no LED nulls the ops and both primitives error rather than answering `false`, which would read as "the LED is off". **SRAM costs 72 bytes on the W boards** — `status_led_owned_context`, the context `pico_status_led` would have built for itself, dead in this build but in the same TU as the path that is used — and 4 bytes on a `pico2`; the rest (~1.2–1.9 KB) is flash. 13 tests in `test_primitives_hardware.c` (60 in the file), 80/80 green. **Hardware-accepted 2026-08-21 on both W boards**, a Pico 2 W and a Pico Plus 2 W, via `tests/logo/hwlight` — all four checks, which is the whole of the cyw43 half of the gate. That gate is two things no host test can reach: a human confirming the light actually *moved* (a driven pin that is not wired looks exactly like a pass from inside Logo), and the **two WiFi orderings** — LED then WiFi, WiFi then LED — which is the double-init this arrangement exists to prevent. **What is still unrun is a `pico2` build**, the GPIO 25 path and the only one that goes through `status_led_init()` rather than the with-context form. It is the trivial half and the disassembly shows it resolving to pin 25, but nothing has yet watched that LED light |
@@ -2430,6 +2438,313 @@ M4 was Berzerk adopting it, as P8's M4 was Space Invaders; unlike P8's, it
 moved to the game's own item ([P15](#p15--berzerk-design-first)) rather than
 holding this one open, because the primitive it was testing is finished and
 the game is not started.
+
+### P17 — Dungeons of Daggorath (design first)
+
+Status: **design drafted 2026-09-02, gated on its own M0 measurement.** See
+[`daggorath-design.md`](daggorath-design.md).
+
+A faithful port of the 1982 DynaMicro game from **its own 6809 source**, 9,866
+lines of it, kept under `docs/DungeonsOfDaggorath/` with the grant of licence
+beside it. Every rule in the design cites the file and routine it came from,
+and where the design and the ROM disagree the ROM is right.
+
+**It is a different shape from every game in this tree so far, in three ways.**
+
+*It is turn driven.* P11, P13 and P15 are frame loops with a 66.7 ms budget;
+Daggorath redraws when you act, and at most twice a second when a creature
+moves near you (`COMPLR.ASM:LUKNEW`). The budget is a **worst-case redraw under
+100 ms**, predicted from battlezone §12's measured units at **38.8 ms and a
+`MOVE` at 78** — two redraws, the half step and the step. **`hw.setcpu "fast`
+is a precondition** (design §12.1), and not for a frame rate it does not have:
+78 ms reads as *the game answered* where 122 reads as *the game thought about
+it*, it is what makes the dot fade below offerable at all, and it halves the
+worst jitter a redraw can put on the heartbeat. The game restores **what it
+found** on exit — battlezone's `restore.clock`, and the reason
+B50 was reachable from ordinary play before it was fixed.
+
+*Every character in it is drawn into the picture.* The CoCo screen in this game
+has **no text mode at all** — `COMDAT.ASM` bases all three of its text control
+blocks inside the 256 × 192 bitmap and `PEXAM.ASM:EXAMIO` points the `EXAMINE`
+block at the video base itself — so the status line and the inventory listing
+are `write` in the graphics window, not text-screen text, and the screen never
+changes mode. The 8 × 10 glyph over a 320 × 240 band gives **exactly 40 columns
+by 24 rows**: the same 40 as the text screen, and exactly the rows the split
+screen hides, so the ROM's 19-row overlay lays out unchanged. It is also nearly
+free — `write` is one statement per *string* into a stack buffer, so a
+40-character status line is ~50 µs of a 38.8 ms redraw and allocates nothing —
+and it never needs erasing, because the redraw's `clean` already did it
+(`write` ignores the pen mode, so `clean` is the only eraser there is). The one
+thing that stays in the text window is the **scrolling command line**, because
+it is the one thing that changes *between* pictures, a keystroke at a time,
+where a redraw per character would cost 39 ms. Two exceptions to "it is all
+`write`": the heart, which has no ASCII glyph and changes twenty times a
+second, so it is a turtle costume drawn *over* the picture; and nothing else.
+
+*There is no 3D in it.* `VIEWER.ASM` walks forward up to nine cells and draws
+fixed 2D outlines scaled about a fixed centre by a ten-entry table. After
+Battlezone's projection pipeline, view cone, near plane and floor, this is **a
+multiply and an add per coordinate** — composed with the 1.25× that takes the
+CoCo's 256 × 152 viewer onto our 320 × 190 at *uniform* scale, because the
+CoCo's pixels in this mode are square and a stretch to fill 240 rows would make
+every corridor 26 % too tall.
+
+*The fade is a dot pattern, and whether it should stay one is a switch.*
+`VCTLST.ASM:SETFAX` dims a line by plotting one pixel in every 2, 3, 5, 9, 17,
+33 or 65 of it, and on a one-bit display that dot fraction **is** the grey
+level — so eight `setpalette` entries and a `setpc` per vector list reproduce
+the ROM's lighting exactly, at one stroke instead of a hundred `dot`s. **But
+grey is a rendering of what a composite television did to that pattern, and our
+panel is not one**: at 1.25× a CoCo pixel is 1.25 of ours and the gaps do not
+disappear, so the far end of a corridor breaks into speckle rather than dimming
+— and that texture is part of how the game is remembered. So the fade is **one
+procedure, `stroke`, chosen by a global**, with the ROM's own DDA behind the
+`"dots` setting, allocating nothing (`dot` takes a list and conses two cells a
+call, which 400 dots a redraw cannot afford). It costs ~3 ms with a fresh Solar
+torch and ~85 with a dying Pine one — **free when your torch is good and
+dearest exactly when it is dying**, which is an unhappy shape and the honest
+one. Grey ships at M1 and is the default; dots are M1a with their own gate, a
+near-ranges-only fallback, and a graduation: if §6.3 forces the display-list
+primitive, the ROM's `VECTOR` skip counter is one decrement inside a loop that
+already exists, the two modes cost the same, and dots become the default.
+Two light channels, regular and magical, and without a lit torch the player's
+base light is zero and the screen is black.
+
+**Two constraints are named up front and one of them is new.** §6.3, *how to
+walk 200 numbers a redraw without allocating*, is the number the whole budget
+rests on and the only reason M0 exists — three candidates priced, with the
+ROM's own `VCTLSX` display-list processor as a C-side lever if none of them
+land. And **`MAX_PROCEDURES`**: a first sketch comes to ~105 of 128, so from
+M1 the tables live in a **data file** read with `readlist` rather than in
+procedures, the seventeen sound effects are one dispatcher over a table, and
+the fifteen commands are a dispatch table — which is what `SNDTAB` and `DISPAT`
+already are in the ROM. `test_the_game_fits_the_procedure_table` is written at
+M1, not at the end, because overflow drops the **last** `to` in the file and
+points nowhere near the cause.
+
+**The maze is shipped, not generated**, and that is more faithful rather than
+less. `DGNGEN` seeds a 24-bit LFSR from a fixed five-byte table, so the dungeon
+has been the same in every game since 1982 — but the LFSR shifts eight times
+per byte returned, ≈ 3.6 ms of Logo each, and a level needs thousands. So
+`scripts/gen_daggorath.py` runs `RANDOX` and `DGNGEN` on the host and emits all
+five mazes bit-identical, and everything the ROM randomised *after*
+`DGEN90`'s spin — creature placement, movement, combat rolls — stays random at
+run time, because it always was.
+
+**Sound is the point of the game and it gets a milestone of its own.** The
+ROM's 623 lines of bit-banged DAC hold no frequencies, only delay counts, so
+the design derives them from the 6809's cycle counts at 0.895 MHz
+(`f ≈ 895000 / (113 + 16X)`) and hands the result to the PSG: voices 0 and 4
+**reserved for the heartbeat** so nothing can flush it, tone pairs for the
+detuned clanks, noise for the rattles and explosions. The heart is the health
+bar — `HEARTR = 64P/(P+2D) - 19` jiffies, 80 bpm at the start, faint at 3, dead
+when damage passes power — and every long effect calls the scheduler between
+its steps so the beat keeps time through it, which is what the CoCo's IRQ did
+for free while the sound routine blocked the game. M6's gate is a **listening
+test** against a recording of the original. `say` is adopted for the wizard's
+three speeches as a flagged, switchable addition.
+
+**And the level graph is four rows of a table.** `VFTTAB` plus `PCLIMB`'s one
+rule — down a hole or a ladder, up a ladder only — gives 1↔2 and 2↔3 by ladder,
+**3 → 4 by nothing at all** (the only way down is killing the plain wizard,
+`PATTK.ASM:ENDGAM`, who strips you and hangs a 200-unit weight penalty on you),
+and 4 → 5 by holes that cannot be climbed back up. None of it is a special case
+in the ROM, and none of it will be here.
+
+M0, M1, M1a (the dot fade, optional) and M2–M6, gates in the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) goes first** (decided 2026-09-02): its M0–M2 are the procedure table, the opaque `write` and the dashed pen, and P17 M1 wants all three — a status line it can invert, a file it can grow into, and a fade it can draw the way the ROM draws it. P18 M3 and M4 run the other way round and wait on P17's own M0 and M6. [B65](bugs.md) blocks `ZSAVE` to the internal
+filesystem at M5, so it writes to `/sd` until that is fixed.
+
+
+### P18 — interpreter work for Dungeons of Daggorath
+
+Status: **todo, and most of it goes before
+[P17](#p17--dungeons-of-daggorath-design-first) is implemented** (opened
+2026-09-02). Five items, all of them asked for by P17 and none of them
+P17-shaped: every one is a general capability that happens to have found its
+first customer. No design document — these are primitives and a constant, not a
+subsystem.
+
+**The order is not a straight line, and pretending otherwise would be wrong.**
+M0–M2 are needed before P17 M1 and depend on no measurement, so they go first.
+**M3 depends on P17's own M0**, which is the thing that measures whether a list
+walk is too slow — building arrays before that runs would be exactly the
+speculative primitive this tree keeps refusing. M4 waits on P17 M6 finding the
+sweeps awkward in practice.
+
+    P18 M0, M1, M2  →  P17 M0  →  [P18 M3 if M0 asks]  →  P17 M1 …
+                                   [P18 M4 if P17 M6 asks]
+
+---
+
+**M0 — `MAX_PROCEDURES` 128 → 192.** *This tree has hit the ceiling repeatedly
+and it is time* (user, 2026-09-02). `logo/games/battlezone` defines **exactly
+128** and had to be held there; P17 sketches ~105 before a line is written, with
+fifteen command handlers, a parser, a scheduler, a renderer, creature AI and
+seventeen sound effects still to fit.
+
+Two findings make this different from the `MAX_GLOBAL_VARIABLES` raise at P10
+M3, and both are worth having before the number is chosen:
+
+- **There is no representation ceiling here.** `global_hash` holds a slot + 1 in
+  a `uint8_t`, which is what pinned that table at 254. Procedure indices are
+  plain `int`, so this is purely a **budget** decision and can be revisited
+  again later — which is the argument for taking 192 now rather than grabbing
+  the maximum.
+- **The procedures table is the one name table with no index.**
+  `find_procedure_index_n` ([procedures.c:90](../core/procedures.c#L90)) is a
+  linear scan with a first-character screen, and its own comment says it "runs
+  for every unmatched word token". `find_global` has been a hash since P10 M3,
+  which is exactly why raising *that* table did not slow reads down. P10 M2's
+  name binding memoises a resolved name on its interned atom, so the scan
+  should run once per name and not once per call — **but that is the thing to
+  confirm, not assume**, and a miss is the case to look at. If misses are not
+  cached, this milestone gives the table the same hash `variables.c` got.
+
+**The cost, and where the fat is.** `UserProcedure` is 80 bytes — and **64 of
+them are `params[MAX_PROC_PARAMS]`**, sixteen pointers for a table whose
+procedures almost all take 0–3 inputs. So 128 slots is 10 KB of `.bss`, 192 is
+15, and 254 is 20. Against P10 M3's measured 1 KB ≈ 0.19 SRAM points, 192 costs
+about **+1 point** and 254 about **+2**, on boards standing at 88.89 / 86.38 /
+**91.29 %**. *Gate: 192 on all three boards with the link figures recorded, and
+`repl_init` reached — an out-of-memory panic there is the failure mode this
+number owns. If the Plus 2 W has room to spare, say so and leave 254 for
+whatever needs it.*
+
+**The lever not taken, named so it is not re-derived:** shrinking
+`MAX_PROC_PARAMS` from 16 to 8 would save 32 bytes a slot and pay for 254 at no
+net SRAM cost at all. It also bounds lambda arity and the argument-collection
+arrays in `eval_expr.c`, so it is a language change wearing a memory change's
+clothes. Not now.
+
+---
+
+**M1 — `(write text fg)` and `(write text fg bg)`.** Asked for by P17
+[§4.1b(i)](daggorath-design.md).
+
+`write` draws text into the picture in the pen colour and sets **only the
+pixels a glyph lights**. `screen_gfx_text` does not clear behind them and
+`turtle_draw_text` passes `cur->colour` whatever the pen state is, so
+`pe write :old` does not erase, writing spaces over text erases nothing, and
+there is exactly one eraser for text in the picture: `clean`. That is a
+limitation rather than a defect, but it means **a program cannot draw a filled
+text cell**, and therefore cannot draw a bar of text in inverse video.
+
+The demonstrated need is P17's status line: `STATUS.ASM:STATUX` sets the status
+block's inverse flag to the *complement* of `VDGINV`, so the CoCo's status row
+is always the opposite polarity to the view above it. `setpc` colours the
+glyph; nothing paints the cell.
+
+| form | glyph | cell |
+|---|---|---|
+| `write text` | pen colour | untouched — **unchanged, and every existing program keeps it** |
+| `(write text fg)` | `fg` | untouched |
+| `(write text fg bg)` | `fg` | filled with `bg` |
+
+**Transparent stays the default**, because `write`'s documented job is
+labelling a picture and an opaque default would punch a rectangle through every
+existing use of it. **Colours follow `setpc`/`setbg`** — 0–254, with **255
+meaning the background colour**, which `setbg` already documents — and *not*
+`settextcolor`'s `[fg bg]` list of 0–15, because `write` is a graphics
+primitive that draws in the pen colour and should keep graphics conventions.
+That sentinel is free: "erase this text" is `(write :old 255 255)`, with no new
+spelling invented. A colour outside 0–255 errors as `setpc`'s does.
+
+**Three things are already right for it.** `primitive_register("write", 1, ...)`
+sets the arity for *unparenthesised* calls only — `sound` is registered at 3 and
+accepts 4 — so **the registration does not move**; `prim_write` gains
+`argc == 2` and `argc == 3` branches in the shape [B48](bugs.md) gave
+`prim_setpos` in August. `screen_gfx_text` already walks every pixel of every
+cell (it tests the glyph bit inside the loop rather than skipping ahead), so
+opaque is *store unconditionally, `fg` or `bg` by the bit* — one line. And it
+already marks the **whole cell extent** dirty rather than the lit pixels, so
+the dirty rectangle is correct for an opaque write with no change at all. The
+advance is `GLYPH_WIDTH` and the fill is `GLYPH_HEIGHT` rows, so cells tile
+exactly and a run of them is a solid bar with no seam.
+
+*Gate: the three forms behave as the table says against the mock; a bare
+`write` is byte-for-byte what it was; the dirty rectangle covers the filled
+cell and not merely the lit pixels; and an inverse bar of text on a board,
+which is the half no host test can reach.*
+
+---
+
+**M2 — `setpendash` / `pendash`.** The largest item here by value, and among the
+smallest by code.
+
+`screen_gfx_line` ([screen.c](../devices/picocalc/screen.c)) is a Bresenham DDA
+with a `PLOT_PIXEL` macro at each step. A dash counter is one decrement beside
+it:
+
+```c
+if (--dash == 0) { dash = dash_period; PLOT_PIXEL(x, y); }
+```
+
+which is **literally `VECTOR.ASM`'s `VECT30`** — `DEC FADCNT / BNE VECT40` —
+the routine P17 §8 is a port of. `setpendash n` plots one pixel in every `n`
+along every stroke; `n` = 1 is solid and is the default; `pendash` reports it.
+The pair is exactly the shape `setpensize`/`pensize` already has, and it lives
+beside them in the reference.
+
+**What it buys P17 is the difference between an option and a default.** The
+game's whole atmosphere is a fade the ROM draws by dotting lines, and in Logo a
+dot is six statements — 400 to 600 of them in a dim corridor, 58–85 ms added to
+a redraw, three fallbacks and a milestone gated on a photograph
+([§8.2](daggorath-design.md)). With a dashed pen **a dotted stroke costs the
+same as a solid one** — slightly less, since it stores fewer pixels — so the
+authentic fade becomes the default and the grey ramp becomes the option, which
+is the way round it should have been. It also makes the fade *exact*:
+`setpendash` takes the ROM's `VCTFAD + 1` straight out of its table.
+
+It is general beyond this game: dashed construction lines, graph gridlines,
+dashed borders. FMSLogo has `setpenpattern`; this is the simpler and
+better-defined version of it.
+
+Applies to pen **strokes** (lines and `arc`), not to `dot`, `fill`, `write` or
+`stamp`. Composes with `setpensize`: a dashed thick pen stamps its disc at the
+same intervals.
+
+*Gate: a dashed line plots the pixels the ROM's fade table plots, checked
+against a hand-computed span; a solid line is unchanged; and the dashed stroke
+is no slower than the solid one it replaces.*
+
+---
+
+**M3 — arrays. Gated on P17 M0 and not before.** P17
+[§6.3](daggorath-design.md) walks ~1,800 static numbers per redraw and has
+three candidate walks (`item` with a running index, `first`/`butfirst`,
+`foreach`); P17 M0 measures all three. **If one of them lands, this milestone
+does not happen** — which is the outcome to hope for, because the standing rule
+on this row has held since P13 and it should not be broken casually.
+
+The row above records that P13 *looked* like the demonstrated need and measured
+out as not being it: `item` costs ~16 µs fixed plus ~0.73 µs an element on a
+board, so a 3D frame's 44 walks over lists of 8–32 cost ~1.1 ms and arrays
+would have returned ~0.7 of it. P17's walk is a different size — one pass over
+a long static table rather than many passes over short ones — which is why it
+is worth re-asking, and exactly why it must be **measured before it is built**.
+
+*Gate: P17 M0's numbers, showing a walk that misses P17 §12's budget and an
+array that makes it.*
+
+---
+
+**M4 — a frequency glide, `(sound voice f0 f1 duration)`. Gated on P17 M6.**
+P17 [§9.2](daggorath-design.md) derives fourteen sound effects from the ROM's
+6809 delay counts and half of them are **pitch sweeps** — `SQUEAK` runs
+1.4 → 6.9 kHz in 13 ms, `WHOOP` 0.21 → 6.9 kHz in 620. Today each is several
+`sound` calls with `wait` between them, and because `sound` on a busy voice
+flushes it, a long sweep blocks the interpreter — so P17 §9.4 has to interleave
+a scheduler tick through every effect to keep the heartbeat in time.
+
+A glide makes each sweep one statement and deletes that interleaving. It is a
+real synthesizer change rather than plumbing — `SoundEvent` is 6 bytes and a
+glide needs a second frequency, so it is a new event kind — which is why it
+waits until P17 M6 has built the effects the hard way and can say whether the
+chain is actually awkward.
+
+*Gate: P17 M6 asking for it, with the `tick`-interleaved version built and
+found wanting.*
+
 
 ---
 
