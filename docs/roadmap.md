@@ -2590,15 +2590,20 @@ M3, and both are worth having before the number is chosen:
   plain `int`, so this is purely a **budget** decision and can be revisited
   again later — which is the argument for taking 192 now rather than grabbing
   the maximum.
-- **The procedures table is the one name table with no index.**
-  `find_procedure_index_n` ([procedures.c:90](../core/procedures.c#L90)) is a
-  linear scan with a first-character screen, and its own comment says it "runs
-  for every unmatched word token". `find_global` has been a hash since P10 M3,
-  which is exactly why raising *that* table did not slow reads down. P10 M2's
-  name binding memoises a resolved name on its interned atom, so the scan
-  should run once per name and not once per call — **but that is the thing to
-  confirm, not assume**, and a miss is the case to look at. If misses are not
-  cached, this milestone gives the table the same hash `variables.c` got.
+- **The linear scan does not matter, and this is confirmed rather than
+  assumed** (2026-09-02). `find_procedure_index_n`
+  ([procedures.c:90](../core/procedures.c#L90)) is a linear scan with a
+  first-character screen where `find_global` has been a hash since P10 M3, and
+  its own comment says it "runs for every unmatched word token" — **which has
+  not been true since P10 M2 and is the one line of this milestone that is a
+  documentation fix.** `resolve_binding` ([eval_expr.c:88](../core/eval_expr.c#L88))
+  calls it only on a memo miss and then calls `remember_binding`, and the
+  **miss case is memoised too** — `remember_binding(memo, ATOM_BIND_NONE, 0)`
+  — so the scan runs **once per distinct interned word for the life of the
+  workspace**, hits and misses alike, until a mutator calls
+  `invalidate_name_bindings`. Defining happens at load time. **So no hash is
+  needed and the raise costs nothing in lookup time**; this is a pure SRAM
+  decision, which is what makes it a small milestone rather than a medium one.
 
 **The cost, and where the fat is.** `UserProcedure` is 80 bytes — and **64 of
 them are `params[MAX_PROC_PARAMS]`**, sixteen pointers for a table whose
