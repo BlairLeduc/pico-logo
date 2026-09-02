@@ -48,6 +48,11 @@ Companion documents (everything in `docs/`):
   and the six primitives over it (**done 2026-08-29**: M0–M3 built, all four
   gates passed). Asked for by P15 §14.3, which deliberately did not block on
   it; P15 now adopts it.
+- [`tempest-design.md`](tempest-design.md) — P17 Tempest, the fourth arcade
+  port and the first whose every object is drawn at a size that depends on how
+  far away it is (design drafted 2026-09-01, gated on its own M0 measurement).
+  The disassembly gives the whole mechanism and none of the pictures, so the
+  sixteen wells and the figures are authored.
 - [`code-review-2026-07-02.md`](code-review-2026-07-02.md) — the review that
   produced PR #86; a few small refinements from it are tracked below, its
   defects in [`bugs.md`](bugs.md).
@@ -2431,12 +2436,155 @@ moved to the game's own item ([P15](#p15--berzerk-design-first)) rather than
 holding this one open, because the primitive it was testing is finished and
 the game is not started.
 
+### P17 — Tempest (design first)
+
+Status: **DESIGN DRAFTED 2026-09-01. Nothing is built** — no game file, no
+harness, no M0. Gated on its own M0 measurement, as P11, P13 and P15 were.
+See [`tempest-design.md`](tempest-design.md).
+
+The fourth arcade port and the third whose cabinet was a genuine XY vector
+machine, so unlike [P15](#p15--berzerk-design-first) there is no raster to
+translate back into lines. What it has instead is the thing none of the other
+three had: **every object on the screen is drawn at a size that depends on how
+far away it is**, and there are up to thirty-five of them. That single fact
+sets the whole design — §7 keeps the figures as pen strokes rather than
+Berzerk's costumes, because `setmag` magnifies a costume by an *integer* factor
+and this game needs a continuum; §19's costume ceiling has slack on it for the
+first time in the tree; and §3.2's projection, **one divide shared by both
+axes**, becomes the number the budget rests on.
+
+**The disassembly is the best and the worst source this tree has had.**
+[`Tempest.asm`](Tempest.asm) is der Mouse's reverse engineering of the program
+ROM, 11,825 lines, and it is unusually good — but it contains **none of the
+pictures**. `lev_x[]`, `lev_y[]`, `lev_angle[]` and `lev_remap[]` are `.chunk`
+with no bytes ($b97c–$bcfc), and the vector ROM holding the flipper, the
+tanker, the pulsar, the fuseball, the spiker and the claw is below $2000 and is
+not in the file at all. So this port gets **the whole mechanism and not one
+shape**: the sixteen wells and the dozen figures are authored (§6.2, §7) and
+everything else is transcribed. Design §23 Q2 asks whether to go and read
+`lev_x[]` out of a ROM image, which would make the wells exact instead of
+close, and **that is the user's call because it changes what M1 builds**.
+
+**Four things the disassembly gives this port for nothing**, and they are the
+case for doing it at all:
+
+- **Enemy behaviour is a documented p-code virtual machine.** Twenty opcodes at
+  $9ba2, a 152-byte program at $a0f7 with per-byte commentary, and **nine entry
+  points** — climb; climb eight then flip; flip constantly; two flips one way
+  and three the other; the top-of-well grab loop; ride the spikes; fuseball;
+  pulsar; flip away then climb four. **And the level picks which one**:
+  `flipper_move` is a `06` record indexed by position within the block of
+  sixteen levels, sixteen bytes long, `07 0b 19 24 53 0b 24 19 53 87 24 19 53
+  07 87 24`. The flipper's personality is a property of the *shape* you are on
+  and it repeats every sixteen levels. Nothing else in this tree's four ports
+  has that structure. Design §9.2 decides to **flatten** the nine into nine
+  procedures rather than transcribe the interpreter — a nested interpreter
+  inside this one cannot be cheaper than the thing it interprets — and keeps the
+  byte listing as the specification.
+- **The whole 99-level difficulty ramp is a second little table machine**, a
+  28-entry pointer table at $9607 driving a six-opcode interpreter at $92d6
+  whose opcodes the disassembler spells out at $968f: constant, table by
+  absolute level, **table by position within the block of sixteen**, linear
+  ramp, relative-to-flipper-speed, and alternating by level parity. In Logo
+  that is **one procedure of about thirty lines over one list**, and it produces
+  every one of the twenty-eight per-level globals exactly. Design §13, and its
+  test is the largest in the file.
+- **`max_enm` is the record `02 01 63 06` — constant 6 for all ninety-nine
+  levels.** There are **seven enemy slots and never more**, at level 1 and at
+  level 99 alike; the campaign's escalation is in the types, the speeds and the
+  wave size. That is the most useful fact in the document for the frame budget
+  and it is why the budget can be written at all.
+- **The state space transfers verbatim.** `segment` 0–15 and `along` $10–$F0
+  are the cabinet's own coordinates, so every speed, hit tolerance, spike
+  height and spawn constant in the ROM ports unchanged. This is
+  [P15 §5](berzerk-design.md)'s 1:1 rule bought on a different axis: Berzerk
+  could take the cabinet's *pixels* because both were plane coordinates; here
+  the plane coordinates cannot transfer but the *game* coordinates can, and
+  they are the ones every constant is quoted in.
+
+**Two places the code corrects the received account of the game.** The gameplay
+summary says *"aside from the Fuseball and Pulsar, enemies can shoot"*;
+`pulsar_fire` is the record `02 3c 63 40`, so **pulsars shoot from level 60**,
+and on the *hard* setting from level 1 ($937a). And the superzapper's second
+use is described as killing "one random enemy"; `check_zap` ($a83a) with
+`zap_length = [0, 19, 5, 0, 0]` kills on every odd tick from 3, so the first
+use gets nine kills against seven slots and the second gets exactly one — **the
+highest-numbered live slot**, which a player can exploit and a test can assert.
+A superzapped tanker does not split, because $a8a4 clears its load bits first.
+
+**This port is in colour**, which is a break with the other three games in the
+tree — Asteroids, Battlezone and Berzerk are white on black, and Berzerk went
+to three colours only when its ROM's attribute logic forced it. Tempest's
+colour scheme is *how you know which sixteen levels you are on*, and one band
+(65–80) is deliberately invisible. The colour tables are not in the
+disassembly either, so the scheme is authored, one palette per block of
+sixteen, at four `setpc`s a frame (design §14).
+
+**The forced deviation is the control.** The cabinet is a rotary knob read
+through a POKEY pot line and there is no knob on a PicoCalc, so the claw is
+key-driven with the spinner's feel reconstructed by held-key acceleration
+(§8.1). Tempest is a game about *sweeping* the rim and a key that repeats is
+not a knob; §23 Q3 says the tuning cannot be settled on paper.
+
+**Estimated frame ≈ 41.6 ms at 300 MHz** — body 22.9 (projection 2.6, drawing
+8.5, logic 11.8) plus a 18.7 ms split present — against a **50 ms / 20 fps
+gate**, so 8.4 ms of headroom. The clock is a precondition, not an
+optimisation, as it is for P13 and P15. Three numbers are flagged as most
+likely wrong (§16.4): the well's redraw, sixteen ~110-step radial lines and the
+longest strokes in any game in this tree; the enemy's five scale multiplies,
+which are the price of not being able to stamp and which three fixed sizes
+would remove; and the shot × enemy pass, the only quadratic in the budget and
+the same line P15 flagged and then measured at 4.0 ms.
+
+**The erase question is open and deliberately so.** The well is static for a
+whole level — 48 strokes — which argues for erase-in-place; but **every moving
+object sits on a lane line**, so an eraser paints black over the well
+continuously, and P15 spent two bugs ([B67](bugs.md), [B78](bugs.md)) on
+exactly that failure in a game where it was an edge case rather than every
+object on every frame. The design predicts clear-and-redraw and **M0 measures
+both anyway**, because P15's §3 predicted clear-and-redraw, measured it, and
+then inverted the same day when its figures became stamps. The lesson from that
+page is that the erase strategy is not a property of the game but of what a
+drawing pass costs.
+
+**No interpreter change is needed to ship**, stated the way P15's was and
+therefore written to be checked rather than cited — P15's identical verdict was
+overturned by its own M0. There is no trigonometry anywhere (sixteen fixed
+segments, a projection that is one scalar multiply); arrays buy ~0.3 ms because
+`item`'s 8 µs is fixed cost. The one lever with a real case is
+[P13](#p13--battlezone-design-first)'s unbuilt **L3 projection operation**,
+which would take §16.2's 2.6 ms to perhaps 0.8 — and which allocates a list per
+call unless it outputs into globals, which is the problem that stopped it the
+first time.
+
+**And the memory ceiling this game will actually hit is the fourth one.**
+`.setitem` of a number the workspace has not held before interns a word
+([B52](bugs.md)), and `along` is a *continuous* value written seven times a
+frame — the worst case for that rule any game in the tree has had, since
+Berzerk's counters were bounded integers and it still died once
+([B25](bugs.md)). So `along` is **quantised the way the cabinet quantises it**:
+`enemy_along` is a byte with its fraction in a separate `enemy_along_lsb`
+(line 333), and this port keeps the split for exactly that reason — the integer
+part takes one of 225 values and the fraction one of sixteen, so the word table
+settles after one pass instead of never settling.
+
+Budgets: **100 of 128 procedures**, a **200-of-254 global peak** measured by a
+test that plays a game, and — for the first time in this tree — **none of the
+25 costume slots**. Eight milestones, M0 the measurement gate: M1 the well and
+the claw, M2 shots and spikes and the end-of-level descent (which is the
+cheapest set piece in the game and the only thing that proves the projection
+reads as depth), M3 the flipper, M4 tankers and spikers and the wave, M5
+pulsars and fuseballs and enemy fire, M6 the campaign, M7 colour and sound and
+the play test. It also gives `test_bench_throughput` a fourth game subject.
+
+
 ---
 
 ## Progress log
 
 | Date | Item | Change |
 |---|---|---|
+| 2026-09-01 | P17 | **Tempest: the design and its P17 roadmap entry.** The fourth arcade port, drafted from der Mouse's disassembly of the program ROM ([`Tempest.asm`](Tempest.asm), 11,825 lines). **The disassembly is the best and the worst source this tree has had**: enemy behaviour is a documented p-code virtual machine (twenty opcodes at $9ba2, nine entry points into one 152-byte program at $a0f7, and the level picks which one out of `flipper_move`'s sixteen bytes); the entire 99-level difficulty ramp is a second table machine, a 28-entry pointer table at $9607 over six opcodes the disassembler spells out at $968f, which is one Logo procedure of thirty lines; and `max_enm` is `02 01 63 06`, so there are **seven enemy slots at level 1 and at level 99 alike**. **And it contains none of the pictures** — `lev_x[]`, `lev_y[]`, `lev_angle[]` and `lev_remap[]` are `.chunk` with no bytes, and the vector ROM with the flipper, tanker, pulsar, fuseball, spiker and claw is below $2000 and is not in the file, so the sixteen wells and the figures are authored and everything else is transcribed. §23 Q2 asks whether to go and read `lev_x[]` out of a ROM image, and it is the user's call because it changes what M1 builds. **The design decision the game forces is that nothing stamps**: every object is drawn at a size that depends on `along`, `setmag` magnifies a costume by an integer factor only, so the figures stay pen strokes and §19's costume ceiling has slack for the first time in the tree. The state space transfers verbatim — `segment` 0–15 and `along` $10–$F0 are the cabinet's own — which is [P15 §5](berzerk-design.md)'s 1:1 rule bought on a different axis. **Two places the code corrects the received account**: pulsars shoot from level 60 (`pulsar_fire` = `02 3c 63 40`), and the superzapper's second use kills the **highest-numbered live slot**, not a random one (`zap_length` = `[0, 19, 5, 0, 0]`, one kill per odd tick from 3). **Estimated frame ≈ 41.6 ms at 300 MHz against a 50 ms / 20 fps gate**, with three numbers flagged as most likely wrong: the well's sixteen ~110-step radials, the enemy's five scale multiplies, and the 12 × 7 shot pass. The erase question is left open for M0 to measure both ways — the well is static, which argues for erase-in-place, but **every moving object sits on a lane line**, which is [B67](bugs.md)/[B78](bugs.md) as the common case rather than the edge one. Eight milestones, M0 the measurement gate. Not started |
 | 2026-08-31 | P15 | **M5 done: Evil Otto, and with him the room acquires a clock. Read on a board the same day at `fast`: HUD 24, FRAME 50, WORST 104, ROOM 25, and the hop reads right. Two defects back over two readings, both fixed.** **[B78](bugs.md)**, Otto eating the maze as he walks — he is the first figure in this game *meant* to overlap the walls, and the cabinet never notices because it XORs its sprites into video RAM where we stamp pixels; fixed by putting the wall back rather than stopping him taking it, and the re-read confirms the walls remain at **FRAME 50-51**, which is the sixteen-stroke repaint priced at a millisecond on a minority of frames. **[B79](bugs.md)**, *"thought once Otto left behind a trail"* — B67's other half for the third time: `stamp` rounds a costume's corner and a pen stroke rounds its own endpoints, so a figure on a half pixel is drawn at one column and erased at another. Otto inherited a fraction nobody noticed him inheriting, because `$2AB6` copies MAN_X/MAN_Y, our man moves 1.5 steps a frame, and `$2A9D`'s clamps replace only one axis. **Three for three now**: a draw/erase pair that agrees at integer positions is not tested until it is tested at half ones. **And both judgements came back right untuned — the hop and the nine seconds — so M5 is closed on every phrase of its gate** **FRAME 50 is the pad and not a speed-up** — `sync` pads a frame that fits to exactly the period, so 50 is that number's floor and says only that the body fit inside the budget; M5 adds work and cannot have made the frame faster, so the difference from M4's 56 is the scene (M4's was read at eleven robots *and bolts in the air*) and one glance at `ROB` settles it. **ROOM 24 → 25 is M5's own cost**, `place.otto` inside the build, and it is the right size; **HUD 26 → 24 is noise on an unchanged path**, which usefully puts ±2 ms under the rest of the row; **WORST 114 → 104** is still M4's open item, moved with FRAME rather than shrunk. The build's scheduling findings — Otto in the round robin from the room build, so B75's denominator is one larger everywhere, and his `TPRIME` of 2 rather than `ROBOT_SPEED` — came out of *looking* for that shape before it was written, which is B69, B73 and B75 paying off The gate's three phrases — the timer arithmetic ($2ABC's `ROBOT_SPEED + RSAVED + RBOLTS`, one unit every 40 ticks, two put back per robot killed at $2486), walls ignored (he is steered by `SETDIR` and never by `IQ`, which is one omission rather than a rule), and robots eaten and paid for. 78 procedures, 129 host tests, `ctest` green at 84/84, all three presets link; not yet read on a board. **The milestone's own work was [§7.5](berzerk-design.md), a gap the design had deferred twice**: his pattern table at $120B renders in the listing as Z80 instructions, and what decodes it is the sprite fetch at $2765 reading the **high byte first** — pattern tables are big-endian, and read that way $120B is sixteen exact entries with a zero at $122B and a loop back to its own seventh. Read little-endian the first entry is $2E12, which is nowhere; the wrong reading looks like garbage rather than like a mistake, which is the only reason the region was hard. **And the bounce is not in the pixels**: nine of his sixteen frames are the same face, and the difference is a two-byte escape that $2772 adds to the video RAM address — 32, 16, 8, 4 and 2 rows down at a 32-byte stride — so he is **eight costume slots and not sixteen**, his stored position is the *top* of the arc, and the collision follows the bounce because the cabinet's intercept bit is set by the draw itself (Otto at the top of his hop passes over your head, for free). **Two findings, both scheduling**: he is a **vector from the moment the room is built** ($2154 → $2A8E → $200E), so B75's denominator is one larger everywhere and the last robot standing shares the room with him — the fourth time in this game a mechanism was read right and its schedule was not (B69, B73, B75) — and his **`TPRIME` is 2, the player's number, not `ROBOT_SPEED`**, so alone in a cleared room he is exactly the man's speed. **`LOGO_SHAPE_MAX_SLOT` 23 → 25**: the count that set it at 23 included the explosion's four frames, which take no slot, and left Otto out entirely; twenty-five is the whole cabinet and there are no spares left |
 | 2026-08-31 | P15 | **The robots did not animate, and the ROM always said they should** ([B77](bugs.md), reported from a board and **confirmed fixed on one the same day**). §7.3 read the eight STANDING frames at `$1000` -- which differ in the eye row alone, `66 4E 1E 7E 78 71` -- wrote "this row is the only one that animates", and generalised that to the whole robot. `$1000` is one of five tables and the only one like that: the four walking tables move the feet, and `rb1`-`rb4` were **the first pointer of each table**, cached as though a table were a sprite. Four patterns added as slots 14-17 with a per-robot phase; left stays free because `$1155` is `$112C` mirrored and `$1162` is `$111F` mirrored. **The first fix did not animate either**: `$27A9` advances the pattern pointer on the countdown that moves the vector, one frame a pixel at 60 Hz, and our frame is three of its ticks -- so three steps through a three-frame table land on the same frame every time, and the cabinet's own phase renders as a robot sliding with his legs locked. The walk advances once per rendered frame the robot moved in. **Why it lasted four milestones and a board session: no test had ever looked at a sprite's pixels.** The mock stages its canvas rather than rasterising pen strokes, so `snapsh` captured a blank field there and every costume test could only count captures and measure the bounding box -- a sprite could have been the wrong drawing entirely and stayed green. **Three changes underneath it.** `LOGO_SHAPE_MAX_SLOT`: the costume ceiling was 15 and the literal lived in eight places across three layers, so it is now one constant in `core/limits.h` and the value is 23 -- a slot is six bytes of table, measured at exactly +48 bytes on all three boards, and the 8 KB pixel pool is untouched. The sprites moved from `render.sprite` + `snapsh` to `putsh`, retiring ~400 statements and §18's measured ~18 ms a sprite at startup thirteen times over; the costumes are byte-identical because this game draws in colour 254, 254 IS `LOGO_SHAPE_PEN`, and `screen_gfx_snap` maps only the background to transparent. And the objection recorded in the file -- that `putsh` doubles every pixel horizontally and so could not draw an 8-wide man -- was true of the old monochrome form and is not true of the colour one. [B76](bugs.md) found and fixed on the way: a frame-cost test asserted an exact cell count over one arbitrary window, which oscillates with how many bolts are alive, and was passing on phase. 17 slots of 23, 1,920 bytes of the 8 KB pool, 15,786 free cells and 19,532 free word-table bytes on the tightest board's arena. 84/84 ctest green |
 | 2026-08-31 | P15 | **The screen scroll between rooms, taken out of M7 because it was asked for — and [§17](berzerk-design.md)'s price for it was double.** The request says what it is for: *the cabinet slides the maze out of view between rooms, which gives the player a chance to breathe.* §17 cut it on "a full-screen present per step and **the room has to be drawn twice during it**", and the ROM does not do the second half. `SCROLL_UP`/`DOWN`/`LEFT`/`RIGHT` ($2175–$2419) step the bitmap **eight pixels** for one full screen (`$20` one-byte `ldir`s across, `$1B` of `$0100` up) and each step **zeroes the rows it vacated** — *"remove junk left after scroll"* — so **nothing scrolls in behind the maze**; it leaves to black and `$2209` does not seed the next room until the loop ends. A step therefore draws **one** room: a `clean`, sixteen strokes and a present, ~21 ms. The cabinet's *step* is what transfers and the count falls out of the canvas — **40 across, 30 down**. **The pause is the cabinet's as well, and it is one step a frame**: the cabinet's step is ~57 ms up/down and ~60 across by arithmetic (6,400-byte `ldir`s at 21 T-states a byte on a 2.5 MHz Z80 plus the zeroing), so its transition is ~**1.53 s** and ~**1.92 s**, and ours wants 51 and 48 ms a step against a frame period of **50**. Each step therefore ends on `sync` — the frame loop's own call — and a doorway is **thirty or forty frames**: **1.50 s and 2.00 s**, the step travelling 160 pixels a second against 138, with ~29 ms of margin inside each frame. `frame_sync_wait_ms` drops the slippage of a step that overran rather than chasing it. **One departure**: the figures do not slide — in the cabinet they are ink in the moved bitmap, here they are stamps over a canvas the slide redraws, and half of it (the man, not the crowd) would read as a defect. **A frame that scrolled is not a frame** — a deliberate hold of a second and a half, kept out of `WORST` and timed into `SL` on the readout beside `ROOM` and `HUD`, where it should read ~1500 down and ~2000 across and anything higher is a step that did not fit its frame. **A death does not scroll** ($1806 re-enters $209D directly; only the doorway at $21CF reaches it). 73 procedures, **113 host tests**, `ctest` green at 84/84. **[§22 Q4](berzerk-design.md) closed**: it weighed a present cost against an irritation, and the cost lands between rooms where there is no frame budget to overrun |
