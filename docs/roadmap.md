@@ -105,7 +105,7 @@ Companion documents (everything in `docs/`):
 | Non-blocking `wifi.start` + `wifi.status` | done | Landed 2026-07-21; a startup file reaches the prompt immediately and a `when [wifi?] [network.ntp ...]` demon does the follow-up. Independent of P6 — `launch-design.md` never cited WiFi as a motivating case |
 | HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | done | M0–M5 implemented, merged to `main` (#108, 2026-07-16): mDNS + `wifi.hostname`/`wifi.sethostname`, TCP server ops, demon-driven pump/parser, handler surface + `http.element`, `webturtle` example, file transfer. Browser + mDNS hardware-validated; `curl -T` upload validation pending. Design: [P7](#p7--http-server-implemented) |
 | Key state for games (`pollkeys`, `keydown?`, `keyhit?`) | done | Landed 2026-08-14, out of B28's keyboard work. `readchar` is a buffered character **stream** at the southbridge's typing cadence — nothing for 300 ms after a press, then one repeat per 100 ms, queued — and a frame loop reading one character a frame consumes slower than the firmware produces, so the backlog grows and the game acts on input the player has already finished giving. One character a frame also means two keys can never be held at once, a constraint all three shipped games had to design around (`asteroids` §Input). The FIFO already carries what a game wants: every entry names a key code and a state, so a press sets a bit and a release clears it, and the game reads a **level** instead of replaying history. `keyboard_poll_keys()` drains the FIFO into a 256-bit down bitmap plus a press-edge latch (64 bytes total) and discards the characters the same events buffered, so no backlog can rebuild; `keydown?`/`keyhit?` are then pure memory reads, and a frame costs one visit to the 10 kHz bus however many controls it checks. `keyhit?` latches only a press that finds the key up, so the firmware's repeats do not read as auto-fire, and it catches a tap too short to still be down at the poll. NULL-able hardware ops, so boards without key releases (the host) simply output `false`. **Asteroids is converted**: every branch of `poll.input` used to end in `stop` because only one control could act per frame, and steering, thrust and fire are independent `if`s now — level (`keydown?`) for the controls that hold, edge (`keyhit?`) for pause, quit, hyperspace and the trigger, which also ends a held `p` toggling the pause ten times a second. `play.level` takes a baseline `pollkeys` so the press that leaves the attract screen is not delivered to the first frame as a hit. **All four games are converted**; Galaxian and Invaders share one `poll.input` shape and both gained move-and-fire-together. Turtle Trails needed it for a different reason: its `while [key?]` drain never built a backlog, but a character stream cannot tell *held* from *pressed*, so a direction held through several junctions was latched once and, after `try.turn` spent it, the next junction saw an empty latch with the key still down. Its latch is set from `(or (keydown? c) (keyhit? c))` — `keydown?` for the held direction, `keyhit?` for a flick shorter than a frame, which the character queue did catch because the press was queued rather than sampled — and each half has a test that fails without it. `poll.input` there had no coverage at all before this (every steering test writes `:a.next` directly), so it gained six tests. Space Invaders' design doc had named this exact change in its own limitations table — "`readchar` gives presses, not held-key state; a held-key device query would smooth this but is out of scope" — so §9 there is now closed rather than open. Menus, attract screens and name entry stay on `readchar`, which is the right shape for them. **The load-bearing assumption is confirmed on hardware** (2026-08-14, Pico Plus 2 W): the whole design rests on the southbridge reporting `RELEASED` for ordinary keys and not only for modifiers — which is all the driver handled before this change, and therefore all the source could prove — and the host tests cannot settle it, since they drive a FIFO this project wrote. `tests/logo/keystate` runs the real bus; DOWN followed the finger and released cleanly, and HIT appeared once per press rather than once per firmware repeat. It stays in the tree as the regression check for any future driver change |
-| Arrays (`array`/`setitem`) | deferred; re-asked by [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M3, **gated on [P17](#p17--dungeons-of-daggorath-design-first) M0** | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need. **[P13](#p13--battlezone-design-first) looked like that need and measured out as not being it** (design §13 L2): `item` costs ~16 µs fixed plus ~0.73 µs an element on a board, so a 3D frame's 44 walks over lists of 8–32 cost ~1.1 ms and arrays would return ~0.7 of it. The pre-P10-M5 figure of "~115 µs for a twelve-element walk" that P11 §12 quotes no longer holds — the interpreter got much faster underneath it. Arrays become this game's lever only if its model tables grow past ~64 entries. **P13 M0 confirmed it on a board** (2026-08-23): `draw.box` reads forty `item`s and they are 0.72 ms of a measured 3.82 ms box -- 19 % -- but the cost is the ~16 us *fixed* charge of an `item` call and not the walk, because the lists are four elements long. O(1) indexing removes the part that is already almost nothing |
+| Arrays (`array`/`setitem`) | deferred; re-asked by [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M3, **gated on [P17](#p17--dungeons-of-daggorath-design-first) M0 — M0 did not ask for it** | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need. **[P13](#p13--battlezone-design-first) looked like that need and measured out as not being it** (design §13 L2): `item` costs ~16 µs fixed plus ~0.73 µs an element on a board, so a 3D frame's 44 walks over lists of 8–32 cost ~1.1 ms and arrays would return ~0.7 of it. The pre-P10-M5 figure of "~115 µs for a twelve-element walk" that P11 §12 quotes no longer holds — the interpreter got much faster underneath it. Arrays become this game's lever only if its model tables grow past ~64 entries. **P13 M0 confirmed it on a board** (2026-08-23): `draw.box` reads forty `item`s and they are 0.72 ms of a measured 3.82 ms box -- 19 % -- but the cost is the ~16 us *fixed* charge of an `item` call and not the walk, because the lists are four elements long. O(1) indexing removes the part that is already almost nothing. **P17 M0 confirmed on a Pico Plus 2 W** (2026-09-02): the winning list walk (`foreach`) drew a 184-point worst-case scene in 53.2 ms at 300 MHz against a 100 ms gate, with zero `nodes`/`atoms` allocated over 1,000 warm walks — the list walk was never the bottleneck arrays would have addressed, so P18 M3 stays deferred |
 | Atom reclamation / `erall` soft reset | done / deferred | Atom reclamation landed 2026-07-23; `erall` soft reset remains deferred. See `memory-reclamation-design.md` |
 | Tile maps + smooth scrolling (accelerated tile games) | **removed 2026-08-28, see [P14](#p14--the-vector-direction-removing-tiles-and-the-sprite-games-plan-first)**; was: bake half done, scrolling half open | Design drafted 2026-07-29 ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md)); M0 measured 2026-08-01 and the gate **failed** — the interpreter, not the wire, was the bottleneck, which opened [P10](#p10--interpreter-throughput) and split the item (§3.4). **The bake half shipped**: `newtiles`/`snaptile`/`newmap`/`settile`/`tile`/`stampmap`/`stamptile` over `core/tilemap.c` (M1+M2, hardware-accepted 2026-08-02), and M3 revamped Turtle Trails in place — the board is the C map and `draw.board` is a `stampmap`, replacing a **5,916 ms** pen-carved build with a **7.6 ms** bake. Two findings came out of it: **B11** (`dot` ignored the pen size on the PicoCalc — the blank maze was that, not the tile system), and that **the C map does not move the frame**, contradicting §3.4's and P10 §7's expectation that it would close Trails. **The scrolling half's gate was measured 2026-08-04** (§13.6–§13.7), on one board before and after, settling the Plus-2-W-vs-Pico-2 mismatch §13.5 flagged: the frame is **73.6 → 42.55 ms (1.73×)** and the body **73.35 → 40.15**, essentially at the 40 ms gate. But **the gate omitted the present it was meant to leave room for** — a scroll dirties the whole viewport, so a scrolled frame is 61–66 ms and the real budget is a body under 14–19 ms. So **M4 is unblocked only for a new, simpler scroller** sized to that (~300–400 statements, ~540 under §15's half-rate lever), and **M5 (Checkpoint Run) is closed** at ~150 ms against a ~19 ms need. Whether to design such a game is the open question. All boards, tiered capacity. See [P9](#p9--tile-maps-and-smooth-scrolling-design-first) |
 | Interpreter throughput (games hit their frame budgets) | done; `pico2` joined the tiering 2026-08-23 and **confirmed it with a control group** -- 1.65x on the frame, both controls unmoved | Opened 2026-08-01 by P9's failed M0 gate, design drafted ([`interpreter-throughput-design.md`](interpreter-throughput-design.md)): the display was never the bottleneck — both shipped games run at ~9 fps and ~4 fps against a designed 25, and ~48 % of interpreter runtime is spent re-deriving facts that cannot change (word class re-lexed every evaluation, names resolved by `strncasecmp` every call). Memoise them on the interned atom. Target: Turtle Trails' `play.frame` under 40 ms, from 87.3 ms. M0–M3 done 2026-08-01, M4 declined. M1 (word class) delivered all of it on hardware — Trails 87.3 → **73.4 ms**, Checkpoint Run 258.6 → **232.6 ms**. M2 (name binding) flattened the workspace-scan cliff (**128.3 → 24.0 µs** per call) and returned 9 KB of SRAM, but moved neither game and regressed the profiled loop 1.64× on the board. **§1's 40 ms is not met**, and P9's C map — named here as what would close Trails — landed on 2026-08-02 and moved the frame by 0.2 ms (73.4 → 73.6). That expectation is **disproved** (P9 design §13.4): it misread P9 M0, which measured `step.bugs` at 59 % of a frame rather than the `tile.at` walk inside it. **M5 profiled the frame on 2026-08-02 (design §11.1) and found one.** There is no hot spot — 791 operations on the board against 787 predicted from the host, every slot proportional to its statement count — but a `make "x (:x + 1)` costs **102.5 µs against a procedure call's 24 µs, 4.3×, where the host ratio is 2.5×**. Calls scale host→board at 75×, a `make` with arithmetic at 129×. M2 made calls cheap; the statement itself is what is left, and the hot slots are almost nothing but `make` statements. The uncached piece inside it is **variable resolution**, which §3.2/§7 set aside as dynamically scoped — a reason it cannot use M2's mechanism, not a reason it must stay slow. Before M5, the target had no named lever, and M4 and the bytecode body — the only candidates then left — had both been rejected partly on the strength of the disproved claim. **M5 (design §11) is therefore to re-profile before choosing**: `tests/logo/p10prof` splits a frame into its thirteen parts on a board and reports each in *operations* as well as milliseconds, so "no hot spot exists" is a result the profile can actually return. **It returned exactly that, and the answer was the flash.** The board:host ratios were 60× for a bare loop and 67× for a call against 132× for an arithmetic statement and 212× for the parenthesised-call path -- the RP2350 executes the interpreter from flash through a 16 KB XIP cache, and the code entered once per statement pays for it. Four tiers of `__not_in_flash_func` (design §11.2–§11.6) took the frame **81.0 → 47.0 ms, 1.72×, for 13.6 KB of SRAM**, `sync` flat at 1.6-1.8 ms throughout as the control. Returns halved every tier — 1.24×, 1.23×, 1.105×, 1.024× — so the tiering is done. **§1's 40 ms is still not met**, by 1.17×, but it is now a game-side number: `step.bugs` and `place.all` are 65 % of the frame and are nothing but statements. Enabled on the `pico2w` and `pico+2w` presets. See [P10](#p10--interpreter-throughput) |
@@ -2441,8 +2441,79 @@ the game is not started.
 
 ### P17 — Dungeons of Daggorath (design first)
 
-Status: **design drafted 2026-09-02, gated on its own M0 measurement.** See
-[`daggorath-design.md`](daggorath-design.md).
+Status: **design drafted 2026-09-02; M0 confirmed on a Pico Plus 2 W,
+2026-09-02 — gate PASSES at 53.2 ms against the 100 ms budget; M1 written the
+same day and confirmed on hardware 2026-09-03, after three bugs that the host
+had recorded as done.** "No board needed for a Logo-only milestone" is what
+this entry used to say, and it was wrong three times over — see M1 below.
+Pico 2 and Pico 2 W still to run M0, though nothing in the result is expected
+to be board-specific. `tests/logo/p17m0` timed all three of section 6.3's list
+walks against a 55-point shape and against the full 184-point worst-case
+scene: **`foreach` won on every axis** — fastest (23.2 µs isolated, 97.8 ms
+full scene), no allocation (`nodes`/`atoms` read zero for all three
+candidates, resolving section 6.3's `butfirst` question clean), and the
+candidate the design already said reads best. The present measured 19.95 ms
+against section 12's predicted 19.8. `test_p17m0.c` pins that the three walks
+agree pixel-for-pixel and that the transform matches section 6.2's
+hand-worked numbers; the timing figures themselves read as zero on the host
+(`ticks` is milliseconds, the host is far faster than the target) — same
+caveat as P13 M0.
+
+**M1 — the dungeon and the view. Recorded done 2026-09-02 and it was not;
+confirmed on a board 2026-09-03 after three bugs, one of which had every
+level of the dungeon wrong.** `scripts/gen_daggorath.py` ports `RANDOM.ASM`'s
+24-bit LFSR and `DGNGEN.ASM`'s carve/wall/door algorithm bit-for-bit, and
+flattens `VARC.ASM`'s twelve architectural lists plus `VERT.ASM:CELINE` into
+the absolute polylines section 11.2 asks for — already split into the
+parallel ys/xs lists the cell walk wants. `logo/games/daggorath` ports the
+forward-view cell walk (`VIEWER.ASM`), `MOVE`/`TURN` with both animations,
+the dot fade, and inverted levels with the `write`-based status bar.
+
+**What the board and the maps found.** The milestone shipped host-green and
+came up on a board as a **blank split screen**: all four level colours used
+palette slot 255, which *holds the current graphics background*, so an even
+level drew the whole dungeon in the background colour and an odd level could
+not be entered at all (`setbg 255` is outside its 0..254 range) —
+[B81](bugs.md). Reading the code beside design §6 then found that the cell
+walk drew left and right but never the **forward** face, leaving the entire
+`:dagg.forward` table loaded and dead — [B82](bugs.md). And
+`docs/DungeonsOfDaggorath/Levels/` arriving — five SVG maps of the real
+dungeon — closed the gap this entry used to record as unclosable: the first
+cell-for-cell diff came back **468 of level 1's 500 cells in the wrong
+place**. `RNDCEL` gives the **column** its first random draw and the row the
+second (`TFR A,B` before the second `SWI`); the port had them reversed, which
+transposed every maze. Falling out of that fix, the player start is
+`(16, 11)` — `ONCE.ASM:GAME10`'s `LDD #$100B / STD PROW`, exactly where
+`level1.svg` draws the blue dot — not `COMDAT.ASM`'s `(12, 22)`, which is the
+attract-mode DEMO's position and **not a carved cell**, so the game had been
+starting inside rock. [B83](bugs.md).
+
+**The lesson is the shape of the oracles, not "test on hardware".** All five
+of the generator's internal invariants — 500 open cells, 70/45 door counts,
+full connectivity — stayed green through every one of these, because they
+were the algorithm checking its own arithmetic. Each bug needed a *different*
+kind of witness: a real panel, the design text, and an external map. All
+three are now gates — `tests/test_daggorath.c` refuses any level colour that
+reaches slot 255 and refuses a redraw line in the background colour, asserts
+the forward face is drawn, and the generator's `check_against_published_map()`
+fails outright if any level drifts from `Levels/`.
+
+**It ships as one file.** The maze and the vector lists are generated into
+`logo/games/daggorath` between two markers rather than into a `daggdata`
+beside it, which measured free: whole-row list literals leave **27,082** free
+nodes against **27,025** for the same data read with `readlist` — 57 *better*,
+that being the loader procedure that no longer exists. `dagg.load`,
+`dagg.ys.of`, `dagg.xs.of`, `dagg.read.runs`, the host test's mock-filesystem
+staging and its one-level fixture all go with it, and the test now runs
+against all five real levels. The one form to avoid is splitting rows to
+honour the 40-column source rule and reassembling them with `se`: same nodes,
+but it retains **~10,900 word-table entries**.
+
+24 tests, all passing. See [`daggorath-design.md`](daggorath-design.md) §7.4
+and §15 for the rest of the porting notes — a `MAKDOR` retry bug caught by an
+infinite loop in the generator, `LVLTAB`'s seed table turning out to be a
+sliding window rather than five independent seeds, and an O(n²) list build
+that had to become two `item` lookups.
 
 A faithful port of the 1982 DynaMicro game from **its own 6809 source**, 9,866
 lines of it, kept under `docs/DungeonsOfDaggorath/` with the grant of licence
@@ -2551,7 +2622,15 @@ rule — down a hole or a ladder, up a ladder only — gives 1↔2 and 2↔3 by 
 and 4 → 5 by holes that cannot be climbed back up. None of it is a special case
 in the ROM, and none of it will be here.
 
-M0, M1, M1a (the dot fade, optional) and M2–M6, gates in the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) goes first** (decided 2026-09-02): its M0–M2 are the procedure table, the opaque `write` and the dashed pen, and P17 M1 wants all three — a status line it can invert, a file it can grow into, and a fade it can draw the way the ROM draws it. **All three landed the same day**, so nothing here is waiting on the interpreter any more; §8's three fallbacks and the milestone gated on a photograph go with them, because the dotted fade is now what a plain `fd` does. P18 M3 and M4 run the other way round and wait on P17's own M0 and M6. [B65](bugs.md) blocks `ZSAVE` to the internal
+M0 and M1 done; M1a (the dot fade, optional) and M2–M6 still ahead, gates in
+the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) went
+first** (decided 2026-09-02): its M0–M2 are the procedure table, the opaque
+`write` and the dashed pen, and P17 M1 wanted all three — a status line it can
+invert, a file it can grow into, and a fade it can draw the way the ROM draws
+it. **All three landed the same day**, which is what let M1 land the same day
+too; §8's three fallbacks and the milestone gated on a photograph go with
+them, because the dotted fade is now what a plain `fd` does. P18 M3 and M4 run
+the other way round and wait on P17's own M0 and M6. [B65](bugs.md) blocks `ZSAVE` to the internal
 filesystem at M5, so it writes to `/sd` until that is fixed.
 
 
@@ -2607,8 +2686,14 @@ a list walk is too slow — building arrays before that runs would be exactly th
 speculative primitive this tree keeps refusing. M4 waits on P17 M6 finding the
 sweeps awkward in practice.
 
-    P18 M0, M1, M2  →  P17 M0  →  [P18 M3 if M0 asks]  →  P17 M1 …
-       (done)                      [P18 M4 if P17 M6 asks]
+**P17 M0 answered it, and the answer is that M3 is not needed.** Confirmed on
+a Pico Plus 2 W 2026-09-02: `foreach` walked a 184-point worst-case scene in
+97.8 ms at 150 MHz and 53.2 ms at 300 MHz — inside the 100 ms gate, with zero
+`nodes`/`atoms` allocated over 1,000 warm walks. §6.3's own list walk is the
+lever that would have asked for arrays, and it did not ask.
+
+    P18 M0, M1, M2  →  P17 M0  →  P18 M3 not needed  →  P17 M1 …
+       (done)            (done, foreach)   [P18 M4 if P17 M6 asks]
 
 ---
 

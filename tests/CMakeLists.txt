@@ -120,6 +120,17 @@ add_logo_test(test_p13m0)
 target_compile_definitions(test_p13m0 PRIVATE
     P13M0_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p13m0")
 
+# Dungeons of Daggorath (P17), M0: the harness, and the three questions --
+# which of section 6.3's list walks, does the fade land, does 1.25x land,
+# does the board take `hw.setcpu "fast`. What the host can check is that the
+# three walks agree (a "fastest" one that draws nothing is not a result) and
+# that the transform matches section 6.2's hand-worked numbers. The gate
+# itself -- a worst-case redraw under 100 ms at 300 MHz -- needs a board
+# (tests/logo/p17m0).
+add_logo_test(test_p17m0)
+target_compile_definitions(test_p17m0 PRIVATE
+    P17M0_SOURCE="${CMAKE_SOURCE_DIR}/tests/logo/p17m0")
+
 # Berzerk (P15), M0: the measurement harness that decides section 3's erase
 # strategy and reads section 15's frame budget off a board. What the host can
 # check is that the room generator reproduces, that `IQ` clears the right bits
@@ -145,6 +156,19 @@ target_compile_definitions(test_battlezone PRIVATE
 add_logo_test(test_berzerk)
 target_compile_definitions(test_berzerk PRIVATE
     BERZERK_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/berzerk")
+
+# Dungeons of Daggorath (P17), M1: the dungeon and the view. The game is
+# pure Logo, and the maze is generated into the game file itself, so loading
+# it is the whole setup -- no data file, no mock filesystem. What the host
+# can check is the generated block (five levels of the right shape), the
+# transform (M0-confirmed numbers), the cell's side-code extraction and
+# stepping, the forward view stopping at a wall, the level colours, the fade
+# table, MOVE/TURN legality, and the procedure-table budget. The redraw
+# timing needs a board (tests/logo/p17m0, already run at M0); the mazes
+# themselves are gated against the published maps by the generator.
+add_logo_test(test_daggorath)
+target_compile_definitions(test_daggorath PRIVATE
+    DAGGORATH_SOURCE="${CMAKE_SOURCE_DIR}/logo/games/daggorath")
 
 # P10 M0 interpreter throughput benchmark -- repeatable baseline plus a
 # regression guard on relative numbers (interpreter-throughput-design.md §6).

@@ -1,0 +1,642 @@
+; Dungeons of Daggorath -- P17 M1: the dungeon and the view.
+;
+;   load "daggorath
+;   daggorath
+;
+; docs/daggorath-design.md is the design; this file is M1's slice of it --
+; section 15: "the cell walk, the architectural lists, MOVE and TURN with
+; both animations, the grey ramp, the inverted levels including the status
+; bar, and hw.setcpu "fast with restore.clock behind it."
+;
+; M1 does NOT include (see the M1 plan's scope note, and each is a later
+; milestone by design section 15):
+;   - ladders/holes/VFTTAB (M5) -- the forward view always draws the plain
+;     ceiling line (VERT.ASM:CELINE); dagg.redraw never looks up a vertical
+;     feature table because there isn't one yet.
+;   - creatures, peeks, objects, torches (M3/M4) -- no CFIND/OFIND/PDRAW,
+;     and the fade uses a fixed ambient light constant (`dagg.light`)
+;     rather than RLIGHT/MLIGHT from a burning torch.
+;   - the heart, the parsed command line, the scheduler (M2) -- `dagg.move`
+;     and `dagg.turn` are plain procedures a caller invokes directly, not
+;     yet driven by a typed command.
+;
+; The maze and the architectural vector lists are generated into this file
+; by scripts/gen_daggorath.py -- see the marked block below. There is no
+; second file to ship and nothing to open at run time.
+
+;==========================================================================
+; The scale tables -- design section 6.1, verbatim (also tests/logo/p17m0,
+; where the transform this file reuses was board-confirmed at M0).
+
+make "dagg.norscl [200 128 80 50 31 20 12 8 4 2]
+make "dagg.hlfscl [255 156 100 65 40 26 16 10 6 3]
+
+; BAKSCL, VIEWER.ASM: "the same table shifted one entry along" -- the
+; second through eleventh entries of the eleven-value HLFSCL/BAKSCL block
+; VIEWER.ASM lays out (the eleventh, marked *DEBUG in the source, is
+; BAKSCL's own last entry, not dead data once the table is read this way).
+make "dagg.bakscl [156 100 65 40 26 16 10 6 3 1]
+
+; VECTOR.ASM's fade table (design section 8), the dash column -- P18 M2's
+; `setpendash` makes a dotted stroke cost the same as a solid one, so dots
+; are M1's default (the grey alternative is M1a, optional, not built here).
+make "dagg.dash [1 2 3 5 9 17 33 65]
+
+; No torches yet (M3), so the fade reads off a fixed ambient light rather
+; than RLIGHT -- 8, "typical dungeon level 1 or 2" per VIEWER.ASM's own
+; comment on the RLIGHT input. A placeholder, not a guess dressed up as one.
+make "dagg.light 8
+
+;==========================================================================
+; The maze and the architectural vector lists.
+;
+; EVERYTHING BETWEEN THE TWO MARKERS BELOW IS GENERATED. Do not hand-edit
+; it -- run `python3 scripts/gen_daggorath.py`, which rewrites the block in
+; place (and gates the mazes against docs/DungeonsOfDaggorath/Levels/).
+;
+; It is *in this file* rather than in a `daggdata` beside it because a game
+; should be one file to ship. That costs nothing in RAM: measured on the
+; host, whole-row list literals land in exactly the same node and word-table
+; count `readlist` did (27,082 free nodes against 27,025, the difference
+; being the loader procedure that no longer exists). What it does cost is
+; the 40-column source rule -- a maze row is 32 numbers and will not fit,
+; and splitting it into 40-column pieces to be reassembled with `se` is the
+; one form that is NOT free: that burns ~10,900 word-table entries where
+; the whole-row literal burns none.
+;
+; Mazes are a list of levels of 32 rows of 32 cells, not flattened -- see
+; dagg.cell. Each vector list is a list of runs, and each run is already
+; the two parallel ys/xs lists `dagg.draw.run` wants: the generator does
+; the splitting section 6.3 used to do here at load time, which is why
+; `dagg.ys.of`, `dagg.xs.of` and `dagg.read.runs` are gone.
+
+; BEGIN GENERATED DATA
+make "dagg.mazes []
+make "rows []
+make "rows lput [195 51 51 51 55 115 31 255 255 255 255 255 255 255 255 255 255 255 207 255 255 255 255 207 255 255 255 255 255 199 115 15] :rows
+make "rows lput [204 255 255 255 255 255 205 255 215 115 51 51 59 183 115 11 179 51 32 51 3 51 51 16 51 51 51 51 51 28 255 204] :rows
+make "rows lput [204 255 211 51 47 255 204 255 205 255 255 255 255 255 255 204 255 255 206 255 204 255 255 205 255 255 255 255 255 205 255 204] :rows
+make "rows lput [204 255 205 255 194 59 128 51 60 255 255 255 255 255 255 204 255 255 204 255 204 255 255 200 179 55 115 51 51 16 51 12] :rows
+make "rows lput [192 51 0 51 12 255 204 255 255 255 255 255 255 255 255 204 255 255 204 255 240 51 51 12 255 255 255 255 255 205 255 204] :rows
+make "rows lput [204 255 204 255 204 255 204 255 255 255 255 255 255 255 255 204 255 255 236 255 255 255 255 204 255 255 255 255 255 192 51 12] :rows
+make "rows lput [192 51 60 255 204 255 224 51 35 51 51 59 183 115 51 12 255 255 194 51 31 255 255 204 255 255 255 255 255 204 255 204] :rows
+make "rows lput [204 255 255 255 204 255 206 255 206 255 255 255 255 255 255 220 255 255 204 255 237 255 255 204 255 255 255 255 255 204 255 236] :rows
+make "rows lput [236 255 255 255 204 255 204 255 204 255 255 255 255 255 255 205 255 255 220 255 206 255 255 204 255 255 255 255 255 196 115 46] :rows
+make "rows lput [206 255 255 255 204 255 204 255 204 255 255 239 255 255 255 240 51 59 129 51 0 55 115 0 51 51 51 51 3 60 255 238] :rows
+make "rows lput [220 255 255 255 204 255 204 255 220 255 255 206 255 255 255 255 255 255 204 255 204 255 255 204 255 255 255 255 204 255 255 206] :rows
+make "rows lput [205 255 255 255 236 255 204 255 221 255 255 204 255 255 255 211 55 115 60 255 204 255 255 192 51 51 59 183 96 55 115 28] :rows
+make "rows lput [192 51 59 179 2 51 48 55 113 3 51 0 59 191 255 205 255 255 255 255 204 255 255 204 255 255 255 255 206 255 255 205] :rows
+make "rows lput [220 255 255 255 204 255 255 255 255 204 255 204 255 255 255 192 51 23 115 51 48 7 115 0 51 59 187 187 144 63 255 204] :rows
+make "rows lput [237 255 255 255 204 255 255 223 255 204 255 204 255 255 255 220 255 205 255 255 255 220 255 204 255 255 255 255 221 255 255 204] :rows
+make "rows lput [242 35 51 51 12 255 255 205 255 204 255 204 255 255 255 237 255 192 51 59 131 61 255 204 255 255 207 255 205 255 255 220] :rows
+make "rows lput [255 206 255 255 220 255 255 204 255 220 255 204 255 255 255 222 255 204 255 255 204 255 255 204 255 255 204 255 236 255 255 205] :rows
+make "rows lput [255 204 255 255 209 55 115 0 51 49 7 124 255 255 255 205 255 204 255 255 204 255 255 240 51 51 12 255 206 255 255 204] :rows
+make "rows lput [255 204 255 255 205 255 255 204 255 255 204 255 255 255 255 220 255 204 255 255 204 255 255 255 255 255 236 255 204 255 255 204] :rows
+make "rows lput [255 208 51 55 64 51 51 28 255 255 204 255 255 255 255 205 255 204 255 255 204 255 255 255 255 255 206 255 204 255 255 204] :rows
+make "rows lput [255 205 255 255 204 255 255 201 179 59 136 183 67 51 51 0 51 0 51 51 0 51 51 51 51 51 0 59 128 51 55 124] :rows
+make "rows lput [255 208 51 51 56 131 51 12 255 255 204 255 220 255 255 204 255 204 255 255 204 255 255 255 255 255 204 255 204 255 255 255] :rows
+make "rows lput [255 221 255 255 255 204 255 220 255 255 204 255 237 255 255 204 255 204 255 255 204 255 255 255 255 255 204 255 204 255 255 255] :rows
+make "rows lput [243 1 51 51 51 16 55 65 55 115 60 255 206 255 255 192 51 4 115 51 0 51 55 115 51 51 0 51 36 115 15 255] :rows
+make "rows lput [255 204 255 255 255 205 255 204 255 255 255 255 204 255 255 220 255 204 255 255 204 255 255 255 255 255 204 255 206 255 204 255] :rows
+make "rows lput [255 204 255 255 255 204 255 204 255 255 255 255 204 255 255 205 255 204 255 255 196 115 51 55 115 51 60 255 204 255 204 255] :rows
+make "rows lput [227 48 51 51 51 0 51 28 255 255 255 255 220 255 255 192 55 64 51 51 12 255 255 255 255 255 255 255 204 255 204 255] :rows
+make "rows lput [206 255 255 255 255 204 255 193 51 51 51 55 125 255 255 204 255 204 255 255 204 255 255 255 255 255 255 255 204 255 204 255] :rows
+make "rows lput [192 51 51 59 183 76 255 204 255 255 255 255 255 255 255 204 255 236 255 255 204 255 255 255 255 255 255 255 192 51 60 255] :rows
+make "rows lput [204 255 255 255 255 204 255 196 115 55 115 51 51 51 51 48 59 142 255 255 220 255 255 255 255 255 255 255 204 255 255 255] :rows
+make "rows lput [204 255 255 255 255 236 255 204 255 255 255 255 255 255 255 255 255 204 255 255 205 255 255 255 255 255 255 255 204 255 255 255] :rows
+make "rows lput [240 51 51 51 51 50 51 48 59 179 51 51 55 115 63 255 255 240 51 51 48 59 179 51 51 51 51 51 60 255 255 255] :rows
+make "dagg.mazes lput :rows :dagg.mazes
+make "rows []
+make "rows lput [255 255 255 195 51 3 51 51 55 119 67 51 59 179 3 51 51 51 15 255 255 255 255 195 59 131 51 15 255 255 255 255] :rows
+make "rows lput [255 255 255 236 255 204 255 255 255 255 236 255 255 255 204 255 255 255 204 255 255 255 255 204 255 204 255 204 255 255 255 255] :rows
+make "rows lput [255 255 255 254 255 220 255 255 255 255 206 255 255 255 204 255 255 255 220 255 255 255 255 204 255 196 119 64 55 115 15 255] :rows
+make "rows lput [255 255 255 255 255 205 255 255 255 255 204 255 255 255 204 255 255 255 205 255 255 255 255 204 255 204 255 236 255 255 192 63] :rows
+make "rows lput [219 179 51 51 51 0 51 51 51 3 52 115 51 3 56 187 179 51 0 51 3 51 3 48 51 32 51 2 59 179 28 255] :rows
+make "rows lput [205 255 255 255 255 204 255 255 255 204 255 255 255 204 255 255 255 255 204 255 204 255 204 255 255 206 255 204 255 255 205 255] :rows
+make "rows lput [204 255 255 255 255 240 59 159 255 220 255 255 255 204 255 255 255 255 236 255 236 255 204 255 255 204 255 204 255 255 204 255] :rows
+make "rows lput [220 255 255 255 255 255 255 205 255 237 255 255 255 192 51 51 51 51 2 51 6 115 48 3 51 8 179 48 3 51 0 63] :rows
+make "rows lput [205 255 255 255 255 255 255 204 255 222 255 255 255 204 255 255 255 255 204 255 204 255 255 204 255 204 255 255 204 255 220 255] :rows
+make "rows lput [204 255 255 255 195 51 51 0 51 1 55 119 119 76 255 255 243 3 48 51 0 51 51 48 51 52 67 59 128 51 13 255] :rows
+make "rows lput [204 255 255 255 204 255 255 204 255 204 255 255 255 240 15 255 255 204 255 255 204 255 255 255 255 255 204 255 204 255 204 255] :rows
+make "rows lput [220 255 255 255 204 255 255 204 255 204 255 255 255 255 204 255 255 204 255 255 204 255 255 255 255 255 204 255 204 255 204 255] :rows
+make "rows lput [205 255 207 255 204 255 255 204 255 220 255 255 255 255 204 255 255 204 255 255 204 255 255 255 255 255 204 255 204 255 204 255] :rows
+make "rows lput [220 255 204 255 204 255 255 204 255 205 255 255 255 255 204 255 255 192 51 51 0 55 115 51 55 115 8 179 8 187 128 63] :rows
+make "rows lput [205 255 204 255 224 51 51 48 55 64 63 255 255 255 204 255 255 204 255 255 204 255 255 255 255 255 204 255 204 255 204 255] :rows
+make "rows lput [196 115 8 179 14 255 255 255 255 204 255 255 255 255 204 255 255 204 255 255 204 255 255 255 255 255 204 255 192 51 48 31] :rows
+make "rows lput [204 255 204 255 204 255 255 255 255 220 255 255 255 255 204 255 255 204 255 255 204 255 255 255 255 255 204 255 204 255 255 205] :rows
+make "rows lput [204 255 204 255 204 255 255 255 255 205 255 255 255 255 204 255 255 192 51 51 48 55 115 59 187 179 0 51 0 51 51 12] :rows
+make "rows lput [204 255 204 255 204 255 255 255 255 192 51 51 3 51 48 51 51 12 255 255 255 255 255 255 255 255 236 255 204 255 255 204] :rows
+make "rows lput [204 255 236 255 204 255 255 255 255 204 255 255 204 255 255 255 255 208 51 7 115 51 59 135 115 55 70 119 64 55 119 108] :rows
+make "rows lput [208 59 162 51 0 51 51 59 187 140 255 255 204 255 255 255 255 205 255 204 255 255 255 204 255 255 204 255 220 255 255 206] :rows
+make "rows lput [205 255 206 255 204 255 255 255 255 204 255 255 208 51 51 55 115 0 51 60 255 255 255 204 255 255 240 55 65 51 59 140] :rows
+make "rows lput [192 55 92 255 204 255 255 255 255 204 255 255 205 255 255 255 255 204 255 255 255 255 255 204 255 255 255 255 220 255 255 220] :rows
+make "rows lput [204 255 205 255 240 51 59 155 179 60 255 255 204 255 255 255 255 204 255 255 255 255 255 204 255 255 255 255 237 255 255 221] :rows
+make "rows lput [204 255 204 255 255 255 255 205 255 255 255 255 204 255 255 255 255 204 255 255 255 255 255 204 255 255 255 255 242 15 255 205] :rows
+make "rows lput [204 255 204 255 255 255 255 220 255 255 255 255 192 59 179 51 51 16 51 51 51 15 255 204 255 255 255 255 255 204 255 220] :rows
+make "rows lput [192 51 0 51 51 51 51 1 51 51 15 255 204 255 255 255 255 205 255 255 255 236 255 204 255 255 255 255 255 204 255 205] :rows
+make "rows lput [204 255 204 255 255 255 255 204 255 255 208 59 188 255 255 255 255 204 255 255 255 222 255 220 255 255 255 255 255 204 255 220] :rows
+make "rows lput [192 51 0 59 179 51 51 16 51 55 77 255 255 255 255 255 255 204 255 255 255 237 255 205 255 255 195 51 55 80 51 13] :rows
+make "rows lput [204 255 204 255 255 255 255 205 255 255 244 123 179 51 51 51 51 0 51 55 115 14 255 220 255 255 204 255 255 205 255 204] :rows
+make "rows lput [204 255 204 255 255 255 255 220 255 255 255 255 255 255 255 255 255 204 255 255 255 204 255 205 255 255 204 255 255 192 51 12] :rows
+make "rows lput [240 51 48 51 51 55 115 49 51 51 55 115 59 183 123 179 51 52 115 51 51 48 51 56 183 115 48 59 183 124 255 252] :rows
+make "dagg.mazes lput :rows :dagg.mazes
+make "rows []
+make "rows lput [195 51 51 3 51 51 3 55 115 63 255 255 255 255 255 255 255 255 207 255 255 223 255 195 51 59 131 51 51 51 3 63] :rows
+make "rows lput [204 255 255 204 255 255 204 255 255 255 255 255 255 255 255 251 179 59 128 51 55 65 51 60 255 255 204 255 255 255 204 255] :rows
+make "rows lput [220 255 255 204 255 255 204 255 255 255 255 255 255 255 255 255 255 255 204 255 255 204 255 255 255 255 220 255 255 255 204 255] :rows
+make "rows lput [205 255 255 204 255 255 204 255 255 255 255 255 255 255 255 255 255 255 252 255 255 240 51 51 51 51 49 51 51 51 36 127] :rows
+make "rows lput [192 51 51 0 51 51 12 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 238 255] :rows
+make "rows lput [204 255 255 204 255 255 204 255 255 215 119 115 51 51 51 51 51 51 51 51 51 51 51 51 59 187 179 51 51 55 126 255] :rows
+make "rows lput [204 255 255 204 255 255 204 255 255 205 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255] :rows
+make "rows lput [204 255 255 204 255 255 204 255 255 192 51 51 51 51 59 179 59 179 51 51 15 255 255 255 255 255 255 255 255 255 255 255] :rows
+make "rows lput [192 51 3 48 51 55 112 51 51 12 255 255 255 255 255 255 255 255 255 255 204 255 255 255 255 255 255 255 255 255 255 255] :rows
+make "rows lput [204 255 204 255 255 255 255 255 255 204 255 255 255 255 255 255 255 255 255 255 204 255 195 51 51 15 255 255 255 255 255 255] :rows
+make "rows lput [236 255 240 51 51 51 51 51 51 52 67 51 51 11 179 51 63 255 255 255 204 255 204 255 255 204 255 255 255 255 255 255] :rows
+make "rows lput [206 255 255 255 255 255 255 255 255 255 204 255 255 204 255 255 255 255 255 255 204 255 204 255 255 204 255 255 255 255 255 255] :rows
+make "rows lput [204 255 255 255 255 255 255 255 255 255 204 255 255 204 255 255 255 255 255 255 220 255 236 255 255 220 255 255 255 255 255 255] :rows
+make "rows lput [204 255 255 255 255 255 255 255 207 255 204 255 255 204 255 255 255 255 255 255 205 255 206 255 255 205 255 255 255 255 255 255] :rows
+make "rows lput [204 255 255 255 255 255 255 255 196 115 16 51 51 4 115 51 51 51 51 51 32 55 64 51 51 0 59 179 15 255 255 255] :rows
+make "rows lput [204 255 255 255 255 255 255 255 204 255 205 255 255 204 255 255 255 255 255 255 206 255 204 255 255 220 255 255 204 255 255 255] :rows
+make "rows lput [236 255 255 255 255 195 51 51 32 51 4 115 39 112 35 51 51 35 51 51 0 51 0 51 55 85 127 255 240 55 115 15] :rows
+make "rows lput [206 255 255 255 255 220 255 255 206 255 204 255 206 255 206 255 255 222 255 255 204 255 204 255 255 221 255 255 255 255 255 204] :rows
+make "rows lput [232 179 51 55 115 1 51 55 64 51 48 51 16 51 40 179 51 57 131 51 16 55 68 115 51 1 51 51 51 51 51 44] :rows
+make "rows lput [222 255 255 255 255 204 255 255 204 255 255 255 221 255 238 255 255 255 220 255 205 255 204 255 255 204 255 255 255 255 255 206] :rows
+make "rows lput [205 255 255 255 255 204 255 255 204 255 255 255 237 255 206 255 255 255 205 255 204 255 220 255 255 236 255 255 255 195 51 12] :rows
+make "rows lput [204 255 255 255 255 204 255 255 204 255 255 255 194 51 0 51 3 51 0 51 48 35 49 3 51 18 51 3 51 44 255 204] :rows
+make "rows lput [204 255 255 255 255 192 51 51 20 119 119 115 12 255 220 255 204 255 220 255 255 206 255 204 255 221 255 204 255 202 179 12] :rows
+make "rows lput [204 255 255 255 255 204 255 255 205 255 255 255 204 255 205 255 204 255 193 51 51 0 51 0 51 13 255 204 255 204 255 204] :rows
+make "rows lput [208 51 51 51 51 0 51 51 28 255 215 115 0 51 12 255 204 255 236 255 255 204 255 204 255 240 3 56 179 0 51 12] :rows
+make "rows lput [205 255 255 255 255 204 255 255 205 255 205 255 204 255 204 255 204 255 206 255 255 204 255 204 255 255 204 255 255 204 255 204] :rows
+make "rows lput [204 255 255 255 255 240 51 51 0 55 64 55 120 131 48 51 0 51 60 255 255 236 255 192 51 55 64 51 55 64 55 76] :rows
+make "rows lput [204 255 255 255 255 255 255 255 204 255 204 255 255 220 255 255 220 255 255 207 255 206 255 220 255 255 220 255 255 204 255 204] :rows
+make "rows lput [204 255 255 255 255 255 255 255 204 255 236 255 255 209 55 115 25 179 51 4 115 0 51 33 55 115 5 115 51 8 187 140] :rows
+make "rows lput [224 51 51 55 115 15 255 255 240 55 74 179 51 45 255 255 205 255 255 204 255 252 255 206 255 255 204 255 255 204 255 204] :rows
+make "rows lput [206 255 255 255 255 204 255 255 255 255 204 255 255 194 51 3 48 7 115 48 31 255 255 204 255 255 192 51 51 12 255 236] :rows
+make "rows lput [252 255 255 255 255 240 59 179 51 51 48 51 55 124 255 252 255 252 255 255 241 51 51 48 51 51 60 255 255 240 51 62] :rows
+make "dagg.mazes lput :rows :dagg.mazes
+make "rows []
+make "rows lput [203 179 51 59 131 55 119 111 255 255 255 255 255 255 255 255 255 255 255 255 255 207 255 255 255 195 51 59 131 51 51 15] :rows
+make "rows lput [204 255 255 255 204 255 255 206 255 255 255 255 255 255 255 207 255 255 255 207 255 208 51 59 179 12 255 255 204 255 255 204] :rows
+make "rows lput [204 255 255 255 204 255 255 204 255 255 255 255 255 255 255 228 115 51 59 140 255 205 255 255 255 192 51 55 64 55 115 28] :rows
+make "rows lput [192 51 51 55 64 59 179 12 255 255 255 255 255 255 255 238 255 255 255 208 51 4 115 51 51 12 255 255 204 255 255 205] :rows
+make "rows lput [236 255 255 255 204 255 255 204 255 255 255 255 255 255 255 206 255 255 255 205 255 204 255 255 255 204 255 255 236 255 255 204] :rows
+make "rows lput [206 255 255 255 204 255 255 220 255 255 255 255 255 255 255 192 59 179 51 0 51 24 179 51 51 20 115 51 14 255 255 204] :rows
+make "rows lput [204 255 255 255 204 255 255 205 255 255 255 255 255 255 255 204 255 255 255 204 255 205 255 255 255 205 255 255 204 255 255 204] :rows
+make "rows lput [192 55 115 55 64 59 187 140 255 255 255 255 255 255 255 196 119 115 51 0 55 112 19 51 51 0 51 51 44 255 255 204] :rows
+make "rows lput [220 255 255 255 204 255 255 220 255 255 255 255 255 255 255 204 255 255 255 220 255 255 205 255 255 204 255 255 242 51 51 60] :rows
+make "rows lput [225 51 55 115 0 51 3 49 51 51 3 51 51 55 119 108 255 255 255 205 255 255 204 255 255 204 255 255 255 255 255 255] :rows
+make "rows lput [206 255 255 255 204 255 252 255 255 255 204 255 255 255 255 206 255 255 255 204 255 255 204 255 255 204 255 255 255 255 207 255] :rows
+make "rows lput [192 51 59 179 44 255 255 199 115 51 12 255 255 255 255 204 255 255 255 204 255 255 204 255 255 204 255 255 255 255 236 255] :rows
+make "rows lput [204 255 255 255 210 55 115 28 255 255 236 255 255 207 255 220 255 255 255 204 255 255 204 255 255 220 255 255 255 255 206 255] :rows
+make "rows lput [192 59 131 51 29 255 255 205 255 255 206 255 255 204 255 205 255 255 255 204 255 255 204 255 255 205 255 255 195 51 16 63] :rows
+make "rows lput [204 255 204 255 205 255 255 220 255 255 204 255 255 204 255 204 255 255 255 204 255 255 220 255 255 196 115 51 44 255 205 255] :rows
+make "rows lput [192 59 176 51 0 51 7 113 39 115 0 51 51 24 179 12 255 255 255 220 255 255 221 255 255 204 255 255 194 51 12 255] :rows
+make "rows lput [204 255 255 255 204 255 204 255 222 255 204 255 255 205 255 204 255 255 255 205 255 255 205 255 255 204 255 255 204 255 220 255] :rows
+make "rows lput [192 51 51 59 144 51 16 51 1 51 0 51 19 48 51 0 59 159 255 236 255 255 204 255 255 204 255 255 204 255 205 255] :rows
+make "rows lput [204 255 255 255 205 255 205 255 204 255 204 255 205 255 255 204 255 225 51 2 51 59 184 179 59 144 51 55 68 115 36 127] :rows
+make "rows lput [204 255 255 255 204 255 204 255 224 51 60 255 204 255 255 236 255 206 255 204 255 255 255 255 255 205 255 255 204 255 238 255] :rows
+make "rows lput [204 255 255 255 204 255 192 51 14 255 255 255 204 255 255 206 255 204 255 204 255 255 255 255 255 204 255 255 204 255 206 255] :rows
+make "rows lput [192 51 51 59 128 51 44 255 196 115 51 51 60 255 255 192 51 0 51 60 255 255 255 255 255 204 255 255 204 255 204 255] :rows
+make "rows lput [204 255 255 255 204 255 206 255 204 255 255 255 255 255 255 204 255 204 255 255 255 255 195 51 51 0 55 115 28 255 236 255] :rows
+make "rows lput [220 255 255 255 204 255 204 255 204 255 255 255 255 255 255 240 51 0 51 15 255 255 204 255 255 204 255 255 237 255 206 255] :rows
+make "rows lput [205 255 255 255 204 255 204 255 220 255 255 255 255 255 255 255 255 204 255 204 255 255 204 255 255 192 51 51 2 51 48 63] :rows
+make "rows lput [204 255 255 255 204 255 204 255 205 255 255 255 255 255 255 255 255 204 255 204 255 255 204 255 255 204 255 255 204 255 255 255] :rows
+make "rows lput [204 255 255 255 204 255 192 51 48 51 51 51 3 51 15 255 255 204 255 208 51 51 0 51 3 48 3 55 112 51 63 255] :rows
+make "rows lput [204 255 255 255 204 255 204 255 255 255 255 255 204 255 200 183 115 12 255 221 255 255 204 255 204 255 204 255 255 255 255 255] :rows
+make "rows lput [204 255 255 255 240 55 64 51 55 79 255 255 204 255 204 255 255 240 51 1 51 51 16 51 12 255 204 255 255 255 255 255] :rows
+make "rows lput [204 255 255 255 255 255 236 255 255 204 255 255 204 255 236 255 255 255 255 204 255 255 205 255 192 51 0 51 51 55 115 63] :rows
+make "rows lput [240 51 51 51 51 51 2 55 115 12 255 255 204 255 206 255 255 195 51 16 51 51 12 255 204 255 204 255 255 255 255 255] :rows
+make "rows lput [255 255 255 255 255 255 252 255 255 244 115 51 48 55 112 51 51 60 255 253 255 255 240 51 48 51 48 55 115 51 51 63] :rows
+make "dagg.mazes lput :rows :dagg.mazes
+make "rows []
+make "rows lput [243 11 179 51 51 35 51 51 3 51 51 19 51 55 119 115 51 51 19 51 55 67 51 35 51 55 123 179 51 51 51 15] :rows
+make "rows lput [255 236 255 255 255 206 255 255 204 255 255 237 255 255 255 255 255 255 205 255 255 204 255 222 255 255 255 255 255 255 255 204] :rows
+make "rows lput [255 206 255 255 255 220 255 255 204 255 255 222 255 255 255 255 255 255 204 255 255 240 51 49 51 51 51 51 51 51 51 12] :rows
+make "rows lput [255 220 255 255 255 205 255 255 220 255 255 205 255 255 255 255 255 255 204 255 255 255 255 255 255 255 255 255 255 255 255 220] :rows
+make "rows lput [255 205 255 255 255 204 255 255 205 255 255 204 255 255 255 255 255 255 204 255 211 51 51 51 51 3 51 59 179 51 51 29] :rows
+make "rows lput [195 48 3 51 55 68 119 115 32 51 51 0 51 3 51 51 51 51 4 115 13 255 255 255 255 204 255 255 255 255 255 205] :rows
+make "rows lput [204 255 204 255 255 204 255 255 222 255 255 204 255 204 255 255 255 255 204 255 236 255 255 255 255 204 255 255 255 195 51 12] :rows
+make "rows lput [204 255 204 255 255 204 255 255 205 255 255 204 255 204 255 255 255 255 244 115 2 51 55 115 51 0 63 255 255 220 255 204] :rows
+make "rows lput [228 115 0 51 3 48 51 51 16 59 179 12 255 204 255 255 255 223 255 255 204 255 255 255 255 204 255 195 51 1 59 140] :rows
+make "rows lput [206 255 236 255 204 255 255 255 205 255 255 192 51 0 51 51 51 33 51 51 12 255 255 255 255 220 255 204 255 204 255 204] :rows
+make "rows lput [204 255 206 255 220 255 255 255 236 255 255 204 255 204 255 255 255 206 255 255 220 255 255 255 255 205 255 204 255 236 255 204] :rows
+make "rows lput [196 123 128 51 61 255 255 255 206 255 255 248 179 0 59 179 51 32 55 115 1 51 3 51 51 0 51 48 19 50 51 12] :rows
+make "rows lput [204 255 204 255 255 255 255 255 204 255 255 255 255 204 255 255 255 206 255 255 204 255 204 255 255 204 255 255 205 255 255 204] :rows
+make "rows lput [204 255 204 255 255 255 255 255 204 255 255 255 255 252 255 255 243 0 51 51 32 51 52 115 59 128 51 51 4 115 51 60] :rows
+make "rows lput [240 59 128 51 59 183 115 51 48 15 255 255 255 255 255 255 255 204 255 255 206 255 255 255 255 204 255 255 204 255 255 255] :rows
+make "rows lput [255 255 204 255 255 255 255 255 255 204 255 255 255 255 255 255 255 204 255 195 56 147 51 51 59 140 255 255 204 255 255 255] :rows
+make "rows lput [255 255 204 255 255 255 255 255 255 192 51 51 51 59 187 179 51 0 51 28 255 205 255 255 255 204 255 255 204 255 255 255] :rows
+make "rows lput [199 123 132 119 115 51 59 179 51 28 255 255 255 255 255 255 255 204 255 205 255 224 51 51 51 28 255 255 204 255 255 255] :rows
+make "rows lput [204 255 204 255 255 255 255 255 255 237 255 255 255 255 255 255 255 196 115 0 51 30 255 255 255 209 51 51 12 255 255 255] :rows
+make "rows lput [204 255 236 255 255 255 255 255 255 206 255 255 255 255 255 255 255 204 255 204 255 205 255 255 255 237 255 255 204 255 255 255] :rows
+make "rows lput [204 255 222 255 255 255 255 255 195 60 255 255 255 255 255 255 255 236 255 192 51 20 115 51 51 50 51 51 0 51 51 15] :rows
+make "rows lput [204 255 221 255 255 255 255 255 204 255 255 255 255 255 255 255 255 238 255 204 255 205 255 255 255 255 255 255 204 255 255 204] :rows
+make "rows lput [204 255 193 51 51 51 51 51 4 115 51 55 115 51 51 51 55 82 55 120 135 112 55 115 51 51 51 55 64 51 51 44] :rows
+make "rows lput [192 51 12 255 255 255 255 255 204 255 255 255 255 255 255 255 255 205 255 255 204 255 255 255 255 255 255 255 220 255 255 206] :rows
+make "rows lput [204 255 192 51 51 51 51 51 12 255 255 255 243 51 51 51 51 0 51 51 60 255 255 255 255 255 255 255 221 255 255 204] :rows
+make "rows lput [192 51 12 255 255 255 255 255 204 255 255 207 255 255 255 255 255 220 255 255 255 255 255 203 179 55 115 51 13 255 255 204] :rows
+make "rows lput [204 255 204 255 255 255 255 255 204 255 255 204 255 255 255 255 255 205 255 255 255 255 255 204 255 255 255 255 204 255 255 204] :rows
+make "rows lput [204 255 204 255 255 255 255 255 204 255 255 204 255 255 255 255 255 220 255 255 255 255 255 204 255 255 255 255 236 255 255 204] :rows
+make "rows lput [204 255 204 255 255 255 255 255 240 3 51 8 179 63 255 255 255 205 255 255 255 255 255 208 51 51 55 115 2 51 3 60] :rows
+make "rows lput [196 115 0 51 51 51 51 63 255 220 255 236 255 255 255 255 255 204 255 255 255 255 255 205 255 255 255 255 204 255 236 255] :rows
+make "rows lput [204 255 204 255 255 255 255 255 255 237 255 222 255 255 255 255 255 204 255 255 255 255 255 204 255 255 255 255 204 255 222 255] :rows
+make "rows lput [240 51 56 179 51 51 55 115 51 50 51 49 51 51 51 55 115 48 51 51 63 255 255 240 51 51 51 51 48 55 113 63] :rows
+make "dagg.mazes lput :rows :dagg.mazes
+make "rows []
+make "v0 [[[38 38 114 114] [29 64 64 27]] [[16 38] [27 64]]]
+make "v1 [[[128 65 68 119] [40 40 56 56]] [[92 93] [48 52]] [[16 38 114 136] [27 64 64 27]]]
+make "v2 [[[128 66 117] [40 50 58]]]
+make "v3 [[[16 38 114 136] [27 64 64 27]]]
+make "dagg.left (list :v0 :v1 :v2 :v3)
+make "v0 []
+make "v1 [[[114 67 67 114] [108 108 148 148]] [[94 94] [126 130]] [[38 38] [64 192]] [[114 114] [64 192]]]
+make "v2 [[[113 67 114] [108 128 148]]]
+make "v3 [[[38 38] [64 192]] [[114 114] [64 192]]]
+make "dagg.forward (list :v0 :v1 :v2 :v3)
+make "v0 [[[38 38 114 114] [229 192 192 229]] [[16 38] [229 192]]]
+make "v1 [[[128 65 68 119] [216 216 200 200]] [[92 93] [208 204]] [[16 38 114 136] [229 192 192 229]]]
+make "v2 [[[128 66 117] [216 206 198]]]
+make "v3 [[[16 38 114 136] [229 192 192 229]]]
+make "dagg.right (list :v0 :v1 :v2 :v3)
+make "v0 []
+make "v1 []
+make "v2 []
+make "v3 []
+make "dagg.lpeek [[[100 108 112 120 128] [28 36 32 36 28]]]
+make "dagg.rpeek [[[100 108 112 120 128] [228 220 224 220 228]]]
+make "dagg.celine [[[28 28] [47 210]]]
+; END GENERATED DATA
+
+;==========================================================================
+; The cell -- CD.ASM: 00 passage, 01 door, 10 secret door, 11 wall, packed
+; N E S W from the low bits up. `dagg.dir`/PDIR: 0=N 1=E 2=S 3=W.
+
+; MAP32, DGNGEN.ASM: unconditionally wraps row/col mod 32 -- the forward
+; view walks via STEP+MAP32 with no BORDER check at all (VIEWER.ASM never
+; calls STEPOK), relying on a real maze always walling its true edges
+; (Phase II). dagg.stepok is the separate, stricter check MOVE uses.
+; Mazes are stored as levels of 32 rows of 32 cells (not flattened) --
+; building one flat 1024-item list a level with `sentence`/`lput` in a
+; loop is an O(n^2) copy and was enough to run a bounded heap out of
+; space; two `item` lookups cost nothing this walk does not already pay.
+to dagg.cell :level :row :col
+  output (item ((modulo :col 32) + 1)
+               (item ((modulo :row 32) + 1) (item (:level + 1) :dagg.mazes)))
+end
+
+to dagg.side :cell :dir
+  output bitand (lshift :cell (0 - (:dir * 2))) 3
+end
+
+; STPTAB, CRETUR.ASM: N row-1, E col+1, S row+1, W col-1.
+to dagg.step.row :row :dir
+  if :dir = 0 [output :row - 1]
+  if :dir = 2 [output :row + 1]
+  output :row
+end
+
+to dagg.step.col :col :dir
+  if :dir = 1 [output :col + 1]
+  if :dir = 3 [output :col - 1]
+  output :col
+end
+
+; STEPOK, CRETUR.ASM: off-maze (BORDER) or into a $FF (not part of the
+; maze) cell is illegal. No wraparound -- a step that would need `mod 32`
+; to land back in 0..31 is exactly what BORDER rejects.
+to dagg.stepok :row :col
+  if :row < 0 [output false]
+  if :row > 31 [output false]
+  if :col < 0 [output false]
+  if :col > 31 [output false]
+  output not (255 = dagg.cell :dagg.level :row :col)
+end
+
+;==========================================================================
+; The transform -- design section 6.2, board-confirmed at M0
+; (tests/logo/p17m0): three constants a range, two multiplies and two
+; subtracts a point.
+
+make "dagg.k   0
+make "dagg.kx0 0
+make "dagg.c   0
+
+to dagg.setscale :range :table
+  local "s
+  make "s (item (:range + 1) :table) / 128
+  make "dagg.k :s * 1.25
+  make "dagg.kx0 128 * :dagg.k
+  make "dagg.c 65 + (95 * :s)
+end
+
+; SETFAX, VCTLST.ASM (design section 8): outputs whether this range draws
+; at all, and sets the dash period as a side effect when it does.
+to dagg.setfade :range
+  local "a
+  make "a (:dagg.light - 7) - :range
+  if not (:a < 0) [setpendash 1  output true]
+  if :a < -7 [output false]
+  setpendash item ((0 - :a) + 1) :dagg.dash
+  output true
+end
+
+;==========================================================================
+; Drawing a vector list -- M0's winning candidate, `foreach` over the
+; parallel ys/xs lists `dagg.load` already split out.
+
+to dagg.draw.run :ys :xs
+  pu (setpos ((:dagg.k * item 1 :xs) - :dagg.kx0)
+             (:dagg.c - (:dagg.k * item 1 :ys))) pd
+  (foreach (bf :ys) (bf :xs) [[y x]
+    (setpos ((:dagg.k * :x) - :dagg.kx0) (:dagg.c - (:dagg.k * :y)))
+  ])
+  pu
+end
+
+to dagg.draw.runs :runs
+  foreach :runs [[run] dagg.draw.run (item 1 :run) (item 2 :run)]
+end
+
+; FLATAB's dispatch, SWCHAR.ASM: which=l/f/r, code=0 passage/1 door/
+; 2 secretdoor/3 wall, in the order the four lists were loaded.
+to dagg.side.runs :which :code
+  if :which = "l [output item (:code + 1) :dagg.left]
+  if :which = "f [output item (:code + 1) :dagg.forward]
+  output item (:code + 1) :dagg.right
+end
+
+; VIEW22's fallthrough: a secret door draws under its own list AND the
+; plain wall underneath it (design section 8.3 -- regular light still
+; shows a wall where a secret door is; only magic light shows the door).
+to dagg.draw.side :which :code
+  ifelse :code = 2 [
+    dagg.draw.runs dagg.side.runs :which 2
+    dagg.draw.runs dagg.side.runs :which 3
+  ] [
+    dagg.draw.runs dagg.side.runs :which :code
+  ]
+end
+
+;==========================================================================
+; The cell walk -- VIEWER.ASM:VIEWER/VIEW10-VIEW60, design section 6.
+
+to dagg.redraw :table
+  local "r local "row local "col local "cell
+  local "lcode local "rcode local "fcode
+  local "stop local "visible
+  clean
+  setpc :dagg.ink
+  make "row :dagg.row
+  make "col :dagg.col
+  make "stop false
+  repeat 10 [
+    if not :stop [
+      make "r repcount - 1
+      dagg.setscale :r :table
+      make "visible dagg.setfade :r
+      make "cell dagg.cell :dagg.level :row :col
+      make "lcode dagg.side :cell (modulo (:dagg.dir + 3) 4)
+      make "rcode dagg.side :cell (modulo (:dagg.dir + 1) 4)
+      make "fcode dagg.side :cell :dagg.dir
+      if :visible [
+        dagg.draw.side "l :lcode
+        dagg.draw.side "f :fcode
+        dagg.draw.side "r :rcode
+        dagg.draw.runs :dagg.celine
+      ]
+      ifelse :fcode = 0 [
+        make "row dagg.step.row :row :dagg.dir
+        make "col dagg.step.col :col :dagg.dir
+      ] [
+        make "stop true
+      ]
+    ]
+  ]
+  dagg.status
+end
+
+;==========================================================================
+; The status bar -- design section 4.1b/4.1c: it lives IN THE PICTURE, not
+; the text window (the CoCo original has no text mode at all, and `clean`
+; is what erases it) -- so this is `write`, not `setcursor`+`type` the way
+; battlezone/berzerk's HUD works. Do not "fix" this back to `setcursor`.
+;
+; No hands/objects yet (M3), so the line is position/direction rather than
+; an invented inventory.
+
+make "dagg.dirnames [NORTH EAST SOUTH WEST]
+
+to dagg.status
+  local "text
+  make "text (sentence "LEVEL (:dagg.level + 1)
+                        "ROW :dagg.row "COL :dagg.col
+                        (item (:dagg.dir + 1) :dagg.dirnames))
+  pu (setpos -150 -55) pd
+  (write :text :dagg.status.fg :dagg.status.bg)
+  pu
+end
+
+;==========================================================================
+; Inverted levels -- NEWLVL.ASM:NLVL50 / design section 4.3: internal
+; level 0,2,4 (displayed 1,3,5) light-on-dark; internal 1,3 (displayed
+; 2,4) dark-on-light, with the status bar always the OPPOSITE polarity to
+; the view above it.
+
+; White is 254, not 255: reference appendix E -- slot 255 HOLDS the current
+; graphics background, so `setpc 255` paints in the background and draws a
+; picture you cannot see, and `setbg 255` is outside setbg's own 0..254
+; range and errors outright. B81.
+to dagg.enter.level :level
+  make "dagg.level :level
+  ifelse (modulo :level 2) = 0 [
+    make "dagg.ink 254  make "dagg.bg 0
+    make "dagg.status.fg 0  make "dagg.status.bg 254
+  ] [
+    make "dagg.ink 0  make "dagg.bg 254
+    make "dagg.status.fg 254  make "dagg.status.bg 0
+  ]
+  setbg :dagg.bg
+end
+
+;==========================================================================
+; TURN -- PTURN.ASM. A sweeping vertical stroke, drawn then erased, at
+; eight steps between two fixed bounds -- design section 6.4's "eight
+; strokes." TURN00 manually sets the scale to 128/128 (1:1, range 1's own
+; transform), so this reuses `dagg.setscale 1 :dagg.norscl` rather than
+; inventing a second transform.
+;
+; CoCo-specific inverse-video toggling (`COM VDGINV` between strokes) is
+; not reproduced pixel-for-pixel -- this draws each stroke, pauses, then
+; erases it with `pe`, which is this codebase's own eraser (gen_rocks.py's
+; own note: "`pe` still erases correctly"), not the ROM's polarity flip.
+
+to dagg.range8 :start :step
+  local "out
+  make "out []
+  repeat 8 [make "out lput (:start + ((repcount - 1) * :step)) :out]
+  output :out
+end
+
+to dagg.turnsweep :dir
+  local "y0 local "y1 local "positions
+  dagg.setscale 1 :dagg.norscl
+  make "y0 :dagg.c - (:dagg.k * 17)
+  make "y1 :dagg.c - (:dagg.k * 135)
+  ifelse :dir = "lr [
+    make "positions dagg.range8 0 32
+  ] [
+    make "positions dagg.range8 248 -32
+  ]
+  setpc :dagg.ink
+  setpendash 1  ; dagg.redraw leaves the last range's fade behind
+  foreach :positions [[cocox]
+    local "x
+    make "x (:dagg.k * :cocox) - :dagg.kx0
+    pu (setpos :x :y0)
+    pd (setpos :x :y1)
+    wait 2
+    pe (setpos :x :y0)
+    pu
+  ]
+end
+
+to dagg.turn.commit :newdir
+  make "dagg.dir :newdir
+  dagg.redraw :dagg.norscl
+  refresh
+end
+
+to dagg.turn :which
+  if :which = "left [
+    dagg.turn.commit modulo (:dagg.dir - 1) 4
+    dagg.turnsweep "lr
+    stop
+  ]
+  if :which = "right [
+    dagg.turn.commit modulo (:dagg.dir + 1) 4
+    dagg.turnsweep "rl
+    stop
+  ]
+  if :which = "around [
+    dagg.turn.commit modulo (:dagg.dir + 2) 4
+    dagg.turnsweep "rl
+    dagg.turnsweep "rl
+    stop
+  ]
+  pr [TURN wants LEFT RIGHT or AROUND]
+end
+
+;==========================================================================
+; MOVE -- PTURN.ASM:PMOVE/PSTEP. Forward/backward draw a half-step frame
+; from the OLD cell before the position updates (PMOVE's own order: PUPDAT
+; at HLFSCL, then PSTEP, then the normal redraw) -- section 6.4's "one
+; intermediate frame before the step, then the step and the real frame."
+;
+; A blocked step (into a wall or off the maze) still redraws from the
+; unchanged position -- PSTEP always calls PUPSUB -- but does not yet
+; charge the weight/8+3 energy cost or play A$THUD: PDAM/HUPDAT is M2/M3's
+; job (the heart, damage and recovery are explicitly M2's line item, design
+; section 15), and inventing a placeholder damage system here would be
+; scope this milestone does not own.
+
+to dagg.move.forward
+  local "nrow local "ncol local "ok
+  make "nrow dagg.step.row :dagg.row :dagg.dir
+  make "ncol dagg.step.col :dagg.col :dagg.dir
+  make "ok dagg.stepok :nrow :ncol
+  dagg.redraw :dagg.hlfscl
+  refresh
+  if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
+  dagg.redraw :dagg.norscl
+  refresh
+end
+
+to dagg.move.backward
+  local "dir local "nrow local "ncol local "ok
+  make "dir modulo (:dagg.dir + 2) 4
+  make "nrow dagg.step.row :dagg.row :dir
+  make "ncol dagg.step.col :dagg.col :dir
+  make "ok dagg.stepok :nrow :ncol
+  dagg.redraw :dagg.bakscl
+  refresh
+  if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
+  dagg.redraw :dagg.norscl
+  refresh
+end
+
+; Sidestep: PMOV30/40 -- step, redraw, and only on SUCCESS play the
+; turn-style sweep (right step sweeps right-to-left, left step sweeps
+; left-to-right -- PTURN.ASM's own RLTURN/LRTURN choices).
+to dagg.move.side :reldir
+  local "dir local "nrow local "ncol local "ok
+  make "dir modulo (:dagg.dir + :reldir) 4
+  make "nrow dagg.step.row :dagg.row :dir
+  make "ncol dagg.step.col :dagg.col :dir
+  make "ok dagg.stepok :nrow :ncol
+  if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
+  dagg.redraw :dagg.norscl
+  refresh
+  if :ok [
+    ifelse :reldir = 1 [dagg.turnsweep "rl] [dagg.turnsweep "lr]
+  ]
+end
+
+to dagg.move :which
+  if :which = "forward [dagg.move.forward  stop]
+  if :which = "backward [dagg.move.backward  stop]
+  if :which = "left [dagg.move.side 3  stop]
+  if :which = "right [dagg.move.side 1  stop]
+  pr [MOVE wants FORWARD BACKWARD LEFT or RIGHT]
+end
+
+;==========================================================================
+; `hw.setcpu "fast` + restore -- logo/games/battlezone's own pattern,
+; reused verbatim (the mechanics are already solved in this tree; design
+; section 12.1 names this file's `restore.clock` as the model).
+
+to clock
+  make "cpu.was "unknown
+  catch "error [make "cpu.was hw.cpu]
+  make "cpu.at :cpu.was
+  catch "error [hw.setcpu "fast]
+  catch "error [make "cpu.at hw.cpu]
+  output "fast = :cpu.at
+end
+
+to restore.clock
+  if "unknown = :cpu.was [stop]
+  if :cpu.was = :cpu.at [stop]
+  catch "error [hw.setcpu :cpu.was]
+end
+
+;==========================================================================
+; Entry points. No `erall` here -- that is the operator's job before
+; `load`, same convention as tests/logo/p17m0's own header.
+;
+; No scheduler/parser yet (M2), so `daggorath` sets up the picture and
+; returns; `dagg.move`/`dagg.turn` are called directly from here on.
+
+; ONCE.ASM:GAME10 -- `LDD #$100B / STD PROW` -- row 16, column 11, facing
+; north, which is where docs/DungeonsOfDaggorath/Levels/level1.svg draws the
+; player's blue dot. COMDAT.ASM's `FCB 12 / FCB 22` is the attract-mode
+; DEMO's start; GAME10 overwrites it, and (12,22) is not a carved cell.
+to daggorath
+  make "dagg.row 16  make "dagg.col 11  make "dagg.dir 0
+  splitscreen
+  window
+  ht
+  setrefresh "manual
+  ignore clock
+  dagg.enter.level 0
+  dagg.redraw :dagg.norscl
+  refresh
+end
+
+to daggorath.quit
+  restore.clock
+  setrefresh "auto
+  setpendash 1
+  setpc 254
+  st
+  textscreen
+end

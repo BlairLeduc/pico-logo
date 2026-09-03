@@ -12,11 +12,11 @@
 | | |
 |---|---|
 | Game | `logo/games/daggorath` — one Logo file, no extension, no `-` or `/` in the name so `load "daggorath` parses |
-| Data | `logo/games/daggdata` — the five mazes and the vector lists, read with `open`/`readlist` (§7.4, §11.2). Data, not code, so it costs no procedure slots |
+| Data | The five mazes and the vector lists, generated into `logo/games/daggorath` itself between two markers (§7.4, §11.2). Top-level `make` lines, not code, so they cost no procedure slots — and the game ships as one file |
 | Tests | `tests/test_daggorath.c` (Unity + mock device), mirroring `tests/test_berzerk.c` |
 | Design | this document |
 | Measurement | `tests/logo/p17m0`, all board runs kept verbatim under [`measurements/`](measurements/). It writes its numbers **to a file**, because numbers on a display cannot be copied off it |
-| Generator | `scripts/gen_daggorath.py`, host-side, output written to `logo/games/daggdata` (§7.4, §11.2) |
+| Generator | `scripts/gen_daggorath.py`, host-side, rewriting the marked block inside `logo/games/daggorath` (§7.4, §11.2) |
 | Source of truth | `docs/DungeonsOfDaggorath/*.ASM` — the 1982 DynaMicro 6809 source, 9,866 lines. **Every rule in this document cites the file and routine it came from.** Where this document and the ROM disagree, the ROM is right. Licensing is not a one-liner and an earlier draft of this row got it wrong: see [`PROVENANCE.md`](DungeonsOfDaggorath/PROVENANCE.md), which transcribes the 2002 grant verbatim and says plainly that it names an individual |
 
 | Depends on | **[P18](roadmap.md#p18--interpreter-work-for-dungeons-of-daggorath)** — five interpreter items this design asked for. Its M0–M2 (`MAX_PROCEDURES` 128 → 192, opaque `write`, `setpendash`) come **before** P17 M1; its M3 (arrays) and M4 (a sound glide) come **after** P17 M0 and M6 respectively, because those are the measurements that decide whether they are needed at all |
@@ -418,7 +418,7 @@ Check: at range 1, `k` = 1.25, `kx0` = 160, `c` = 160. `X` = 0 → `x` = −160,
 **Keep the tables as the ROM's own bytes.** The alternative — pre-transforming
 into turtle coordinates offline — costs exactly the same two multiplies at draw
 time and throws away the ability to diff our tables against the assembler
-source. So `logo/games/daggdata` holds `16 27 38 64 114 64 136 27` for the left
+source. So the generated block holds `[16 38 114 136] [27 64 64 27]` for the left
 wall, which is `VARC.ASM:LWALL` and nothing else.
 
 ### 6.3 The list walk is M0's question
@@ -489,7 +489,7 @@ several thousand of them on top of the carve itself. Eight to fifteen seconds
 per `CLIMB` is not a port, it is a punishment.
 
 So `scripts/gen_daggorath.py` implements `RANDOX` and `DGNGEN` exactly and
-emits all five mazes into `logo/games/daggdata`. This is **more** faithful, not
+emits all five mazes into `logo/games/daggorath`. This is **more** faithful, not
 less: the shipped mazes are bit-identical to the 1982 ones, and a Daggorath map
 drawn on paper in 1983 still works.
 
@@ -509,20 +509,51 @@ The distribution walks *down* from a start level and wraps: a count of 6
 starting at level 1 puts one each on 1, 2, 3, 4, 5 and then 1 again
 (`CINI44`, `CMPB #5 / BLE`).
 
-### 7.4 The data file
+### 7.4 The data, and why it is not a second file
 
-`logo/games/daggdata`, read once at `daggorath` with `open` / `setread` /
-`readlist`, holds:
+The generator writes into `logo/games/daggorath` itself, between
+`; BEGIN GENERATED DATA` and `; END GENERATED DATA`:
 
-- **the five mazes**, 32 lines of 32 numbers each — 5,280 nodes and ~256
-  distinct interned numbers, which is nothing against a 32,752-cell pool and a
-  32 KB word table;
+- **the five mazes**, one `make "rows lput [ … ] :rows` line per row —
+  8,134 nodes and ~256 distinct interned numbers, which is a quarter of the
+  32,752-cell pool and nothing against a 32 KB word table;
 - **the vector lists** (§11.2), flattened out of the ROM's relative-nybble
-  encoding by the generator;
+  encoding by the generator and *already split* into the parallel ys/xs
+  lists §6.3 wants, one list to a line;
 - **the vertical features table** (§7.5) and the four small stat tables of §11.
 
 It is data, not code, so it costs **no procedure slots** — and §14 says why
 that is the binding constraint in this port.
+
+**Confirmed on hardware 2026-09-03**, one file, loading and playing as it did
+from two.
+
+**It began as a separate `daggdata` read with `open`/`setread`/`readlist`,
+and moving it inline cost nothing.** Measured on the host from a bare
+workspace, after `recycle`: reading the mazes from a file leaves **27,025**
+free nodes, the identical data as whole-row list literals leaves **27,082** —
+57 *better*, that being the loader procedure that no longer exists. Word-table
+use is the same to within 30 entries. So a game that was two files to ship is
+one, and `dagg.load`, `dagg.ys.of`, `dagg.xs.of` and `dagg.read.runs` are all
+deleted along with the file-not-found failure mode.
+
+**Two constraints shape the emitted form, and one of them is a trap.**
+`load` buffers only `to … end` blocks; every other line is lexed and run on
+its own, so a literal may not span lines and each maze row has to be one
+`LOAD_MAX_LINE`-sized line (32 numbers is up to 151 characters against a
+256-byte limit). That breaks this tree's 40-column source rule, and the
+obvious repair — emitting six numbers a line and reassembling the row with
+`se` — is the trap: it produces the same node count but retains **~10,900
+word-table entries** where the whole-row literal retains none. The 40-column
+rule is a rule about *source you read*; it loses to the word table here, and
+the generated block is marked as generated precisely so nobody reflows it.
+
+**What this forecloses.** All five mazes are now resident from `load`, where a
+file could have been read one level at a time on `CLIMB` — 6,507 nodes, a
+fifth of the pool, that four unvisited levels are holding. If M5 finds that
+RAM binding, the fix is not to bring the file back but to emit each row as a
+64-character hex *word* and expand only the current level, which keeps one
+file and cuts the resident maze to a fifth.
 
 ### 7.5 The ladders and the holes, and the level 3 wall
 
@@ -1078,7 +1109,8 @@ flat namespace to buy 1.31× on the frame, and Daggorath has no frame to buy.
 Each closes on a gate that can be checked without a board unless it says
 otherwise.
 
-**M0 — the harness, and the three questions.**
+**M0 — the harness, and the three questions. Confirmed on a Pico Plus 2 W,
+2026-09-02; Pico 2 and Pico 2 W still to run.**
 `tests/logo/p17m0`. Builds the worst-case scene of §12 out of hand-written
 tables and times it 200 times, reading the walk, the transform, the strokes and
 the present apart from one another, into a file. Answers: (1) which of §6.3's
@@ -1089,8 +1121,33 @@ read as the original's texture beside a photograph of it**; (3) does §4.1's
 `hw.setcpu "fast`. *Gate: a worst-case redraw under 100 ms at 300 MHz on all
 three boards, with the 150 MHz figure taken alongside it.*
 
-**M1 — the dungeon and the view.**
-`scripts/gen_daggorath.py`, `logo/games/daggdata`, the cell walk, the
+**The board passed at 53.2 ms against the 100 ms gate — with the scene 67 %
+bigger than this section predicted.** `p17m0`'s hand-written worst case came to
+184 points, not the ~110 §12 guessed, because every range draws a real left and
+right wall plus a placeholder ceiling line rather than the sparser mix a real
+corridor would show; the gate held anyway, with 47 ms to spare. The present
+measured 19.95 ms against §12's predicted 19.8 — as close a match as this
+design makes anywhere. Temperature rose 27.3 → 29.5 °C over the run, confirming
+battlezone §12.3's finding that thermals are not a constraint here either.
+`hw.setcpu "fast` took cleanly, switching and reading back `fast`.
+
+**Q1's answer is `foreach`, and it is a genuine surprise.** All three
+candidates read **zero** `nodes` and `atoms` delta over 1,000 walks — so
+§6.3's open question about `butfirst` resolves clean: it does not allocate,
+and neither does anything else here. But the timing does not favour the
+no-alloc linear candidate the way §6.3 expected going in. Isolated on the
+55-point creature: `foreach` 23.2 µs, `first`/`butfirst` 25.9 µs, `item` 28.2
+µs. On the full 184-point scene the ordering holds: `foreach` 97.8 ms,
+`item` 105.4 ms, `first`/`butfirst` 109.5 ms — `item`'s running index is not
+even the slowest of the three, let alone quadratically bad, at this list
+length. **M1 should draw with `foreach`**, per §6.3's own candidate 3: it
+reads best, it does not allocate, and this board says it is also the fastest
+of the three — the rare case where all three considerations agree.
+
+**M1 — the dungeon and the view. Done 2026-09-02; confirmed on hardware
+2026-09-03, after three bugs the host had no way to see, and again after the
+data moved into the game file (§7.4) and made it one file to ship.**
+`scripts/gen_daggorath.py`, the generated maze block, the cell walk, the
 architectural lists, `MOVE` and `TURN` with both animations, the grey ramp, the
 inverted levels including the status bar (which is why
 [P18](roadmap.md#p18--interpreter-work-for-dungeons-of-daggorath) goes first), and
@@ -1098,6 +1155,103 @@ inverted levels including the status bar (which is why
 *Gate: walking level 1 from (16, 11) matches a published Daggorath map, checked
 cell by cell against the generator's own render; and the procedure-table test
 exists.*
+
+**The map gate is met, and it found a bug.** M1 originally shipped on internal
+consistency alone — no published Daggorath map had turned up, so the carve/
+wall/door port was checked line-by-line against `DGNGEN.ASM`, with
+`docs/DungeonsOfDaggorath/daggdata-reference.txt` checked in for eyeball review
+(§11.2) and `check_maze()` asserting, for all five levels, exactly 500 open
+cells, 70 regular and 45 secret door bit-pairs, and full connectivity.
+`docs/DungeonsOfDaggorath/Levels/` closed that gap: five SVGs of the real
+dungeon, one cell to a 50 × 50 white square, doors drawn on the cell edges.
+`check_against_published_map()` in the generator now diffs every carved cell
+and every interior edge of all five levels against them, and it fails the
+generator outright if they disagree.
+
+**Every one of the five levels was wrong when that gate was first run** — 468
+of level 1's 500 cells in the wrong place ([B83](bugs.md)). `RNDCEL` masks its
+first random draw and `TFR A,B` copies it into **B, the column**, then draws
+again into **A, the row**; the port read the two the other way round, which
+transposed every maze about its diagonal. All five now match the published maps
+exactly, cell for cell and door for door — which is the first real evidence
+that `RANDOX`, all three `DGNGEN` phases and the `LVLTAB` sliding window are
+right, rather than merely self-consistent.
+
+**And the player start is `(16, 11)`, not `(12, 22)`.** `ONCE.ASM:GAME10` does
+`LDD #$100B / STD PROW` before a real game — row 16, column 11, exactly where
+`level1.svg` draws the player's blue dot. `COMDAT.ASM`'s `FCB 12 / FCB 22` sits
+in the ONCE-only init block, i.e. the attract-mode DEMO's position; `(12, 22)`
+is not a carved cell in the true level 1 at all, so the game had been starting
+inside rock. This section's original `(16, 11)` was right and the commit-time
+note that "nothing in this tree derives it from a source file" was wrong.
+The procedure-table test
+(`test_the_game_fits_the_procedure_table`) exists in `tests/test_daggorath.c`,
+a static count of `"to "` lines against `MAX_PROCEDURES`, matching
+`test_battlezone.c`'s own version rather than the "measured in play" one
+§14 describes — that turned out to be the *global*-table test, not the
+procedure count (battlezone's `test_the_game_fits_the_global_table_with_room_to_spare`).
+
+**Confirmed on hardware 2026-09-03: the view reads as the original.** M1 was
+recorded as done on 2026-09-02 and was not — it had never actually been seen
+on a board. What a board found, and what only a board could have found in one
+case:
+
+| | Found by | |
+|---|---|---|
+| The whole view drawn in the background colour, and odd levels unenterable | a board (blank split screen) | [B81](bugs.md) |
+| The forward face never drawn — `:dagg.forward` loaded and dead | reading the code against §6 | [B82](bugs.md) |
+| Every maze the wrong dungeon; the player starting inside rock | `Levels/`, once it existed | [B83](bugs.md) |
+
+The lesson is not "test on hardware" — it is that **each of the three needed a
+different kind of oracle, and the host had none of them.** A colour that means
+"the background" draws lines the mock records happily; a missing draw call is
+invisible unless something knows what should have been drawn; and a maze can
+satisfy every invariant its own generator knows how to check. The gates that
+now exist are one per row: a test that refuses slot 255 and refuses a line in
+the background colour, a test that the cell walk draws the forward face, and
+`check_against_published_map()`.
+
+**One porting bug worth recording, because the ASM reads the same way both
+ways.** `MAKDOR`'s retry (`BITB A,Y; BNE MDOR10`) rejects back to `MDOR10` —
+re-rolling the *cell* as well as the direction. A first port only re-rolled
+the direction, which spins forever the instant `RNDCEL` lands on a cell whose
+sides are all already wall/door/secret-door (`scripts/gen_daggorath.py` hung
+past two minutes before this was found). The fix is the one-loop shape now in
+`_place_one_door`. A related, and welcome, discovery: DGNGEN's own maze
+invariant — a wall bit only ever appears on a side facing a `$FF` cell or the
+grid edge, never between two carved cells — means `STEPOK`'s target-cell-`$FF`
+check and `VIEW60`'s wall-bit check are two faithful views of the same fact,
+and a synthetic test maze has to preserve that pairing or one of the two
+correct behaviours reads as a bug (see `tests/test_daggorath.c`'s
+`build_synthetic_corridor`).
+
+**`LVLTAB` is a sliding window, not five single-byte seeds.** `LDX #LVLTAB;
+LDB LEVEL; ABX` indexes by *one* byte a level, not three, so each level's
+3-byte `SEED` reuses two bytes of the level before it: level *L*'s seed is
+`LVLTAB[L..L+2]` over the full seven-byte table
+(`$73 $C7 $5D $97 $F3 $13 $87`). This section's own paraphrase above ("$73
+$C7 $5D $97 $F3 for the five levels") reads as five independent seeds and
+is not what the ASM does; `scripts/gen_daggorath.py`'s `LVLTAB` comment has
+the corrected reading.
+
+**Mazes load as 32 rows of 32 cells, not one flattened 1024-item list.**
+The first version of `dagg.load` built one flat list a level with
+`sentence`/`lput` in a loop — an O(n²) copy — and ran a bounded heap out of
+space loading the real five-level file on the host REPL (the per-test
+fixture is one level and never hit it). `dagg.cell` does two `item` lookups
+instead of one now; nothing else changed.
+
+**The heaviest data-format decision, and why it stayed simple.** VARC.ASM's
+twelve architectural lists and `VERT.ASM:CELINE` are all either plain
+absolute `y,x` pairs or `SVORG`/`SVECT` macro calls whose own arguments are
+already absolute coordinates — the assembler encodes the `V$REL` nybble
+bytes, not the source. So `gen_daggorath.py`'s `RAW` table transcribes
+`LPEEK`/`RPEEK` as the encoded bytes it hand-computed from the macro calls
+and runs them through a real `V$REL` decoder (verified by hand against both
+peeks' five points each) rather than skipping straight to the absolute
+points — the decoder is what M3/M4 will need for `D3.ASM`/`D4.ASM`'s
+creature data, and building it now against a known-correct case is cheaper
+than building it blind later.
 
 **M1a — the grey ramp** (§8.1), M1's last commit and the only optional
 milestone in the list. Dots are M1's default and come free with P18 M2, so what
@@ -1170,7 +1324,7 @@ Nothing in §7, §8 or §10 is on this list. The tables are the game.
 Host tests, mock device, mirroring `tests/test_berzerk.c`:
 
 - **the tables** — every row of §10.1, §10.2 and §7.5 read back out of
-  `daggdata` and compared against constants transcribed here, so a generator
+  the generated block and compared against constants transcribed here, so a generator
   bug is a failing test rather than a wrong game;
 - **the transform** — §6.2's `k`/`kx0`/`c` against hand-computed corners at
   ranges 0, 1 and 9, and the centroid at (0, 65);
@@ -1240,7 +1394,10 @@ day (2026-09-02).
 
 5. **How to walk 200 numbers a redraw** (§6.3) — three candidates, and the one
    number the whole budget rests on. **M0** measures all three; the levers if
-   none land are a display-list primitive or arrays.
+   none land are a display-list primitive or arrays. **Answered on a Pico
+   Plus 2 W, 2026-09-02: `foreach`** — fastest of the three, no allocation,
+   and the candidate §6.3 already said reads best. Pico 2 and Pico 2 W still
+   to confirm, though nothing here is expected to differ by board.
 7. **Dots or grey?** (§8, §8.1) P18 M2 makes them the same price, so what was
    a budget question is now purely a question of which looks more like the
    original on a sharp panel — and the answer may differ between a fresh torch
