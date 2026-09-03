@@ -1,32 +1,42 @@
-; Dungeons of Daggorath -- P17 M1: the dungeon and the view, and M2: the
-; command line and the clock.
+; Dungeons of Daggorath -- P17 M1: the dungeon and the view, M2: the
+; command line and the clock, and M3: objects.
 ;
 ;   load "daggorath
 ;   daggorath
 ;
-; docs/daggorath-design.md is the design; this file is M1 and M2's slice of
-; it -- section 15: M1 is "the cell walk, the architectural lists, MOVE and
-; TURN with both animations, the grey ramp, the inverted levels including
-; the status bar, and hw.setcpu "fast with restore.clock behind it"; M2 is
-; "the scheduler of section 5, the parser (PARSER.ASM/TOKEN.ASM), the text
-; furniture of sections 4.1b-4.1c, the heart drawn and beating, fainting,
-; damage recovery, death."
+; docs/daggorath-design.md is the design; this file is M1, M2 and M3's
+; slice of it -- section 15: M1 is "the cell walk, the architectural lists,
+; MOVE and TURN with both animations, the grey ramp, the inverted levels
+; including the status bar, and hw.setcpu "fast with restore.clock behind
+; it"; M2 is "the scheduler of section 5, the parser (PARSER.ASM/
+; TOKEN.ASM), the text furniture of sections 4.1b-4.1c, the heart drawn and
+; beating, fainting, damage recovery, death"; M3 is "OCBs, the bag, two
+; hands, GET PULL STOW DROP EXAMINE USE REVEAL INCANT, the status line,
+; weight, torches and both light channels, the map and both scrolls."
+;
+; YOU START IN THE DARK, and that is M3's doing rather than a fault: the
+; player's own light is zero (COMDAT.ASM never sets PRLITE), so until you
+; PULL the pine torch out of the bag and USE it, RLIGHT is 0 and
+; VCTLST.ASM:SETFAX draws nothing at any range. The ROM's own attract mode
+; opens EXAMINE / PULL RIGHT TORCH / USE RIGHT / LOOK (TOKEN.ASM:AUTTAB)
+; for exactly this reason.
 ;
 ; This file does NOT include (each is a later milestone by design section
 ; 15):
-;   - objects, the bag, both hands, torches and the two light channels
-;     (M3) -- the status line names both hands, but nothing ever puts
-;     anything in one, so both read EMPTY (STATUS.ASM's own M$EMPT), and
-;     the fade reads off a fixed ambient light (`dagg.light`) rather than
-;     RLIGHT from a burning torch.
-;   - creatures, peeks, combat (M4) -- no CFIND/PDRAW, and no LUKNEW in
-;     the scheduler because nothing sets NEWLUK yet.
+;   - creatures, peeks, combat (M4) -- no CFIND/PDRAW, so EXAMINE never
+;     says !CREATURE!, the map never marks one, and NEWLVL.ASM:NLVL40
+;     never runs, which is why every object in the dungeon is created
+;     creature-owned (ONCE.ASM:CINI40) and then stays where it is. What
+;     you can reach at M3 is what you started with and what you drop.
 ;   - ladders/holes/VFTTAB (M5) -- the forward view always draws the plain
-;     ceiling line (VERT.ASM:CELINE).
+;     ceiling line (VERT.ASM:CELINE), and the map marks no vertical
+;     features. INCANT transforms the Ring of Ohm but does not end the
+;     game: PINCAN.ASM:WINNER is M5's, with the wizards.
 ;   - sound (M6) -- the heart beats and is drawn, but the thump on voices
-;     0 and 4 (design section 9.4) is M6's.
-;   - thirteen of the fifteen commands, which is why `dagg.soon` exists:
-;     MOVE and TURN are the two this file can already act on.
+;     0 and 4 (design section 9.4) is M6's, and so are A$TORC/A$FLAS/
+;     A$RING/A$SCRO, the four noises M3's commands would make.
+;   - four of the fifteen commands, which is why `dagg.soon` exists:
+;     ATTACK (M4), CLIMB (M5), ZLOAD and ZSAVE (M5).
 ;
 ; The maze and the architectural vector lists are generated into this file
 ; by scripts/gen_daggorath.py -- see the marked block below. There is no
@@ -59,10 +69,23 @@ make "dagg.bakscl [156 100 65 40 26 16 10 6 3 1]
 ; because -7 is already total darkness.
 make "dagg.dash [1 2 3 5 9 17 33]
 
-; No torches yet (M3), so the fade reads off a fixed ambient light rather
-; than RLIGHT -- 8, "typical dungeon level 1 or 2" per VIEWER.ASM's own
-; comment on the RLIGHT input. A placeholder, not a guess dressed up as one.
-make "dagg.light 8
+; The two light channels -- CD.ASM's RLIGHT/MLIGHT and PRLITE/PMLITE,
+; design section 8.3. PRLITE is the player's OWN light and COMDAT.ASM never
+; sets it, so it is zero: with no burning torch the whole dungeon is dark.
+; PUPDAT.ASM:PSUB10 adds the torch's two XXXTAB values on top of it, and
+; that sum is what SETFAX attenuates by range.
+;
+; MAGFLG is the channel selector, set for one vector list at a time by
+; whatever is about to draw something magical -- a secret door
+; (VIEWER.ASM:VIEW22), a floor object (VIEW52, which draws it twice, once
+; under each channel), or a magical creature (CMRDRW, M4). SETFAX consumes
+; and clears it, which is why it is set immediately before a draw and never
+; anywhere else.
+make "dagg.prlite 0
+make "dagg.prmlite 0
+make "dagg.light 0
+make "dagg.mlight 0
+make "dagg.magflg "false
 
 ;==========================================================================
 ; The maze and the architectural vector lists.
@@ -282,7 +305,360 @@ make "v3 []
 make "dagg.lpeek [[[100 108 112 120 128] [28 36 32 36 28]]]
 make "dagg.rpeek [[[100 108 112 120 128] [228 220 224 220 228]]]
 make "dagg.celine [[[28 28] [47 210]]]
+make "dagg.gentab [[FLASK] [RING] [SCROLL] [SHIELD] [SWORD] [TORCH]]
+make "dagg.objwgt [5 1 10 25 25 10]
+make "dagg.adjtab []
+make "dagg.adjtab lput [SUPREME 1] :dagg.adjtab
+make "dagg.adjtab lput [JOULE 1] :dagg.adjtab
+make "dagg.adjtab lput [ELVISH 4] :dagg.adjtab
+make "dagg.adjtab lput [MITHRIL 3] :dagg.adjtab
+make "dagg.adjtab lput [SEER 2] :dagg.adjtab
+make "dagg.adjtab lput [THEWS 0] :dagg.adjtab
+make "dagg.adjtab lput [RIME 1] :dagg.adjtab
+make "dagg.adjtab lput [VISION 2] :dagg.adjtab
+make "dagg.adjtab lput [ABYE 0] :dagg.adjtab
+make "dagg.adjtab lput [HALE 0] :dagg.adjtab
+make "dagg.adjtab lput [SOLAR 5] :dagg.adjtab
+make "dagg.adjtab lput [BRONZE 3] :dagg.adjtab
+make "dagg.adjtab lput [VULCAN 1] :dagg.adjtab
+make "dagg.adjtab lput [IRON 4] :dagg.adjtab
+make "dagg.adjtab lput [LUNAR 5] :dagg.adjtab
+make "dagg.adjtab lput [PINE 5] :dagg.adjtab
+make "dagg.adjtab lput [LEATHER 3] :dagg.adjtab
+make "dagg.adjtab lput [WOODEN 4] :dagg.adjtab
+make "dagg.adjtab lput [FINAL 1] :dagg.adjtab
+make "dagg.adjtab lput [ENERGY 1] :dagg.adjtab
+make "dagg.adjtab lput [ICE 1] :dagg.adjtab
+make "dagg.adjtab lput [FIRE 1] :dagg.adjtab
+make "dagg.adjtab lput [GOLD 1] :dagg.adjtab
+make "dagg.adjtab lput [EMPTY 0] :dagg.adjtab
+make "dagg.adjtab lput [DEAD 5] :dagg.adjtab
+make "dagg.odb []
+make "dagg.odb lput [1 255 0 5] :dagg.odb
+make "dagg.odb lput [1 170 0 5] :dagg.odb
+make "dagg.odb lput [4 150 64 64] :dagg.odb
+make "dagg.odb lput [3 140 13 26] :dagg.odb
+make "dagg.odb lput [2 130 0 5] :dagg.odb
+make "dagg.odb lput [0 70 0 5] :dagg.odb
+make "dagg.odb lput [1 52 0 5] :dagg.odb
+make "dagg.odb lput [2 50 0 5] :dagg.odb
+make "dagg.odb lput [0 48 0 5] :dagg.odb
+make "dagg.odb lput [0 40 0 5] :dagg.odb
+make "dagg.odb lput [5 70 0 5] :dagg.odb
+make "dagg.odb lput [3 25 0 26] :dagg.odb
+make "dagg.odb lput [1 13 0 5] :dagg.odb
+make "dagg.odb lput [4 13 0 40] :dagg.odb
+make "dagg.odb lput [5 25 0 5] :dagg.odb
+make "dagg.odb lput [5 5 0 5] :dagg.odb
+make "dagg.odb lput [3 5 0 10] :dagg.odb
+make "dagg.odb lput [4 5 0 16] :dagg.odb
+make "dagg.odb lput [1 0 0 0] :dagg.odb
+make "dagg.odb lput [1 0 255 255] :dagg.odb
+make "dagg.odb lput [1 0 255 255] :dagg.odb
+make "dagg.odb lput [1 0 255 255] :dagg.odb
+make "dagg.odb lput [1 0 0 5] :dagg.odb
+make "dagg.odb lput [0 0 0 5] :dagg.odb
+make "dagg.odb lput [5 5 0 5] :dagg.odb
+make "dagg.xxx []
+make "dagg.xxx lput [3 18 0] :dagg.xxx
+make "dagg.xxx lput [3 19 0] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [64 64 0] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [3 20 0] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [60 13 11] :dagg.xxx
+make "dagg.xxx lput [96 128 0] :dagg.xxx
+make "dagg.xxx lput [3 21 0] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [30 10 4] :dagg.xxx
+make "dagg.xxx lput [15 7 0] :dagg.xxx
+make "dagg.xxx lput [108 128 0] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [0 0 0] :dagg.xxx
+make "dagg.omx []
+make "dagg.omx lput [4 1] :dagg.omx
+make "dagg.omx lput [3 1] :dagg.omx
+make "dagg.omx lput [3 1] :dagg.omx
+make "dagg.omx lput [3 2] :dagg.omx
+make "dagg.omx lput [2 3] :dagg.omx
+make "dagg.omx lput [2 3] :dagg.omx
+make "dagg.omx lput [1 1] :dagg.omx
+make "dagg.omx lput [1 3] :dagg.omx
+make "dagg.omx lput [1 6] :dagg.omx
+make "dagg.omx lput [1 4] :dagg.omx
+make "dagg.omx lput [1 4] :dagg.omx
+make "dagg.omx lput [1 6] :dagg.omx
+make "dagg.omx lput [0 1] :dagg.omx
+make "dagg.omx lput [0 4] :dagg.omx
+make "dagg.omx lput [0 8] :dagg.omx
+make "dagg.omx lput [0 8] :dagg.omx
+make "dagg.omx lput [0 3] :dagg.omx
+make "dagg.omx lput [0 4] :dagg.omx
+make "dagg.genval [-1 -1 -1 16 17 15]
+make "v0 [[[110 120 120 110] [162 164 160 162]]]
+make "v1 [[[122 124 126 124 122] [60 62 60 58 60]]]
+make "v2 [[[118 120 126 124 118] [194 192 200 202 194]]]
+make "v3 [[[134 128 122 128 134 134] [172 192 186 168 164 172]]]
+make "v4 [[[114 124] [80 100]] [[118 114] [82 86]]]
+make "v5 [[[118 116 114 118] [60 74 72 60]]]
+make "dagg.fobj (list :v0 :v1 :v2 :v3 :v4 :v5)
+make "v0 []
+make "v1 []
+make "v2 []
+make "v3 []
+make "v4 []
+make "v5 []
 ; END GENERATED DATA
+
+;==========================================================================
+; Object control blocks -- CD.ASM's OCB, as twelve parallel flat lists.
+;
+; The ROM has room for 72 (`OCBLND RMB OC.LEN*72`) and creates 65: 63 from
+; OMXTAB (ONCE.ASM:CINI40) and the two GAMDAT gives the player. `item` and
+; `.setitem` are the only indexing this Logo has, so a list of records
+; would cost a second level of both on every field read -- the same
+; reasoning, and the same shape, as logo/games/asteroids' rock state.
+;
+; The fields are CD.ASM's, minus P.OCPTR: the ROM threads the bag and each
+; creature's loot through that one link field, and here the bag is a plain
+; Logo list of OCB numbers. `dagg.floor` is the other half of it -- see
+; dagg.ofind.
+
+make "dagg.ocbmax 65
+
+; `fput`, not `lput`: `lput` copies the whole list to append one cell, so
+; building twelve 65-cell lists that way is an O(n^2) 26,000 cells of
+; garbage against a 32,752-cell pool -- with the mazes already in it, that
+; runs out of space on the eleventh list. Order does not matter for zeros.
+to dagg.zeros :n
+  local "out
+  make "out []
+  repeat :n [make "out fput 0 :out]
+  output :out
+end
+
+make "dagg.ocrow dagg.zeros :dagg.ocbmax
+make "dagg.occol dagg.zeros :dagg.ocbmax
+make "dagg.oclvl dagg.zeros :dagg.ocbmax
+make "dagg.ocown dagg.zeros :dagg.ocbmax
+make "dagg.ocx0 dagg.zeros :dagg.ocbmax
+make "dagg.ocx1 dagg.zeros :dagg.ocbmax
+make "dagg.ocx2 dagg.zeros :dagg.ocbmax
+make "dagg.octyp dagg.zeros :dagg.ocbmax
+make "dagg.occls dagg.zeros :dagg.ocbmax
+make "dagg.ocrev dagg.zeros :dagg.ocbmax
+make "dagg.ocmgo dagg.zeros :dagg.ocbmax
+make "dagg.ocpho dagg.zeros :dagg.ocbmax
+make "dagg.ocbptr 0
+
+; The type numbers this file names. They are ADJTAB rows, which is what
+; P.OCTYP holds -- see the generated dagg.adjtab.
+make "dagg.t.seer 4
+make "dagg.t.thews 5
+make "dagg.t.vision 7
+make "dagg.t.abye 8
+make "dagg.t.hale 9
+make "dagg.t.empty 23
+make "dagg.t.dead 24
+make "dagg.k.ring 1
+make "dagg.k.torch 5
+
+; OCBFIX, OBIRTH.ASM: copy ODBTAB's four bytes into P.OCCLS..P.OCPHO, then
+; XXXTAB's three special bytes IF this type has an entry. A type with no
+; entry leaves them ALONE rather than zeroing them, which is what lets
+; PINCAN transform a Vulcan ring into a Fire ring without spending its
+; three charges (P.OCXXX+0), because FIRE has no XXXTAB row.
+to dagg.ocbfil :i :typ
+  local "d local "x
+  make "d item (:typ + 1) :dagg.odb
+  .setitem :i :dagg.occls item 1 :d
+  .setitem :i :dagg.ocrev item 2 :d
+  .setitem :i :dagg.ocmgo item 3 :d
+  .setitem :i :dagg.ocpho item 4 :d
+  make "x item (:typ + 1) :dagg.xxx
+  if empty? :x [stop]
+  .setitem :i :dagg.ocx0 item 1 :x
+  .setitem :i :dagg.ocx1 item 2 :x
+  .setitem :i :dagg.ocx2 item 3 :x
+end
+
+; OBIRTX, OBIRTH.ASM. The second OCBFIL is the whole mechanic of REVEAL:
+; GENVAL dresses every new shield, sword and torch in the LEATHER, WOODEN
+; or PINE parameters while keeping its own reveal requirement, so an
+; unrevealed Mithril shield really does fight like a leather one until
+; PREVEA gives it its numbers back. Flasks, rings and scrolls are -1 in
+; GENVAL and keep theirs from birth -- you still cannot see what they are,
+; because OBJNAM hides the adjective, but they work.
+to dagg.obirth :typ :lvl
+  local "i local "g local "rev
+  make "i :dagg.ocbptr + 1
+  make "dagg.ocbptr :i
+  .setitem :i :dagg.octyp :typ
+  .setitem :i :dagg.oclvl :lvl
+  .setitem :i :dagg.ocown 0
+  .setitem :i :dagg.ocrow 0
+  .setitem :i :dagg.occol 0
+  dagg.ocbfil :i :typ
+  make "g item (1 + item :i :dagg.occls) :dagg.genval
+  if :g < 0 [output :i]
+  make "rev item :i :dagg.ocrev
+  dagg.ocbfil :i :g
+  .setitem :i :dagg.ocrev :rev
+  output :i
+end
+
+; CINI40/CINI44, ONCE.ASM: every object in the game is created once, at
+; power-on, and marked CREATURE-owned. NEWLVL.ASM:NLVL40 then hands them
+; round-robin to the living creatures of their level -- which is M4, so at
+; M3 they are created and then nothing ever picks them up. Nothing is
+; lying on the floor at the start of a game and that is the ROM's design
+; (design section 7.3): you get gear by killing things.
+;
+; The distribution walks DOWN from the object's first level and wraps, and
+; CINI44 allows a level 5 the dungeon does not have -- so a few objects
+; are unreachable in any game. Kept: design section 19, decision 4.
+to dagg.makeobjects
+  local "n local "lvl local "cnt local "i local "k
+  make "dagg.ocbptr 0
+  repeat count :dagg.omx [
+    make "n repcount - 1
+    make "lvl item 1 (item repcount :dagg.omx)
+    make "cnt item 2 (item repcount :dagg.omx)
+    make "i :lvl
+    repeat :cnt [
+      make "k dagg.obirth :n :i
+      .setitem :k :dagg.ocown (0 - 1)
+      make "i :i + 1
+      if :i > 5 [make "i :lvl]
+    ]
+  ]
+end
+
+; GAMDAT, COMDAT.ASM: a wooden sword and a pine torch, in that order, both
+; in the bag and both revealed -- which is where POBJWT's own `FDB 30+5`
+; comes from (25 + 10). GAME30 re-fills each OCB from its real type after
+; OBIRTH, undoing the GENVAL substitution, and then clears P.OCREV.
+make "dagg.gamdat [17 15]
+
+to dagg.givebag
+  local "i
+  make "dagg.bag []
+  foreach :dagg.gamdat [[typ]
+    make "i dagg.obirth :typ :dagg.level
+    .setitem :i :dagg.ocown 1
+    dagg.ocbfil :i :typ
+    .setitem :i :dagg.ocrev 0
+    make "dagg.bag lput :i :dagg.bag
+  ]
+end
+
+;==========================================================================
+; Hands, the bag and the floor.
+;
+; PLHAND/PRHAND hold an OCB number or 0 for empty, exactly as the ROM
+; holds a pointer or a null one. BAGPTR's linked list is a Logo list with
+; the head at the front, because PSTOW0 pushes there.
+;
+; `dagg.floor` is the ROM's OCB table read the way OFIND reads it. FNDOBJ
+; walks all 65 OCBs and OFIND then rejects the owned ones; at ten ranges a
+; redraw that is 650 walks of three `item`s each, which is tens of
+; milliseconds against a redraw budget of 100 (design section 12). So the
+; unowned objects are kept in their own list, in OCB order so that OFIND
+; still answers in the order the ROM answers in, and the walk is over the
+; two or three things actually lying on this floor.
+
+make "dagg.plhand 0
+make "dagg.prhand 0
+make "dagg.bag []
+make "dagg.floor []
+make "dagg.ptorch 0
+make "dagg.ofindp 0
+
+to dagg.hand :h
+  if :h = "l [output :dagg.plhand]
+  output :dagg.prhand
+end
+
+to dagg.sethand :h :i
+  ifelse :h = "l [make "dagg.plhand :i] [make "dagg.prhand :i]
+end
+
+; Kept ascending by OCB number: OFIND's answers are in table order and
+; PGET takes the first match, so a floor list in drop order would hand you
+; a different object than the ROM would.
+to dagg.floor.add :i
+  local "out local "done
+  make "out []
+  make "done "false
+  foreach :dagg.floor [[k]
+    if (and (not :done) (:i < :k)) [make "out lput :i :out  make "done "true]
+    make "out lput :k :out
+  ]
+  if not :done [make "out lput :i :out]
+  make "dagg.floor :out
+end
+
+to dagg.floor.del :i
+  local "out
+  make "out []
+  foreach :dagg.floor [[k] if not (:k = :i) [make "out lput :k :out]]
+  make "dagg.floor :out
+end
+
+to dagg.bag.del :i
+  local "out
+  make "out []
+  foreach :dagg.bag [[k] if not (:k = :i) [make "out lput :k :out]]
+  make "dagg.bag :out
+end
+
+; OFIND/FNDOBJ, COMCRE.ASM: a cursor rather than a list, because the two
+; callers that matter -- the cell walk and EXAMINE -- ask for one object at
+; a time and the cell walk is on the redraw path, where building a list
+; would allocate. OFINDF is the "rewind" flag; ours is the cursor itself.
+to dagg.ofind.rewind
+  make "dagg.ofindp 0
+end
+
+to dagg.ofind :row :col
+  local "i local "j
+  make "j :dagg.ofindp
+  repeat (count :dagg.floor) - :j [
+    make "j :j + 1
+    make "i item :j :dagg.floor
+    if (and (:dagg.level = item :i :dagg.oclvl)
+            (:row = item :i :dagg.ocrow)
+            (:col = item :i :dagg.occol)) [
+      make "dagg.ofindp :j
+      output :i
+    ]
+  ]
+  make "dagg.ofindp count :dagg.floor
+  output 0
+end
+
+; OBJNAM, STATUS.ASM. An unrevealed object gets its generic name only --
+; TORCH, not PINE TORCH -- which is the whole of the game's information
+; economy: you cannot tell a Solar torch from a Pine one until you have
+; the power to REVEAL it.
+to dagg.objnam :i
+  local "gen
+  if :i = 0 [output "EMPTY]
+  make "gen first item (1 + item :i :dagg.occls) :dagg.gentab
+  if not (0 = item :i :dagg.ocrev) [output :gen]
+  output (word first item (1 + item :i :dagg.octyp) :dagg.adjtab
+               char 32 :gen)
+end
 
 ;==========================================================================
 ; The cell -- CD.ASM: 00 passage, 01 door, 10 secret door, 11 wall, packed
@@ -349,9 +725,22 @@ end
 ; SETFAX, VCTLST.ASM (design section 8): outputs whether this range draws
 ; at all, and sets the dash period as a side effect when it does.
 ; `CMPA #-7 / BLE SFAD30` is total darkness at MINUS SEVEN, not past it.
+;
+; It reads MAGFLG first and clears it, so one call serves one vector list
+; and the next list is back on the regular channel -- which is why
+; `dagg.drawit` calls this per LIST rather than once per range the way M1
+; did. That costs a call per architectural face (about fifty a redraw)
+; and it is the only way a secret door can be lit by a magical torch while
+; the wall in front of it is not.
 to dagg.setfade :range
   local "a
-  make "a (:dagg.light - 7) - :range
+  ifelse :dagg.magflg [
+    make "a :dagg.mlight
+    make "dagg.magflg "false
+  ] [
+    make "a :dagg.light
+  ]
+  make "a (:a - 7) - :range
   if not (:a < 0) [setpendash 1  output true]
   if not (:a > -7) [output false]
   setpendash item ((0 - :a) + 1) :dagg.dash
@@ -383,15 +772,44 @@ to dagg.side.runs :which :code
   output item (:code + 1) :dagg.right
 end
 
-; VIEW22's fallthrough: a secret door draws under its own list AND the
-; plain wall underneath it (design section 8.3 -- regular light still
-; shows a wall where a secret door is; only magic light shows the door).
+; DRAWIT, VIEWER.ASM: set the lighting for THIS list, then draw it if the
+; light reaches. Every draw in the cell walk goes through here, because
+; SETFAX's magic-channel flag is per-list.
+to dagg.drawit :runs
+  if dagg.setfade :dagg.range [dagg.draw.runs :runs]
+end
+
+; VIEW22's fallthrough: a secret door draws its own list under the MAGIC
+; light and then the plain wall underneath it under the regular light
+; (design section 8.3) -- so a secret door is a wall until you carry a
+; magical torch, and the two lists are lit by two different numbers.
 to dagg.draw.side :which :code
-  ifelse :code = 2 [
-    dagg.draw.runs dagg.side.runs :which 2
-    dagg.draw.runs dagg.side.runs :which 3
-  ] [
-    dagg.draw.runs dagg.side.runs :which :code
+  if :code = 2 [
+    make "dagg.magflg "true
+    dagg.drawit dagg.side.runs :which 2
+    dagg.drawit dagg.side.runs :which 3
+    stop
+  ]
+  dagg.drawit dagg.side.runs :which :code
+end
+
+; VIEW52: every unowned object in the cell, drawn TWICE -- once with
+; MAGFLG set and once without, so an object shows if either channel
+; reaches it. `DEC MAGFLG / BSR DRAWIT / BSR DRAWIT` in the ROM, and
+; SETFAX clearing the flag on the first call is what makes the second one
+; the regular-light draw.
+;
+; FWDOBJ is indexed by CLASS, not type: one outline for every torch.
+to dagg.draw.objects :row :col
+  local "i local "runs
+  dagg.ofind.rewind
+  make "i dagg.ofind :row :col
+  until [:i = 0] [
+    make "runs item (1 + item :i :dagg.occls) :dagg.fobj
+    make "dagg.magflg "true
+    dagg.drawit :runs
+    dagg.drawit :runs
+    make "i dagg.ofind :row :col
   ]
 end
 
@@ -399,9 +817,9 @@ end
 ; The cell walk -- VIEWER.ASM:VIEWER/VIEW10-VIEW60, design section 6.
 
 to dagg.redraw :table
-  local "r local "row local "col local "cell
+  local "row local "col local "cell
   local "lcode local "rcode local "fcode
-  local "stop local "visible
+  local "stop
   clean
   setpc :dagg.ink
   make "row :dagg.row
@@ -409,19 +827,17 @@ to dagg.redraw :table
   make "stop false
   repeat 10 [
     if not :stop [
-      make "r repcount - 1
-      dagg.setscale :r :table
-      make "visible dagg.setfade :r
+      make "dagg.range repcount - 1
+      dagg.setscale :dagg.range :table
       make "cell dagg.cell :dagg.level :row :col
       make "lcode dagg.side :cell (modulo (:dagg.dir + 3) 4)
       make "rcode dagg.side :cell (modulo (:dagg.dir + 1) 4)
       make "fcode dagg.side :cell :dagg.dir
-      if :visible [
-        dagg.draw.side "l :lcode
-        dagg.draw.side "f :fcode
-        dagg.draw.side "r :rcode
-        dagg.draw.runs :dagg.celine
-      ]
+      dagg.draw.side "l :lcode
+      dagg.draw.side "f :fcode
+      dagg.draw.side "r :rcode
+      dagg.drawit :dagg.celine
+      dagg.draw.objects :row :col
       ifelse :fcode = 0 [
         make "row dagg.step.row :row :dagg.dir
         make "col dagg.step.col :col :dagg.dir
@@ -449,10 +865,9 @@ end
 ; names, because STATUX inverts the whole status row and not just the cells
 ; a glyph lands in: the spaces between the hands are part of the bar.
 ;
-; Nothing puts an object in a hand until M3, so both names are M$EMPT.
-
-make "dagg.lhand "EMPTY
-make "dagg.rhand "EMPTY
+; The longest name in the game is fourteen characters (MITHRIL SHIELD,
+; LEATHER SHIELD), so two full hands are 28 of the 40 and the bar always
+; has room for the heart between them.
 
 to dagg.spaces :n
   local "s
@@ -462,10 +877,10 @@ to dagg.spaces :n
 end
 
 to dagg.status.line
-  output (word :dagg.lhand
-               dagg.spaces (40 - ((count :dagg.lhand)
-                                  + (count :dagg.rhand)))
-               :dagg.rhand)
+  local "l local "r
+  make "l dagg.objnam :dagg.plhand
+  make "r dagg.objnam :dagg.prhand
+  output (word :l dagg.spaces (40 - ((count :l) + (count :r))) :r)
 end
 
 to dagg.status
@@ -540,10 +955,20 @@ end
 ; point, a stroke is 118 points, and TURN10 draws it and then erases it, so
 ; the CoCo spends ~13 ms a stroke and ~105 ms on a sweep. It is the number
 ; to tune on a board if the whoosh reads too fast or too slow.
+;
+; TURN00 also checks that we are LOOKING FORWARD (`CMPU #VIEWER`) and does
+; nothing at all otherwise -- turning with the map or the inventory up
+; changes your direction and no more.
+;
+; And the sweep is subject to the light like everything else: TURN00 sets
+; range 0's fade and TURN10 draws through VECTOR, so in the dark VCTFAD is
+; $FF, VECTOR's FADCNT wraps and no point is ever plotted. A stroke here is
+; about 148 pixels, so `setpendash 255` is that same nothing.
 to dagg.turnsweep :dir
   local "y0 local "y1 local "positions
+  if not (:dagg.dspmod = 0) [stop]
   dagg.setscale 1 :dagg.norscl
-  ignore dagg.setfade 0
+  if not dagg.setfade 0 [setpendash 255]
   clean
   setpc :dagg.ink
   dagg.draw.runs :dagg.turnlines
@@ -566,12 +991,221 @@ to dagg.turnsweep :dir
   ]
 end
 
+;==========================================================================
+; The three display modes -- design section 4.2, CD.ASM's DSPMOD. All three
+; are graphics; the screen never changes mode.
+;
+;   0 VIEWER  the forward view          (dagg.redraw)
+;   1 MAPPER  the map a scroll shows    (dagg.mapper)
+;   2 EXAMIN  the inventory listing     (dagg.examin)
+;
+; DSPMOD is sticky, which is why LOOK is a command: EXAMINE puts the
+; listing up and every redraw after it redraws the LISTING until you LOOK.
+; The map is the exception -- HUMAN.ASM:HMAN10 takes it down on the first
+; keystroke after it went up, before that keystroke is even buffered.
+
+make "dagg.dspmod 0
+make "dagg.mapflg "false
+make "dagg.range 0
+
+; PUPDAX/PUPSUB, PUPDAT.ASM. PSUB10 is the two-channel sum of design
+; section 8.3: the player's own light plus the burning torch's, and there
+; is no third term. Nothing is drawn at all while unconscious.
+to dagg.pupdat :table
+  if :dagg.faint [stop]
+  dagg.setlight
+  if :dagg.dspmod = 1 [dagg.mapper  refresh  stop]
+  if :dagg.dspmod = 2 [dagg.examin  refresh  stop]
+  dagg.redraw :table
+  refresh
+end
+
+to dagg.setlight
+  make "dagg.light :dagg.prlite
+  make "dagg.mlight :dagg.prmlite
+  if :dagg.ptorch = 0 [stop]
+  make "dagg.light :dagg.light + item :dagg.ptorch :dagg.ocx1
+  make "dagg.mlight :dagg.mlight + item :dagg.ptorch :dagg.ocx2
+end
+
 ; PTUR90 and PMOV90 both end `DEC UPDATE / SYNC` -- build the view for
 ; where the player now is and put it on the screen. It is the LAST thing
 ; a movement command does, after any animation, never before it.
 to dagg.show
-  dagg.redraw :dagg.norscl
-  refresh
+  dagg.pupdat :dagg.norscl
+end
+
+;==========================================================================
+; Text in the picture -- design section 4.1. The graphics band is a 40 x 24
+; character grid: `write` starts at the turtle's x and centres the cell on
+; its y, so column c is x = -160 + 8c and row r is y = 155 - 10r.
+;
+; The ROM lays EXAMINE out on a 32-column grid (TXTEXA is 32*19 characters)
+; and the ROWS carry over unchanged -- there are still nineteen of them.
+; The COLUMNS do not: every number EXAMIN uses is a fraction of its screen
+; width rather than a fixed offset, so they are recomputed for 40 rather
+; than left at 32 with eight columns of nothing down the right-hand side.
+
+to dagg.write.at :row :col :text
+  pu (setpos (-160 + (8 * :col)) (155 - (10 * :row)))
+  write :text
+end
+
+;==========================================================================
+; EXAMINE -- PEXAM.ASM:EXAMIN. `clean` is EXAMIO's `SWI ZFLOP`: the listing
+; REPLACES the view rather than overlaying it, and stays up until LOOK.
+;
+; Two entries to a line. PRTOBJ advances the cursor by 16 and rounds down
+; to a multiple of 16, which on a 32-column screen and for names of
+; fourteen characters or fewer -- and fourteen is the longest in the game
+; -- is exactly "column 0, then half way across, then the next row." Half
+; way across is column 20 here, and 20 + 14 still fits.
+;
+; The separator is a rule of I.EXCL (CD.ASM) drawn the full width of the
+; screen -- 32 characters there, 40 here -- and both headers are CENTRED:
+; EXAMIN puts "IN THIS ROOM" at column 10 of 32 and "BACKPACK" at column
+; 12, which are (32 - 12) / 2 and (32 - 8) / 2. On 40 they are 14 and 16.
+
+make "dagg.exrow 0
+make "dagg.excol 0
+
+to dagg.prtobj :i :highlight
+  local "name
+  make "name dagg.objnam :i
+  pu (setpos (-160 + (8 * :dagg.excol)) (155 - (10 * :dagg.exrow)))
+  ifelse :highlight [(write :name :dagg.bg :dagg.ink)] [write :name]
+  ifelse :dagg.excol = 0 [
+    make "dagg.excol 20
+  ] [
+    make "dagg.excol 0
+    make "dagg.exrow :dagg.exrow + 1
+  ]
+end
+
+; EXAM20's `TST NEWLIN`: an odd number of entries leaves the cursor half
+; way along a line, and the next thing printed starts a fresh one.
+to dagg.exnewline
+  if :dagg.excol = 0 [stop]
+  make "dagg.excol 0
+  make "dagg.exrow :dagg.exrow + 1
+end
+
+to dagg.examin
+  local "i
+  clean
+  setpc :dagg.ink
+  make "dagg.exrow 0
+  make "dagg.excol 0
+  dagg.write.at 0 14 [IN THIS ROOM]
+  make "dagg.exrow 1
+  ; !CREATURE! goes here (EXAM10's CFIND) -- M4.
+  dagg.ofind.rewind
+  make "i dagg.ofind :dagg.row :dagg.col
+  until [:i = 0] [
+    dagg.prtobj :i "false
+    make "i dagg.ofind :dagg.row :dagg.col
+  ]
+  dagg.exnewline
+  dagg.write.at :dagg.exrow 0 dagg.exbar
+  make "dagg.exrow :dagg.exrow + 1
+  dagg.write.at :dagg.exrow 16 [BACKPACK]
+  make "dagg.exrow :dagg.exrow + 1
+  ; EXAM30 walks the bag from the head, and the BURNING torch is drawn in
+  ; inverse video (`COM P.TXINV,U`) -- which is the three-argument `write`
+  ; P18 M1 exists for, the same one the status bar uses.
+  foreach :dagg.bag [[k] dagg.prtobj :k (:k = :dagg.ptorch)]
+  dagg.status
+end
+
+to dagg.exbar
+  local "s
+  make "s "
+  repeat 40 [make "s word :s char 33]
+  output :s
+end
+
+;==========================================================================
+; The map -- MAPPER.ASM, design section 13.
+;
+; 32 x 32 cells, white where the cell cannot be occupied ($FF) and black
+; where it can. On the CoCo a cell is one byte wide and six scan lines
+; tall, which fills the whole 256 x 192 display -- the status line and the
+; text area included, which is why PUSE.ASM:USC210 turns the drawn heart
+; off before putting the map up. Ours is 10 x 7, so 320 x 224 at the top
+; of the band, and the status line goes with it for the same reason.
+;
+; Drawn as ONE horizontal stroke per RUN of consecutive wall cells rather
+; than a stroke a cell: a real level is a couple of hundred strokes instead
+; of 1,024 fills. The scan underneath is still 1,024 cells, and it is a
+; `foreach` over each row list rather than 1,024 `item` calls, which is the
+; same choice M0 measured for the cell walk. The map is a screen you ask
+; for, not a redraw, so it is not on section 12's 100 ms budget.
+;
+; MAPPER writes raw $00/$FF and never reads VDGINV, so on the CoCo the map
+; is the one picture in the game that does not invert with the level. Ours
+; inverts with it -- rock in the level's ink, floor in its background --
+; because `clean` fills with the level's own background and a white flash
+; between two dark pictures is worse than the departure.
+
+to dagg.map.bar :y :c0 :c1
+  pu (setpos (-160 + (10 * :c0)) :y)
+  pd (setpos (-160 + (10 * (:c1 + 1))) :y)
+  pu
+end
+
+; `:c` and not `repcount`: repcount counts the innermost REPEAT, and
+; `foreach` is not one -- inside this loop it would answer `dagg.mapper`'s
+; own `repeat 32`, which is the row number, so every run would start and
+; end in the same place.
+to dagg.map.row :r
+  local "y local "run local "c
+  make "y (160 - (7 * :r)) - 3
+  make "run 0
+  make "c 0
+  foreach (item (:r + 1) (item (:dagg.level + 1) :dagg.mazes)) [[cell]
+    make "c :c + 1
+    ifelse :cell = 255 [
+      if :run = 0 [make "run :c]
+    ] [
+      if not (:run = 0) [dagg.map.bar :y (:run - 1) (:c - 2)  make "run 0]
+    ]
+  ]
+  if not (:run = 0) [dagg.map.bar :y (:run - 1) 31]
+end
+
+; MARK4, MAPPER.ASM: four short rows inside the cell. The ROM's patterns
+; are a dot for an object and an X for you; the greys design section 13
+; imagined are M1a's palette, so these are shapes in the ink colour.
+to dagg.map.mark :r :c :what
+  local "x local "y
+  make "x (-160 + (10 * :c)) + 5
+  make "y (160 - (7 * :r)) - 3
+  if :what = "you [
+    pu (setpos (:x - 3) (:y - 2))  pd (setpos (:x + 3) (:y + 2))
+    pu (setpos (:x - 3) (:y + 2))  pd (setpos (:x + 3) (:y - 2))
+    pu
+    stop
+  ]
+  pu (setpos :x (:y - 2))  pd (setpos :x (:y + 2))  pu
+end
+
+to dagg.mapper
+  clean
+  setpc :dagg.ink
+  setpendash 1
+  setpensize 7
+  repeat 32 [dagg.map.row repcount - 1]
+  setpensize 1
+  ; MAPFLG: a Vision scroll shows walls only, a Seer scroll shows what is
+  ; on them. Creatures and vertical features are M4 and M5.
+  if :dagg.mapflg [
+    foreach :dagg.floor [[k]
+      if :dagg.level = item :k :dagg.oclvl [
+        dagg.map.mark (item :k :dagg.ocrow) (item :k :dagg.occol) "obj
+      ]
+    ]
+  ]
+  dagg.map.mark :dagg.row :dagg.col "you
 end
 
 ; PTURN parses its own second token off the line (design section 15's
@@ -621,8 +1255,7 @@ to dagg.move.forward
   make "nrow dagg.step.row :dagg.row :dagg.dir
   make "ncol dagg.step.col :dagg.col :dagg.dir
   make "ok dagg.stepok :nrow :ncol
-  dagg.redraw :dagg.hlfscl
-  refresh
+  dagg.pupdat :dagg.hlfscl
   if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
   dagg.show
 end
@@ -633,8 +1266,7 @@ to dagg.move.backward
   make "nrow dagg.step.row :dagg.row :dir
   make "ncol dagg.step.col :dagg.col :dir
   make "ok dagg.stepok :nrow :ncol
-  dagg.redraw :dagg.bakscl
-  refresh
+  dagg.pupdat :dagg.bakscl
   if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
   dagg.show
 end
@@ -677,6 +1309,302 @@ end
 to dagg.move.cost
   make "dagg.pdam :dagg.pdam + (int (:dagg.objwt / 8)) + 3
   dagg.hupdat
+end
+
+;==========================================================================
+; The object commands -- PGET.ASM, PUSE.ASM, PREVEA.ASM, PINCAN.ASM,
+; PEXAM.ASM, PLOOK.ASM. Design section 15's M3.
+;
+; PARHND and PAROBJ, PARSER.ASM, are the two argument parsers all of them
+; share. PARHND takes the next token from DIRTAB and accepts only LEFT and
+; RIGHT -- BACK, AROUND, UP and DOWN all parse and are all rejected here.
+
+make "dagg.speflg "false
+make "dagg.objtyp 0
+make "dagg.objcls 0
+
+to dagg.parhnd
+  local "n
+  make "n dagg.parse dagg.gettok :dagg.dirtab
+  if :n = 2 [output "r]
+  if :n = 1 [output "l]
+  output "err
+end
+
+; PAROBJ: <generic>, or <adjective> <generic> with the two agreeing on
+; class. The specific form re-reads the SAME token -- POBJ10 calls PARSE0,
+; which is PARSER without the GETTOK -- so "PINE" is tried as a generic
+; first and only then as an adjective, and a bare "PINE" fails because the
+; generic that must follow it is missing. "PINE SWORD" fails on the class
+; comparison, which is why ADJTAB carries a class beside every word.
+to dagg.parobj
+  local "tok local "n
+  make "tok dagg.gettok
+  make "n dagg.parse :tok :dagg.gentab
+  if :n = 0 [output "false]
+  if :n > 0 [
+    make "dagg.speflg "false
+    make "dagg.objtyp :n - 1
+    make "dagg.objcls :n - 1
+    output "true
+  ]
+  make "dagg.speflg "true
+  make "n dagg.parse :tok :dagg.adjtab
+  if :n < 1 [output "false]
+  make "dagg.objtyp :n - 1
+  make "dagg.objcls item 2 (item :n :dagg.adjtab)
+  make "n dagg.parse dagg.gettok :dagg.gentab
+  if :n < 1 [output "false]
+  if not ((:n - 1) = :dagg.objcls) [output "false]
+  output "true
+end
+
+to dagg.objmatch :i
+  if :dagg.speflg [output :dagg.objtyp = item :i :dagg.octyp]
+  output :dagg.objcls = item :i :dagg.occls
+end
+
+; PGET20's loop: the first object on this floor that matches, in OCB
+; order, which for a generic name is "the first one of its class."
+to dagg.findfloor
+  local "i
+  dagg.ofind.rewind
+  make "i dagg.ofind :dagg.row :dagg.col
+  until [:i = 0] [
+    if dagg.objmatch :i [output :i]
+    make "i dagg.ofind :dagg.row :dagg.col
+  ]
+  output 0
+end
+
+to dagg.findbag
+  local "k
+  repeat count :dagg.bag [
+    make "k item repcount :dagg.bag
+    if dagg.objmatch :k [output :k]
+  ]
+  output 0
+end
+
+; WUPDAT, PGET.ASM: the weight changes, the heart rate follows it, and
+; then COMUPD redraws. Only GET and DROP move POBJWT -- STOW and PULL move
+; an object between a hand and the bag and you are carrying it either way.
+;
+; COMUPD is `SWI STATUS` then `SWI PUPDAT`; ours is just the redraw,
+; because design section 4.1b's status line is written INSIDE the redraw
+; (`clean` is the only eraser there is) and a separate STATUS would draw it
+; twice.
+to dagg.comupd
+  dagg.pupdat :dagg.norscl
+end
+
+to dagg.wupdat :delta
+  make "dagg.objwt :dagg.objwt + :delta
+  dagg.hupdat
+  dagg.comupd
+end
+
+to dagg.weight :i
+  output item (1 + item :i :dagg.occls) :dagg.objwgt
+end
+
+; PGET: GET <hand> <object>. The hand must be empty and the object must be
+; on the floor you are standing on.
+to dagg.get
+  local "h local "i
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  if not (0 = dagg.hand :h) [dagg.cmderr  stop]
+  if not dagg.parobj [dagg.cmderr  stop]
+  make "i dagg.findfloor
+  if :i = 0 [dagg.cmderr  stop]
+  dagg.sethand :h :i
+  .setitem :i :dagg.ocown 1
+  dagg.floor.del :i
+  dagg.wupdat dagg.weight :i
+end
+
+; PDROP: DROP <hand>. The object lands where you stand, on this level.
+;
+; PDROP does NOT clear PTORCH, and it does not have to: USE stows the
+; torch it lights, and PULL is the only way back out of the bag and clears
+; PTORCH when it takes it. A burning torch can never be in a hand.
+to dagg.drop
+  local "h local "i
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  make "i dagg.hand :h
+  if :i = 0 [dagg.cmderr  stop]
+  dagg.sethand :h 0
+  .setitem :i :dagg.ocown 0
+  .setitem :i :dagg.ocrow :dagg.row
+  .setitem :i :dagg.occol :dagg.col
+  .setitem :i :dagg.oclvl :dagg.level
+  dagg.floor.add :i
+  dagg.wupdat (0 - dagg.weight :i)
+end
+
+; PSTOW: STOW <hand>. PSTOW0 pushes at the head of the bag list, so the
+; last thing you stowed is the first thing EXAMINE lists and the first
+; thing a generic PULL finds.
+to dagg.stow
+  local "h local "i
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  make "i dagg.hand :h
+  if :i = 0 [dagg.cmderr  stop]
+  make "dagg.bag fput :i :dagg.bag
+  dagg.sethand :h 0
+  dagg.comupd
+end
+
+; PPULL: PULL <hand> <object>. Taking the burning torch back into a hand
+; puts it out (`CMPX PTORCH / STD PTORCH`), which is the only way to stop
+; a torch burning short of letting it die.
+to dagg.pull
+  local "h local "i
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  if not (0 = dagg.hand :h) [dagg.cmderr  stop]
+  if not dagg.parobj [dagg.cmderr  stop]
+  make "i dagg.findbag
+  if :i = 0 [dagg.cmderr  stop]
+  dagg.bag.del :i
+  dagg.sethand :h :i
+  if :i = :dagg.ptorch [make "dagg.ptorch 0]
+  dagg.comupd
+end
+
+; PUSE: USE <hand>. Every failure past the hand parse is SILENT -- PUSE24
+; is a bare RTS and not CMDERR -- so using something that does nothing
+; tells you nothing, which is how you find out what an unrevealed object
+; is without being told.
+;
+; The torch branch is on CLASS, so a DEAD torch lights too; it just has no
+; light in it. USETAB is on TYPE, and it holds five entries: three flasks
+; and two scrolls.
+to dagg.use
+  local "h local "i local "typ
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  make "i dagg.hand :h
+  if :i = 0 [stop]
+  make "typ item :i :dagg.octyp
+  if (item :i :dagg.occls) = :dagg.k.torch [
+    make "dagg.ptorch :i
+    make "dagg.bag fput :i :dagg.bag
+    dagg.sethand :h 0
+    dagg.pupdat :dagg.norscl
+    stop
+  ]
+  if :typ = :dagg.t.thews [
+    make "dagg.ppow :dagg.ppow + 1000
+    dagg.empty :i
+    stop
+  ]
+  if :typ = :dagg.t.hale [make "dagg.pdam 0  dagg.empty :i  stop]
+  if :typ = :dagg.t.abye [
+    ; SCAL16 is a radix-7 multiply, so `LDA #102` is 102/128 and not
+    ; 102/256 -- 80 % of your power, taken as damage.
+    make "dagg.pdam :dagg.pdam + (int ((:dagg.ppow * 102) / 128))
+    dagg.empty :i
+    stop
+  ]
+  if :typ = :dagg.t.seer [dagg.scroll :i "true  stop]
+  if :typ = :dagg.t.vision [dagg.scroll :i "false  stop]
+end
+
+; UFL900: only the TYPE changes, so the flask keeps the class and the
+; offense it was born with and becomes an EMPTY FLASK -- and empty flasks
+; are always revealed, which is the game admitting what you just drank.
+to dagg.empty :i
+  .setitem :i :dagg.octyp :dagg.t.empty
+  .setitem :i :dagg.ocrev 0
+  dagg.hupdat
+  dagg.comupd
+end
+
+; USC100/USC200. An UNREVEALED scroll sets MAPFLG and then does nothing at
+; all (`TST P.OCREV,U / BNE USC199`): a scroll you have not revealed is a
+; scroll that does not work. A revealed one puts the map up and stops the
+; heart being DRAWN while it goes on beating underneath (`CLR HEARTF`),
+; because on the CoCo the map covers the status line the heart lives in.
+to dagg.scroll :i :everything
+  make "dagg.mapflg :everything
+  if not (0 = item :i :dagg.ocrev) [stop]
+  make "dagg.heartf "false
+  ask 1 [ht]
+  make "dagg.dspmod 1
+  dagg.pupdat :dagg.norscl
+end
+
+; PREVEA: REVEAL <hand>. Twenty-five power for every point of the object's
+; reveal requirement, and the re-fill is the point of it -- OBIRTH dressed
+; this object in its generic's numbers and this is where it gets its own
+; back. Silent on every failure, like USE.
+to dagg.reveal
+  local "h local "i local "rev
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  make "i dagg.hand :h
+  if :i = 0 [stop]
+  make "rev item :i :dagg.ocrev
+  if :rev = 0 [stop]
+  if (25 * :rev) > :dagg.ppow [stop]
+  dagg.ocbfil :i (item :i :dagg.octyp)
+  .setitem :i :dagg.ocrev 0
+  dagg.comupd
+end
+
+; PINCAN: INCANT <word>. The one place in the parser that wants the WHOLE
+; word (FULFLG) rather than a prefix, and it checks BOTH hands -- PINCAN
+; calls PINC10 for the left hand and then falls through into it for the
+; right.
+;
+; A ring carries the type it becomes in P.OCXXX+1, and clearing that
+; afterwards is what stops you doing it twice. FIRE, ICE and ENERGY have
+; no XXXTAB row, so OCBFIL leaves P.OCXXX+0 alone and the ring keeps its
+; three charges. The Ring of Ohm ends the game (PINCAN.ASM:WINNER) and
+; that is M5's, with the wizards.
+to dagg.incant
+  local "n
+  make "n dagg.parse dagg.gettok :dagg.adjtab
+  if :n < 1 [stop]
+  if not :dagg.fulflg [stop]
+  make "dagg.objtyp :n - 1
+  dagg.incant.hand :dagg.plhand
+  dagg.incant.hand :dagg.prhand
+end
+
+to dagg.incant.hand :i
+  local "a
+  if :i = 0 [stop]
+  if not (:dagg.k.ring = item :i :dagg.occls) [stop]
+  make "a item :i :dagg.ocx1
+  if :a = 0 [stop]
+  if not (:a = :dagg.objtyp) [stop]
+  .setitem :i :dagg.octyp :a
+  dagg.ocbfil :i :a
+  .setitem :i :dagg.ocx1 0
+  dagg.comupd
+end
+
+; PEXAM and PLOOK, with INIVUX in front of the second: clear the text,
+; recompute the heart rate, force an immediate beat and turn the drawn
+; heart back on, then put the forward view up.
+to dagg.examine
+  make "dagg.dspmod 2
+  dagg.pupdat :dagg.norscl
+end
+
+to dagg.look
+  ct
+  dagg.hupdat
+  make "dagg.heart.due ticks
+  make "dagg.heartf "true
+  if not :dagg.over [ask 1 [st]]
+  make "dagg.dspmod 0
+  dagg.pupdat :dagg.norscl
 end
 
 ;==========================================================================
@@ -808,11 +1736,12 @@ end
 to dagg.faint.down
   ct
   make "dagg.olight :dagg.light
-  until [:dagg.light < -7] [
-    make "dagg.light :dagg.light - 1
+  until [not (:dagg.light > -8)] [
+    make "dagg.mlight :dagg.mlight - 1
     dagg.redraw :dagg.norscl
     refresh
     dagg.heart.tick
+    make "dagg.light :dagg.light - 1
   ]
   clean
   refresh
@@ -828,6 +1757,7 @@ to dagg.faint.up
     dagg.redraw :dagg.norscl
     refresh
     dagg.heart.tick
+    make "dagg.mlight :dagg.mlight + 1
     make "dagg.light :dagg.light + 1
   ]
   make "dagg.faint "false
@@ -853,10 +1783,10 @@ end
 ; global holding the `ticks` value it is next due at. `ticks` is
 ; milliseconds and monotonic; a jiffy is 16.667 ms.
 ;
-; Only two timers exist at M2. LUKNEW (twice a second) has nothing to do
-; until a creature or a burning torch sets NEWLUK, and BURNER (once a
-; minute) needs a torch, so both arrive with their own milestones rather
-; than as empty procedures here.
+; Four of the ROM's five system tasks exist now (COMDAT.ASM:TCBDAT):
+; PLAYER is `dagg.play`'s own poll, HSLOW recovers damage, BURNER burns the
+; torch once a minute and LUKNEW redraws twice a second when something has
+; asked for it. CREGEN is M4's -- it adds creatures, and there are none.
 ;
 ; `dagg.heart.tick` is deliberately separate: it is the IRQ's half of the
 ; work, the half a long blocking effect has to keep calling.
@@ -864,6 +1794,9 @@ end
 make "dagg.now 0
 make "dagg.heart.due 0
 make "dagg.hslow.due 0
+make "dagg.burner.due 0
+make "dagg.luknew.due 0
+make "dagg.newluk "false
 
 to dagg.heart.tick
   make "dagg.now ticks
@@ -873,6 +1806,50 @@ end
 to dagg.tick
   dagg.heart.tick
   if not (:dagg.now < :dagg.hslow.due) [dagg.hslow]
+  if not (:dagg.now < :dagg.luknew.due) [dagg.luknew]
+  if not (:dagg.now < :dagg.burner.due) [dagg.burner]
+end
+
+; BURNER, COMPLR.ASM: once a minute, one off the torch's timer -- and the
+; torch is called DEAD at five minutes to go, not at zero (`CMPA #5 /
+; BGT`), so a fifteen-minute Pine torch is dead after ten and a
+; sixty-minute Solar one after fifty-five.
+;
+; It goes on burning after that, though. The only thing that stops BURNER
+; is a timer of ZERO, and each light value is clamped DOWN to the timer as
+; it falls -- so a torch dims before it dies (a Solar torch's regular light
+; is 13 and starts falling with thirteen minutes left) and then dwindles
+; from 5 to nothing over the five minutes it spends called dead.
+;
+; It asks for a redraw whether or not there was a torch to burn -- BURN99's
+; `DEC NEWLUK` is on every path out.
+to dagg.burner
+  local "i local "t
+  make "dagg.burner.due :dagg.now + 60000
+  make "dagg.newluk "true
+  make "i :dagg.ptorch
+  if :i = 0 [stop]
+  make "t item :i :dagg.ocx0
+  if :t = 0 [stop]
+  make "t :t - 1
+  .setitem :i :dagg.ocx0 :t
+  if not (:t > 5) [
+    .setitem :i :dagg.octyp :dagg.t.dead
+    .setitem :i :dagg.ocrev 0
+  ]
+  if :t < item :i :dagg.ocx1 [.setitem :i :dagg.ocx1 :t]
+  if :t < item :i :dagg.ocx2 [.setitem :i :dagg.ocx2 :t]
+end
+
+; LUKNEW, COMPLR.ASM: twice a second, redraw if anything asked for one --
+; and unconditionally while the MAP is up, because the map is the one
+; screen that shows things that move without you.
+to dagg.luknew
+  make "dagg.luknew.due :dagg.now + 500
+  if (or :dagg.newluk (:dagg.dspmod = 1)) [
+    make "dagg.newluk "false
+    dagg.pupdat :dagg.norscl
+  ]
 end
 
 ; HSLOW, COMPLR.ASM: recover a 64th of the damage and reschedule HEARTR
@@ -940,12 +1917,12 @@ end
 ; time, so a list literal that spans lines is not a thing this dialect can
 ; be given; seven `se`s that run once at load read better than one
 ; 320-character line.
-make "dagg.cmdtab [[ATTACK [dagg.soon]] [CLIMB [dagg.soon]] [DROP [dagg.soon]]]
-make "dagg.cmdtab se :dagg.cmdtab [[EXAMINE [dagg.soon]] [GET [dagg.soon]]]
-make "dagg.cmdtab se :dagg.cmdtab [[INCANT [dagg.soon]] [LOOK [dagg.soon]]]
-make "dagg.cmdtab se :dagg.cmdtab [[MOVE [dagg.move]] [PULL [dagg.soon]]]
-make "dagg.cmdtab se :dagg.cmdtab [[REVEAL [dagg.soon]] [STOW [dagg.soon]]]
-make "dagg.cmdtab se :dagg.cmdtab [[TURN [dagg.turn]] [USE [dagg.soon]]]
+make "dagg.cmdtab [[ATTACK [dagg.soon]] [CLIMB [dagg.soon]] [DROP [dagg.drop]]]
+make "dagg.cmdtab se :dagg.cmdtab [[EXAMINE [dagg.examine]] [GET [dagg.get]]]
+make "dagg.cmdtab se :dagg.cmdtab [[INCANT [dagg.incant]] [LOOK [dagg.look]]]
+make "dagg.cmdtab se :dagg.cmdtab [[MOVE [dagg.move]] [PULL [dagg.pull]]]
+make "dagg.cmdtab se :dagg.cmdtab [[REVEAL [dagg.reveal]] [STOW [dagg.stow]]]
+make "dagg.cmdtab se :dagg.cmdtab [[TURN [dagg.turn]] [USE [dagg.use]]]
 make "dagg.cmdtab se :dagg.cmdtab [[ZLOAD [dagg.soon]] [ZSAVE [dagg.soon]]]
 
 ; DIRTAB. The string T.BAK labels is BACK, not BACKWARD -- the CoCo manual
@@ -996,12 +1973,43 @@ end
 ; to 31 carry the messages and the prompt and nothing else. The status line
 ; is in the picture (see dagg.status) and does not live here.
 
-; PROMPT, MISC.ASM: M$PROM1 is I.CR then I.DOT, and M$CURS draws an
-; underline and backs over it. Our text window has a real cursor, so the
-; prompt is the newline and the period.
+; PROMPT, MISC.ASM. M$PROM1 is `FCB I.CR,I.DOT` and falls straight into
+; M$CURS -- one $FF-terminated string, so the prompt is FOUR characters:
+; newline, period, underline, backspace.
+;
+; The game has to draw that cursor itself, and an earlier version of this
+; comment said it did not: "our text window has a real cursor." It has one,
+; and this game never reaches it. `screen_txt_enable_cursor` is turned on
+; only inside devices/picocalc/input.c's line reader, and `dagg.play` polls
+; with `key?`/`rc` and never enters it (design section 4.1c -- this is a
+; typing game that must not block). So there was no cursor at all. B87.
+;
+; THE ROM'S BYTES DO NOT TRANSCRIBE, because the two backspaces are not the
+; same backspace. I.BS on a CoCo moves the cursor and nothing else, so
+; M$CURS can draw an underline and step back over it and leave it standing.
+; Ours (screen.c:screen_txt_putc) is DESTRUCTIVE -- it steps back and clears
+; the cell it lands on -- so a `char 8` after the underline would rub it
+; out. What carries over is the effect and not the sequence: draw the
+; underline and leave the cursor PAST it, then let whatever comes next back
+; over it, which erases it for free.
+;
+;   prompt      newline, '.', underline
+;   a character backspace (rubs out the underline), the character, underline
+;   a backspace backspace, backspace, underline
+;   carriage    backspace                                   (HMAN30's CLRA)
+;
+; which is M$PROM1, M$CURS, M$ERAS and HMAN30 in that order, each doing what
+; it does on a CoCo.
+
+; I.BAR ($1C) is the CoCo's underline; ours is ASCII 95.
+to dagg.cursor
+  type char 95
+end
+
 to dagg.prompt
   pr []
   type char 46
+  dagg.cursor
 end
 
 ; CMDERR, PARSER.ASM: two I.QUES, printed where the echoed line stopped,
@@ -1010,10 +2018,11 @@ to dagg.cmderr
   type word char 63 char 63
 end
 
-; The thirteen commands whose milestones are still ahead. Each row of
-; dagg.cmdtab loses this as its own milestone lands; the table is complete
-; from M2 because the PARSER's ambiguity rule depends on it -- Z has to be
-; ambiguous and M has to not be.
+; The four commands whose milestones are still ahead -- ATTACK (M4),
+; CLIMB, ZLOAD and ZSAVE (M5). Each row of dagg.cmdtab loses this as its
+; own milestone lands; the table is complete from M2 because the PARSER's
+; ambiguity rule depends on it -- Z has to be ambiguous and M has to not
+; be.
 to dagg.soon
   pr [NOT YET]
 end
@@ -1043,14 +2052,27 @@ end
 to dagg.human :c
   if :c = "esc [make "dagg.over "true  stop]
   if :dagg.faint [stop]
+  ; HMAN10: the map comes down on the FIRST keystroke after it went up,
+  ; before that keystroke is buffered -- which is what design section 13's
+  ; "the map stays up until your next command" actually is. HEARTF is the
+  ; flag, because the map is what turned it off.
+  if (and (not :dagg.over) (not :dagg.heartf)) [dagg.look  dagg.prompt]
+  ; M$ERAS: the cursor goes, then the character, then the cursor comes back
+  ; where the character was.
   if :c = "bs [
     if empty? :dagg.linbuf [stop]
     make "dagg.linbuf bl :dagg.linbuf
     type char 8
+    type char 8
+    dagg.cursor
     stop
   ]
   if :c = "cr [dagg.enter  stop]
+  ; HMAN20 echoes and then prints M$CURS. The leading backspace is what
+  ; rubs the old cursor out, which on a CoCo the underline did not need.
+  type char 8
   type :c
+  dagg.cursor
   make "dagg.linbuf lput :c :dagg.linbuf
   if (count :dagg.linbuf) = 32 [dagg.enter]
 end
@@ -1059,12 +2081,18 @@ end
 ; on the first token, then prompt -- unless we are unconscious, in which
 ; case there is no prompt to give.
 to dagg.enter
+  ; HMAN30's `CLRA / SWI OUTCHR` -- erase the cursor before anything the
+  ; command prints lands where it was standing.
+  type char 8
   make "dagg.tokens dagg.split :dagg.linbuf
   make "dagg.linbuf []
   make "dagg.linptr 1
   dagg.dispatch
   if :dagg.over [stop]
   if :dagg.faint [stop]
+  ; HMAN70: no prompt while the map is up either -- there is nowhere to
+  ; put one, and the next keystroke takes the map down anyway.
+  if not :dagg.heartf [stop]
   dagg.prompt
 end
 
@@ -1126,9 +2154,14 @@ end
 to daggorath
   make "dagg.row 16  make "dagg.col 11  make "dagg.dir 0
   make "dagg.ppow 160  make "dagg.pdam 0  make "dagg.objwt 35
-  make "dagg.light 8  make "dagg.olight 8
+  make "dagg.prlite 0  make "dagg.prmlite 0
+  make "dagg.light 0  make "dagg.mlight 0  make "dagg.olight 0
+  make "dagg.magflg "false  make "dagg.mapflg "false
   make "dagg.faint "false  make "dagg.over "false
   make "dagg.linbuf []  make "dagg.tokens []  make "dagg.linptr 1
+  make "dagg.plhand 0  make "dagg.prhand 0  make "dagg.ptorch 0
+  make "dagg.bag []  make "dagg.floor []
+  make "dagg.dspmod 0
   splitscreen
   window
   ct
@@ -1136,12 +2169,19 @@ to daggorath
   setrefresh "manual
   ignore clock
   dagg.enter.level 0
+  ; CINI40 then GAME30: the whole dungeon's loot exists before the level
+  ; does, and the player's wooden sword and pine torch are the last two
+  ; objects created. POBJWT's 35 above is those two (25 + 10), which is
+  ; what COMDAT.ASM's `FDB 30+5` is.
+  dagg.makeobjects
+  dagg.givebag
   dagg.setup.heart
   dagg.hupdat
   make "dagg.heart.due ticks
   make "dagg.hslow.due ticks + (:dagg.heartr * 16.667)
-  dagg.redraw :dagg.norscl
-  refresh
+  make "dagg.luknew.due ticks + 500
+  make "dagg.burner.due ticks + 60000
+  dagg.pupdat :dagg.norscl
   dagg.prompt
   dagg.play
   daggorath.quit

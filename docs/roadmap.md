@@ -2446,7 +2446,10 @@ Status: **design drafted 2026-09-02; M0 confirmed on a Pico Plus 2 W,
 same day and confirmed on hardware 2026-09-03, after three bugs that the host
 had recorded as done; M2 written and confirmed on a Pico Plus 2 W 2026-09-03,
 a run that found two more M1 bugs in the turn animation ([B84](bugs.md),
-[B85](bugs.md)).** "No board needed for a Logo-only milestone" is what
+[B85](bugs.md)); M3 written and confirmed on a Pico Plus 2 W the same day
+over four board runs, 103 tests — the first milestone here to come up right on
+a board the first time, and the only defect those runs found was M2's missing
+command-line cursor ([B87](bugs.md)).** "No board needed for a Logo-only milestone" is what
 this entry used to say, and it was wrong three times over — see M1 below.
 Pico 2 and Pico 2 W still to run M0, though nothing in the result is expected
 to be board-specific. `tests/logo/p17m0` timed all three of section 6.3's list
@@ -2587,6 +2590,167 @@ three walks into a wall at seven damage a `MOVE`, so both stay host-tested
 against `HUPD20` and the faint set piece's sixteen back-to-back redraws remain
 uncosted on hardware.
 
+**M3 — objects. Written and confirmed on a Pico Plus 2 W 2026-09-03, and
+its largest visible change is that the game now starts in the dark.**
+OCBs as twelve parallel lists, the bag and both hands, `GET` `PULL` `STOW`
+`DROP` `EXAMINE` `USE` `REVEAL` `INCANT` — and `LOOK`, which came with them
+because `DSPMOD` is sticky and it is the only way back from the inventory
+screen — plus weight, the two light channels, `BURNER`, `LUKNEW`, the map and
+both scrolls. Both halves of the gate are met: all twenty-five object types
+walk `OBIRTH` → `REVEAL` → `OBJNAM`, and a Pine torch is walked through all
+fifteen of its minutes against `BURNER`. 95 tests.
+
+**`PRLITE` is zero and `COMDAT.ASM` never sets it**, so until you `PULL` the
+pine torch out of the bag and `USE` it, `SETFAX` draws nothing at any range.
+That is why the ROM's attract mode opens `EXAMINE` / `PULL RIGHT TORCH` /
+`USE RIGHT` / `LOOK` (`TOKEN.ASM:AUTTAB`). M1 and M2 pinned `dagg.light` at 8
+as an admitted placeholder; the placeholder is gone.
+
+**The third "the macro is not the table", and this time the repair is
+structural.** The design's §10.2 called the level-1 ring **HOTH**, because
+`DTABAS.ASM`'s `OBJXXX` macro does; `TOKEN.ASM`'s `ADJTAB`, which is what the
+parser matches and `OBJNAM` prints, calls it **RIME**, and `HOTH` is not a word
+this game knows. After `LVLTAB`'s "five seeds" at M1 and `CMDTAB`'s
+"four-letter abbreviations" at M2, the fix is not another corrected name:
+`scripts/gen_daggorath.py` now **decodes** `TOKEN.ASM`'s packed five-bit
+strings for every name and parses `DTABAS.ASM`'s macro calls for every number,
+pairing the two by position with the **object class** — which both tables carry
+— as the cross-check. Twenty-five agreements is what makes positional pairing
+safe. `CMDTAB` and `DIRTAB` stay hand-written in the game file, because they
+are code, and are checked against the same decoder.
+
+**Three ROM behaviours kept, and one that surprised the design.** `PDROP`
+never clears `PTORCH` and does not need to: `USE` stows the torch it lights and
+`PULL` is the only way back out of the bag, so a burning torch can never be in
+a hand. Every failure in `USE` and `REVEAL` past the hand parse is **silent**
+(`PUSE24` is a bare `RTS`), which is how you learn what an unrevealed object is
+without being told. An unrevealed *scroll* does nothing at all. And a torch has **three
+phases, not two**: it burns at full value while the timer is above it, dims as
+each light is clamped down to the falling timer, is renamed `DEAD` at five —
+and goes on dimming to nothing over those last five minutes, because `BURNER`'s
+only stopping condition is a timer of zero. So the gate's "dies at five
+minutes" is the *timer* reading five, and the naming and the darkness do not
+line up: `PATT22` reads the **name**, so you fight as though blind from the
+minute it is renamed while the thing is still visibly lighting the corridor —
+a Lunar torch keeps its full magic 4 for two minutes after it is called dead.
+Every torch, every minute of its life, is now checked against `BURNER`
+transcribed into C, the same oracle shape as the heart's `HUPD20` test.
+
+**And `GENVAL` costs a torch its lifetime, not just its light.** An
+unrevealed Solar torch burns for **fifteen minutes at 7/0** — a pine torch's
+whole `XXXTAB` row — and nothing tells it from a real one while it does.
+`PREV00`'s `OCBFIL` restores all three bytes **including the timer**, so
+revealing a torch you have already been burning refills it. Design §8.3 and
+§10.2 are corrected with both.
+
+**Four port decisions, each with a cost behind it.** The floor is its own
+list rather than `OFIND`'s flat walk over all 65 OCBs — that walk is 650
+iterations a redraw at ten ranges, tens of milliseconds against a 100 ms budget
+— kept in OCB order so `OFIND` still answers in the ROM's order. `SETFAD`
+moved from once a range to once a **vector list**, where the ROM has it, which
+is the only way a secret door can be lit by a magical torch while the wall in
+front of it is not. The map inverts with the level where `MAPPER` does not
+(it writes raw `$00`/`$FF` and never reads `VDGINV`), because `clean` fills
+with the level's own background. And the twelve OCB lists are built with
+`fput`: `lput` copies the whole list to append one cell, so building them that
+way is 26,000 cells of garbage against a 32,752-cell pool and it ran out of
+space on the eleventh list.
+
+**One M1/M2 defect fell out of making the light real** ([B86](bugs.md)):
+`HUPD30` decrements `MLIGHT` before the redraw and `RLIGHT` after it, and the
+port decremented `RLIGHT` first and never touched `MLIGHT` — sixteen frames
+either way, ending at the same −8, but each drawn a step darker than the ROM
+draws it, and magical things lit at full magic light all the way to black.
+Invisible while the light was a constant 8.
+
+**Six keystrokes on the board, and each one a different thing.** `E`,
+`P L T`, `U L`, `P R SW`, `L` — from a black screen to a lit corridor with a
+sword in hand, then walking the dungeon until the torch burned out. In order
+that confirms: the inventory screen on its new 40-column grid; the parser's
+*any unambiguous prefix* rule three times, including `SW` where `S` would have
+been ambiguous between `SCROLL`, `SHIELD` and `SWORD`; `PULL` off the bag and
+`USE` stowing the torch it lights; the two-hand status line naming a real
+object; `LOOK` coming back from `EXAMINE`, which is the only way back and the
+reason `LOOK` was pulled into this milestone; and `BURNER` running on the wall
+clock for fifteen minutes with the redraw and the heartbeat going through it.
+It is also `TOKEN.ASM:AUTTAB` — the ROM's own attract-mode opening — arrived at
+independently, which is the strongest available statement that the opening is
+the shape the game intends.
+
+**The torch was watched moving through the backpack listing**: gone from it
+when pulled, back **in reverse video** when used. Three pieces of
+`PGET.ASM`/`PUSE.ASM` agreeing in one visible step — `PPULL` unlinking it and
+clearing `PTORCH`, `PUSE12`'s `PSTOW0` pushing it back at the **head** so a
+burning torch is always first in your backpack, and `EXAM32`'s `CMPX PTORCH /
+COM P.TXINV,U` inverting that one row. That row is
+[P18](#p18--interpreter-work-for-dungeons-of-daggorath) M1's three-argument
+`write` earning its keep a **second** time: the design made the case for it on
+the status bar alone and called the other uses conveniences, and this is one of
+them turning out to be a mechanic — it is how you tell, at a glance, which of
+two torches is the one that is burning.
+
+**A second run closed the object round trip and drew the one thing the
+generator had never had eyes on.** `D R` put the wooden sword **on the ground
+and it read as a sword**, `G R SW` took it back and it was gone from the floor,
+`S R` and `P R SW` moved it in and out of the bag. That is `VIEW52` — the
+floor-object pass inside the cell walk — seen for the first time, and `FSWORD`
+is the one `VOBJ.ASM` list with a **pen lift** in it (`V$NEW` between the blade
+and the hand guard), so it is the only object whose shape says the generator's
+`V$NEW` decode came out *right* rather than merely plausible. The design's
+§11.2 asked for a reference render because a wrong nybble gives something that
+looks almost correct; a sword that reads as a sword is that check made by an
+eye.
+
+**A third run found an M2 defect four runs had walked past** —
+*"I don't have a cursor in the input section"* ([B87](bugs.md)). There was
+none: `screen_txt_enable_cursor(true)` happens in exactly one place,
+`devices/picocalc/input.c`'s line reader, and `dagg.play` polls with
+`key?`/`rc` and never enters it. M2's own comment said so and drew the wrong
+conclusion — "our text window has a real cursor." **The ROM draws its own and
+the port had dropped it**: `M$PROM1` is `FCB I.CR,I.DOT` falling straight into
+`M$CURS`, so `PROMPT` is four characters and not two, and `HMAN20` prints
+`M$CURS` again after every keystroke. Its *bytes* do not transcribe, because
+`I.BS` moves the CoCo's cursor and ours clears the cell it lands on — so the
+underline is drawn with the cursor left **past** it and whatever comes next
+backs over it, erasing it for free. The same shape as this port's three "the
+macro is not the table" findings, one level down: **the ROM's byte stream is
+not the terminal's**, and copying it would have read correctly and drawn
+nothing.
+
+**M3 is confirmed to the exact limit of what M3 can reach.** `GET`, `PULL`,
+`STOW`, `DROP`, `EXAMINE`, `USE`, `INCANT` and `LOOK` have all been typed on a
+board, with the status line, the floor objects, the reverse-video torch and a
+fifteen-minute burn-out under them. What is left — `REVEAL`, the three flasks
+and the map — needs an object the player has no way to get: you start with a
+wooden sword and a pine torch, everything else stays creature-owned until
+`NLVL40` has creatures to hand it to, and `GAME30` **reveals** whatever it puts
+in your bag (`CLR P.OCREV,X`), so the first unrevealed object in a real game
+comes off a corpse. `REVEAL` is gated on M4, not on another run.
+
+**`INCANT` is the exception, because it never reads `P.OCREV`, and a board
+took it.** `PINCAN` wants a ring with a live `P.OCXXX+1` and the reveal does
+not touch that — so the ROM's own two-table seam (`GAMDAT` for a game,
+`DEMDAT` for the attract mode, `GAME20` choosing with a pointer) is all it
+needed: `make "dagg.gamdat [12 15]` before `daggorath` starts you with a Vulcan
+ring and a pine torch, and **`I FIRE` made a Fire ring on a Pico Plus 2 W**.
+Four keystrokes that are both halves of the parser's asymmetry at once: `I` is
+an unambiguous prefix and `PARS12` takes it, while `FIRE` had to be spelled out
+because `PINCAN` is the one place in the game that tests `FULFLG` and `FIR`
+matches nothing. `test_gamdat_is_the_seam_a_board_uses_to_reach_a_ring` runs
+the same sequence on the host, including the half that does not work. For the
+same reason a session is **fifteen minutes long**: everything in the dungeon starts
+creature-owned, so the pine torch `GAMDAT` hands you is the only light in the
+game, and when it burns out you are dark for good. That is the ROM's own
+economy arriving early rather than a limit of the port, but it is what makes M4
+the milestone that turns this into something you can play for longer than a
+torch.
+
+**The budgets, both taken.** 100 procedures of 192, and **108 globals of 254**
+at the peak — the global count is taken here for the first time, because M3 put
+twelve parallel lists and thirty-odd names into that table in one go. A warm
+redraw still spends **zero** nodes and zero atoms with an object on the floor,
+which is what `OFIND` being a cursor rather than a list buys.
+
 A faithful port of the 1982 DynaMicro game from **its own 6809 source**, 9,866
 lines of it, kept under `docs/DungeonsOfDaggorath/` with the grant of licence
 beside it. Every rule in the design cites the file and routine it came from,
@@ -2613,7 +2777,10 @@ block at the video base itself — so the status line and the inventory listing
 are `write` in the graphics window, not text-screen text, and the screen never
 changes mode. The 8 × 10 glyph over a 320 × 240 band gives **exactly 40 columns
 by 24 rows**: the same 40 as the text screen, and exactly the rows the split
-screen hides, so the ROM's 19-row overlay lays out unchanged. It is also nearly
+screen hides, so the ROM's 19-row `EXAMINE` overlay keeps all nineteen of its
+rows — its *columns* are recomputed for 40, because every one of them is a
+fraction of the screen width rather than a fixed offset (both headers centred,
+the rule the full width, the second entry on a line half way across). It is also nearly
 free — `write` is one statement per *string* into a stack buffer, so a
 40-character status line is ~50 µs of a 38.8 ms redraw and allocates nothing —
 and it never needs erasing, because the redraw's `clean` already did it
@@ -2694,8 +2861,8 @@ rule — down a hole or a ladder, up a ladder only — gives 1↔2 and 2↔3 by 
 and 4 → 5 by holes that cannot be climbed back up. None of it is a special case
 in the ROM, and none of it will be here.
 
-M0, M1 and M2 done; M1a (the grey ramp, optional and decided by a pair of
-eyes) and M3–M6 still ahead, gates in the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) went
+M0, M1, M2 and M3 done; M1a (the grey ramp, optional and decided by a pair of
+eyes) and M4–M6 still ahead, gates in the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) went
 first** (decided 2026-09-02): its M0–M2 are the procedure table, the opaque
 `write` and the dashed pen, and P17 M1 wanted all three — a status line it can
 invert, a file it can grow into, and a fade it can draw the way the ROM draws

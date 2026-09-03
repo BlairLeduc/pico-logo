@@ -6,15 +6,22 @@ board -- RANDOM.ASM's shift-register RNG costs ~1.75 ms a byte even at 300
 MHz, and a level carve needs several thousand of them.  So this script ports
 RANDOM.ASM:RANDOX and DGNGEN.ASM:DGNGEN bit-for-bit and writes their result,
 once, into logo/games/daggorath itself.  It also flattens the twelve VARC.ASM
-architectural outlines, the two VARC.ASM peek-a-boo marks and VERT.ASM's
-plain ceiling line (CELINE) into flat absolute polylines -- section 11.2's
-"the generator flattens the encoding" -- for M1's forward-view cell walk.
+architectural outlines, the two VARC.ASM peek-a-boo marks, VERT.ASM's plain
+ceiling line (CELINE) and VOBJ.ASM's six object outlines into flat absolute
+polylines -- section 11.2's "the generator flattens the encoding" -- for the
+forward-view cell walk.
 
-M1's scope only: VERT.ASM's LADDER/HOLEUP/HOLEDN (needs VFTTAB, M5) and
-VOBJ.ASM/D3.ASM/D4.ASM (objects and creatures, M3/M4) are not transcribed
-here.  The vector-list decoder below is written to be general over the
-V$JSR/V$RTS opcodes those will need, but nothing in this file's RAW table
-uses them yet.
+And it reads the object tables out of TOKEN.ASM and DTABAS.ASM rather than
+transcribing them: the names come from TOKEN.ASM's packed five-bit strings
+and the numbers from DTABAS.ASM's macro calls, cross-checked on the object
+class, which both of them carry.  That check is what says the ring the
+OBJXXX macro calls HOTH is the ring TOKEN.ASM calls RIME -- see
+read_object_tables().
+
+M1-M3's scope: VERT.ASM's LADDER/HOLEUP/HOLEDN (needs VFTTAB, M5) and
+D3.ASM/D4.ASM (creatures, M4) are not transcribed here.  The vector-list
+decoder below is written to be general over the V$JSR/V$RTS opcodes those
+will need, but nothing in this file's RAW table uses them yet.
 
 Every generated maze is gated against docs/DungeonsOfDaggorath/Levels/ --
 the published maps of the real dungeon -- cell for cell and door for door,
@@ -36,7 +43,9 @@ Writes:
                                      so there is nothing to buy by splitting
                                      them out again.
     docs/DungeonsOfDaggorath/daggdata-reference.txt
-                                  -- checked in for eyeball review, §11.2
+                                  -- checked in for eyeball review, §11.2,
+                                     now with the object tables beside the
+                                     vector lists
 """
 
 import pathlib
@@ -314,6 +323,185 @@ def check_maze(maze, start_row=None, start_col=None):
 
 
 # ===========================================================================
+# TOKEN.ASM / DTABAS.ASM -- the object tables, read out of the ROM rather
+# than transcribed from it.
+#
+# M1's LVLTAB and M2's CMDTAB were both cases of this design reading a MACRO
+# and believing it was the table.  DTABAS.ASM's OBJXXX macro carries a name
+# beside every object -- SUPREME, HOTH, THEWS -- and those names are the
+# macro's own first argument, not what the player types.  TOKEN.ASM's ADJTAB
+# holds the words, packed five bits to a letter, and one of them disagrees:
+# the macro says HOTH and the table says RIME.
+#
+# So the names come from TOKEN.ASM and the numbers come from DTABAS.ASM,
+# both parsed here, and the two are cross-checked on the one field they
+# share -- the object class, which TOKEN.ASM carries in every packed string
+# and DTABAS.ASM carries in every macro call.  Twenty-five agreements is
+# what makes it safe to pair the two tables by POSITION, which is how the
+# ROM itself pairs them (P.OCTYP indexes ODBTAB in OCBFIX and ADJTAB in
+# OBJNAM, with no name matching anywhere).
+#
+# The packed string is: 5 bits of length, 5 bits of class, then one 5-bit
+# letter each (A = 1), MSB first, spilling across the FCB bytes.  EXPAND.ASM
+# unpacks it into STRING+0 (count), STRING+1 (class), STRING+2.. (chars),
+# which is why STATUS.ASM:OBJNAM copies from `ADJTAB+1` and PARSER returns
+# `STRING+1` as the token class.
+# ===========================================================================
+
+TOKEN_PATH = REPO_ROOT / "docs" / "DungeonsOfDaggorath" / "TOKEN.ASM"
+DTABAS_PATH = REPO_ROOT / "docs" / "DungeonsOfDaggorath" / "DTABAS.ASM"
+
+_XDEF = re.compile(r"^\s+XDEF\s+(T\.\w+),")
+_FCB_BITS = re.compile(r"^\s+FCB\s+%([01]{8})")
+
+
+def read_token_table(name):
+    """One of TOKEN.ASM's four token tables, as [(symbol, word, class), ...].
+
+    The debug commands between `IF DEBFLG` and `ENDIF` are assembled only
+    when DEBFLG is set, and it is 0, so they are skipped -- QMAP is not a
+    command this game has.
+    """
+    text = TOKEN_PATH.read_text()
+    start = text.index("\n%s  FCB" % name)
+    end = text.index("\n%sNUM  EQU" % name[:3], start)
+    body = text[start:end]
+    out, packed, sym, skipping = [], [], None, False
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("IF ") and "DEBFLG" in stripped:
+            skipping = True
+        elif stripped.startswith("ENDIF"):
+            skipping = False
+        if skipping:
+            continue
+        m = _XDEF.match(line)
+        if m:
+            if sym is not None:
+                out.append((sym, packed))
+            sym, packed = m.group(1), []
+            continue
+        m = _FCB_BITS.match(line)
+        if m and sym is not None:
+            packed.append(int(m.group(1), 2))
+    if sym is not None:
+        out.append((sym, packed))
+    return [(s, *_unpack_string(b)) for s, b in out]
+
+
+def _unpack_string(packed):
+    """EXPAND.ASM's five-bit unpacking: count, class, then the letters."""
+    bits = "".join(format(b, "08b") for b in packed)
+    count = int(bits[0:5], 2)
+    cls = int(bits[5:10], 2)
+    word = ""
+    for i in range(count):
+        v = int(bits[10 + 5 * i:15 + 5 * i], 2)
+        word += chr(ord("A") + v - 1) if v else " "
+    return word, cls
+
+
+_MACRO_ARGS = re.compile(r"^\s+\\[12]\s+([A-Z0-9$.,]+)\s*$")
+
+CLASS_NUMBER = {"K.FLAS": 0, "K.RING": 1, "K.SCRO": 2,
+                "K.SHIE": 3, "K.SWOR": 4, "K.TORC": 5}
+
+
+def read_dtabas_macro(name):
+    """The argument lists inside one of DTABAS.ASM's definition macros."""
+    text = DTABAS_PATH.read_text()
+    start = text.index("\n%s  MACR" % name)
+    end = text.index("ENDM", start)
+    rows = []
+    for line in text[start:end].splitlines():
+        m = _MACRO_ARGS.match(line)
+        if m:
+            rows.append(m.group(1).split(","))
+    return rows
+
+
+def read_object_tables():
+    """ODBTAB, XXXTAB, OMXTAB, OBJWGT and the two token tables, joined.
+
+    Returns (generics, objects, genval): `generics` is the six-entry class
+    table [(word, weight), ...], `objects` the twenty-five-entry type table
+    [(word, class, reveal, magoff, physoff, level, count, xxx), ...] with
+    `xxx` either None or the three special-parameter bytes, and `genval`
+    OBIRTH.ASM's per-class translation table resolved to type numbers.
+    """
+    gentab = read_token_table("GENTAB")
+    adjtab = read_token_table("ADJTAB")
+    by_symbol = {sym: i for i, (sym, _, _) in enumerate(adjtab)}
+
+    genxxx = read_dtabas_macro("GENXXX")
+    assert len(genxxx) == len(gentab) == 6, "GENTAB and GENXXX disagree"
+    generics = []
+    for i, ((_, word, cls), args) in enumerate(zip(gentab, genxxx)):
+        assert cls == i, f"{word}: GENTAB class {cls} is not its own index"
+        assert CLASS_NUMBER[args[2]] == i, f"{word}: GENXXX class disagrees"
+        generics.append((word, int(args[5])))
+
+    rows = read_dtabas_macro("OBJXXX") + read_dtabas_macro("SPCXXX")
+    assert len(rows) == len(adjtab) == 25, "ADJTAB and OBJXXX/SPCXXX disagree"
+    objects = []
+    for (sym, word, cls), args in zip(adjtab, rows):
+        # This is the whole cross-check: the class TOKEN.ASM packed into the
+        # word and the class DTABAS.ASM wrote in the macro call, for all
+        # twenty-five, pairing the two tables by position the way the ROM
+        # does.  It is also what says RIME and HOTH are the same object.
+        assert CLASS_NUMBER[args[2]] == cls, (
+            f"{word}/{args[0]}: TOKEN.ASM class {cls} against "
+            f"DTABAS.ASM {args[2]}")
+        reveal, magoff, physoff = (int(a) for a in args[3:6])
+        # OBJXXX writes the level as LVL0..LVL5; SPCXXX's own eleven-arg
+        # row (DEAD) writes a plain 0 in the same place.
+        level = 0
+        if len(args) > 6:
+            level = int(args[6][3:] if args[6].startswith("LVL") else args[6])
+        count = int(args[7]) if len(args) > 7 else 0
+        xxx = None
+        if len(args) > 8:
+            # XXXTAB's three bytes.  For a ring the second is the type it
+            # INCANTs into, written as the T.RNxx symbol (PINCAN.ASM reads
+            # it out of P.OCXXX+1 and compares it against an ADJTAB match),
+            # so it resolves through the same symbol table.
+            xxx = [by_symbol[a] if a.startswith("T.") else int(a)
+                   for a in args[8:11]]
+        objects.append((word, cls, reveal, magoff, physoff, level, count, xxx))
+
+    genval = [-1 if s is None else by_symbol[s] for s in GENVAL_SYMBOLS]
+    return generics, objects, genval
+
+
+def check_command_tables():
+    """CMDTAB and DIRTAB, decoded, against what logo/games/daggorath holds.
+
+    Those two tables are hand-written in the game file rather than
+    generated -- they are code, one `run`-able instruction to a row -- but
+    the WORDS in them are the same packed strings this file already
+    decodes, and M2 got them wrong once by reading DTABAS.ASM's CMDXXX
+    macro instead (ATTK, INCN, ZSAV are assembler symbols).  So they are
+    checked here rather than trusted.
+    """
+    commands = [word for _, word, _ in read_token_table("CMDTAB")]
+    assert commands == [
+        "ATTACK", "CLIMB", "DROP", "EXAMINE", "GET", "INCANT", "LOOK",
+        "MOVE", "PULL", "REVEAL", "STOW", "TURN", "USE", "ZLOAD", "ZSAVE",
+    ], commands
+    directions = [word for _, word, _ in read_token_table("DIRTAB")]
+    assert directions == [
+        "LEFT", "RIGHT", "BACK", "AROUND", "UP", "DOWN",
+    ], directions
+
+
+# OBIRTH.ASM:GENVAL, by class: -1 leaves the object as it was born, anything
+# else is the type whose parameters an unrevealed object of that class wears.
+# So an unrevealed Mithril shield fights like a Leather one until REVEAL
+# gives it its own numbers back (PREVEA.ASM:PREV00's second OCBFIL).
+GENVAL_SYMBOLS = [None, None, None, "T.SHI4", "T.SWO3", "T.TOR4"]
+
+
+# ===========================================================================
 # VARC.ASM / VERT.ASM -- the vector-list decoder.
 #
 # Six control codes, read off VCTLST.ASM's own dispatch table (VCTDIS,
@@ -434,6 +622,26 @@ RAW = {
 
     # VERT.ASM -- only the plain ceiling line; see the M1 scope note above.
     "CELINE": [28, 47, 28, 210, V_END],
+
+    # VOBJ.ASM -- the six objects seen lying on the floor, indexed by CLASS
+    # (VIEWER.ASM:VIEW52 reads FWDOBJ with P.OCCLS, not the type), so there
+    # is one outline for every torch and one for every sword.  Transcribed
+    # as the bytes the SVORG/SVECT macros assemble: SVECT's nybble is
+    # ((delta / 2) & $F), so a -2 step is $F and FTORCH's second vector is
+    # the byte $FF -- which is V$NEW everywhere except inside a relative
+    # run, where VCTREL tests only for zero (V$ABS).  Writing the absolute
+    # points here instead would have hidden that.
+    "FFLASK": [110, 162, V_REL, 0x51, 0x0E, 0xB1, V_ABS, V_END],
+    "FRING": [122, 60, V_REL, 0x11, 0x1F, 0xFF, 0xF1, V_ABS, V_END],
+    "FSCROL": [118, 194, V_REL, 0x1F, 0x34, 0xF1, 0xDC, V_ABS, V_END],
+    # FSHIEL's SVORG is not a pen lift: it emits an absolute pair and then
+    # V$REL, and DRWFLG is already set, so (128,168) continues the polyline
+    # the three absolute pairs started.  One run of six points.
+    "FSHIEL": [134, 172, 128, 192, 122, 186,
+               128, 168, V_REL, 0x3E, 0x04, V_ABS, V_END],
+    "FSWORD": [114, 80, 124, 100, V_NEW,
+               118, 82, 114, 86, V_END],
+    "FTORCH": [118, 60, V_REL, 0xF7, 0xFF, 0x2A, V_ABS, V_END],
 }
 
 # Fixed order: the Logo loader reads this many records, in this order, by
@@ -444,14 +652,82 @@ VECTOR_LIST_ORDER = [
     "RPASAG", "RDOOR", "RSDOOR", "RWALL",
     "LPEEK", "RPEEK",
     "CELINE",
+    # FWDOBJ's own order, which is GENXXX's, which is the class number.
+    "FFLASK", "FRING", "FSCROL", "FSHIEL", "FSWORD", "FTORCH",
 ]
+
+FWDOBJ = ["FFLASK", "FRING", "FSCROL", "FSHIEL", "FSWORD", "FTORCH"]
 
 
 # ===========================================================================
 # Output
 # ===========================================================================
 
-def game_data_lines(mazes, decoded):
+def object_table_lines(generics, objects, genval, decoded):
+    """The §10.2 tables, as Logo statements, in ROM order.
+
+    Positions are what the ROM uses and what the game reads: an object's
+    TYPE is its row in `dagg.adjtab`/`dagg.odb`/`dagg.xxx` (P.OCTYP indexes
+    ODBTAB in OCBFIX and ADJTAB in OBJNAM), and its CLASS is its row in
+    `dagg.gentab`/`dagg.objwgt`/`dagg.fobj` (P.OCCLS indexes OBJWGT in PGET
+    and FWDOBJ in VIEWER).  Both are zero-based in the ROM and one-based
+    here, because `item` counts from one.
+    """
+    lines = []
+
+    names = " ".join("[%s]" % word for word, _ in generics)
+    lines.append('make "dagg.gentab [%s]' % names)
+    lines.append('make "dagg.objwgt [%s]'
+                 % " ".join(str(weight) for _, weight in generics))
+
+    # ADJTAB carries the class beside the word because PARSER returns it
+    # (STRING+1), which is how PAROBJ rejects "PINE SWORD".
+    lines.append('make "dagg.adjtab []')
+    for word, cls, *_ in objects:
+        lines.append('make "dagg.adjtab lput [%s %d] :dagg.adjtab' % (word, cls))
+
+    # ODBTAB: class, reveal, magic offense, physical offense -- the four
+    # bytes OCBFIX copies into P.OCCLS..P.OCPHO.
+    lines.append('make "dagg.odb []')
+    for _, cls, reveal, magoff, physoff, _, _, _ in objects:
+        lines.append('make "dagg.odb lput [%d %d %d %d] :dagg.odb'
+                     % (cls, reveal, magoff, physoff))
+
+    # XXXTAB: torch timer/regular/magic, shield magic/physical filters, ring
+    # charges/incantation.  An empty list is a type with no entry, which
+    # OCBFIX leaves alone rather than zeroing.
+    lines.append('make "dagg.xxx []')
+    for *_, xxx in objects:
+        body = " ".join(str(v) for v in xxx) if xxx else ""
+        lines.append('make "dagg.xxx lput [%s] :dagg.xxx' % body)
+
+    # OMXTAB, the eighteen real objects only -- SPCXXX has no distribution
+    # entry (`OBJXXX OMX,OMX`, not SPCXXX), because nothing is born special.
+    lines.append('make "dagg.omx []')
+    for _, _, _, _, _, level, count, _ in objects:
+        if count:
+            lines.append('make "dagg.omx lput [%d %d] :dagg.omx' % (level, count))
+
+    lines.append('make "dagg.genval [%s]'
+                 % " ".join(str(v) for v in genval))
+
+    def runs_literal(name):
+        parts = []
+        for run in decoded[name]:
+            ys = " ".join(str(y) for y, _ in run)
+            xs = " ".join(str(x) for _, x in run)
+            parts.append("[[%s] [%s]]" % (ys, xs))
+        return " ".join(parts)
+
+    for i, name in enumerate(FWDOBJ):
+        lines.append('make "v%d [%s]' % (i, runs_literal(name)))
+    lines.append('make "dagg.fobj (list :v0 :v1 :v2 :v3 :v4 :v5)')
+    for i in range(6):
+        lines.append('make "v%d []' % i)
+    return lines
+
+
+def game_data_lines(mazes, decoded, generics, objects, genval):
     """The Logo statements that put the maze and the vector lists in memory.
 
     One statement to a line, because `load` only buffers `to ... end`
@@ -494,15 +770,16 @@ def game_data_lines(mazes, decoded):
     for var, name in (("dagg.lpeek", "LPEEK"), ("dagg.rpeek", "RPEEK"),
                       ("dagg.celine", "CELINE")):
         lines.append(f'make "{var} [{runs_literal(name)}]')
+    lines.extend(object_table_lines(generics, objects, genval, decoded))
     return lines
 
 
-def write_game_data(mazes, decoded, path):
+def write_game_data(mazes, decoded, tables, path):
     """Rewrite the generated block inside logo/games/daggorath in place."""
     text = path.read_text()
     begin = text.index(BEGIN_MARKER)
     end = text.index(END_MARKER)
-    body = "\n".join(game_data_lines(mazes, decoded))
+    body = "\n".join(game_data_lines(mazes, decoded, *tables))
     new = text[:begin] + BEGIN_MARKER + "\n" + body + "\n" + text[end:]
 
     longest = max(len(line) for line in body.splitlines())
@@ -511,7 +788,7 @@ def write_game_data(mazes, decoded, path):
     return longest
 
 
-def write_reference(mazes, decoded, path):
+def write_reference(mazes, decoded, tables, path):
     lines = [
         "Generated by scripts/gen_daggorath.py -- do not hand-edit.",
         "Checked in per docs/daggorath-design.md section 11.2: a wrong",
@@ -528,6 +805,24 @@ def write_reference(mazes, decoded, path):
         lines.append(f"{name}: {len(runs)} run(s)")
         for run in runs:
             lines.append("  " + " -> ".join(f"({y},{x})" for y, x in run))
+
+    generics, objects, genval = tables
+    lines.append("")
+    lines.append("classes (GENTAB word, OBJWGT weight):")
+    for i, (word, weight) in enumerate(generics):
+        lines.append(f"  {i} {word:8s} weight {weight}")
+    lines.append("")
+    lines.append("objects (ADJTAB word, ODBTAB, OMXTAB, XXXTAB):")
+    header = ("   # word     cls reveal magoff physoff level count "
+              "special")
+    lines.append(header)
+    for i, (word, cls, reveal, magoff, physoff, level, count, xxx) in \
+            enumerate(objects):
+        special = " ".join(str(v) for v in xxx) if xxx else "-"
+        lines.append(f"  {i:2d} {word:8s} {cls:3d} {reveal:6d} {magoff:6d} "
+                     f"{physoff:7d} {level:5d} {count:5d} {special}")
+    lines.append("")
+    lines.append(f"GENVAL (by class): {genval}")
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -622,10 +917,12 @@ def main():
     check_maze(mazes[0], start_row=16, start_col=11)
 
     decoded = {name: decode(name, RAW) for name in VECTOR_LIST_ORDER}
+    tables = read_object_tables()
+    check_command_tables()
 
-    longest = write_game_data(mazes, decoded, GAME_PATH)
+    longest = write_game_data(mazes, decoded, tables, GAME_PATH)
     REFERENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    write_reference(mazes, decoded, REFERENCE_PATH)
+    write_reference(mazes, decoded, tables, REFERENCE_PATH)
     print(f"rewrote the generated block in {GAME_PATH} "
           f"(longest line {longest} chars)")
     print(f"wrote {REFERENCE_PATH}")

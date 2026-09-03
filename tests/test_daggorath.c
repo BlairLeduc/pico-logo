@@ -19,6 +19,7 @@
 #include "test_scaffold.h"
 #include "mock_device.h"
 #include "core/repl.h"
+#include "core/variables.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -281,6 +282,12 @@ static void build_synthetic_corridor(void)
     set_cell(2, 5, 255); // (2,5): not part of the maze
     run("make \"dagg.level 0  make \"dagg.row 5  make \"dagg.col 5  make \"dagg.dir 0");
     run("dagg.enter.level 0");
+    // M3 made the light real: RLIGHT/MLIGHT come from a burning torch and
+    // the player's own light is zero, so a fixture with no torch draws a
+    // black screen.  dagg.redraw does not recompute them (PUPSUB does, and
+    // HUPD30 depends on it not), so setting them here is what the ROM's
+    // "typical dungeon level 1 or 2" comment on the VIEWER inputs means.
+    run("make \"dagg.light 8  make \"dagg.mlight 8");
 }
 
 void test_the_forward_view_stops_at_a_wall(void)
@@ -856,6 +863,49 @@ void test_backspace_unbuffers_and_stops_at_the_start(void)
     TEST_ASSERT_EQUAL_FLOAT(0, num("count :dagg.linbuf"));
 }
 
+// B87 -- the command line draws its own cursor, because the one
+// devices/picocalc/input.c turns on lives only inside its line reader and
+// dagg.play never enters it (it polls with `key?`/`rc`, because this is a
+// typing game that must not block).  Asserted as the raw byte stream the
+// mock records, which is the right level: emitting the sequence is the
+// game's job and turning it into a picture is the device's -- and our
+// backspace is DESTRUCTIVE (screen.c:screen_txt_putc steps back and clears
+// the cell it lands on) where the CoCo's I.BS was a pure cursor move,
+// which is exactly why the ROM's own bytes could not be copied across.
+void test_the_command_line_carries_its_own_cursor(void)
+{
+    build_synthetic_corridor();
+
+    // M$PROM1 is `FCB I.CR,I.DOT` falling into M$CURS -- one string
+    mock_device_clear_output();
+    run("dagg.prompt");
+    TEST_ASSERT_EQUAL_STRING("\n._", mock_device_get_output());
+
+    // HMAN20: rub the cursor out, echo the character, put the cursor back
+    mock_device_clear_output();
+    run("dagg.human dagg.key char 77"); // M
+    TEST_ASSERT_EQUAL_STRING("\bM_", mock_device_get_output());
+
+    // M$ERAS: the cursor, then the character, then the cursor where the
+    // character was
+    mock_device_clear_output();
+    run("dagg.human dagg.key char 8");
+    TEST_ASSERT_EQUAL_STRING("\b\b_", mock_device_get_output());
+
+    // ...and a backspace on an empty line emits nothing at all, so it can
+    // never eat the prompt's own period
+    mock_device_clear_output();
+    run("dagg.human dagg.key char 8");
+    TEST_ASSERT_EQUAL_STRING("", mock_device_get_output());
+
+    // HMAN30 erases the cursor before the command prints anything where it
+    // was standing -- and then the next prompt puts a fresh one up
+    run("make \"dagg.linbuf []");
+    mock_device_clear_output();
+    run("dagg.enter");
+    TEST_ASSERT_EQUAL_STRING("\b\n._", mock_device_get_output());
+}
+
 // PLAY10: anything that is not A-Z, a space, a return or a backspace
 // becomes a space (the CLRB fallthrough), and lower case is folded up.
 void test_the_key_conversion_is_play10s(void)
@@ -1011,6 +1061,1141 @@ void test_the_recovery_task_reschedules_itself_at_the_heart_rate(void)
 }
 
 //==========================================================================
+// M3 -- objects (design section 15).  Everything below reads out of the
+// generated block, which is itself read out of TOKEN.ASM and DTABAS.ASM by
+// scripts/gen_daggorath.py -- so these constants are section 10.2 of the
+// design, transcribed by hand, checked against the ROM's own tables.  A
+// generator bug is a failing test here rather than a wrong game.
+//==========================================================================
+
+static const char *text(const char *expr)
+{
+    Result r = eval_string(expr);
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_OK, r.status, expr);
+    return value_to_string(r.value);
+}
+
+// The whole of ONCE.ASM's start-of-game: the dungeon's loot from OMXTAB,
+// then GAMDAT's two objects into the player's bag.  It is `daggorath`
+// without the screen, the clock and the input loop.
+static void start_game(void)
+{
+    build_synthetic_corridor();
+    run("make \"dagg.ppow 160  make \"dagg.pdam 0  make \"dagg.objwt 35");
+    run("make \"dagg.plhand 0  make \"dagg.prhand 0  make \"dagg.ptorch 0");
+    run("make \"dagg.bag []  make \"dagg.floor []  make \"dagg.dspmod 0");
+    run("make \"dagg.prlite 0  make \"dagg.prmlite 0  make \"dagg.heartf \"true");
+    run("dagg.makeobjects");
+    run("dagg.givebag");
+}
+
+static float field(const char *list, int i)
+{
+    char expr[96];
+    snprintf(expr, sizeof(expr), "item %d :%s", i, list);
+    return num(expr);
+}
+
+// docs/daggorath-design.md section 10.2, in ADJTAB order -- which is the
+// order P.OCTYP indexes, so the row number here IS the object type.
+struct object_row
+{
+    const char *word;
+    int cls, reveal, magoff, physoff, level, count;
+};
+
+static const struct object_row SECTION_10_2[] = {
+    {"SUPREME", 1, 255, 0, 5, 4, 1},
+    {"JOULE", 1, 170, 0, 5, 3, 1},
+    {"ELVISH", 4, 150, 64, 64, 3, 1},
+    {"MITHRIL", 3, 140, 13, 26, 3, 2},
+    {"SEER", 2, 130, 0, 5, 2, 3},
+    {"THEWS", 0, 70, 0, 5, 2, 3},
+    // The design's own table calls this one HOTH.  It is not what the
+    // player types -- see the next test.
+    {"RIME", 1, 52, 0, 5, 1, 1},
+    {"VISION", 2, 50, 0, 5, 1, 3},
+    {"ABYE", 0, 48, 0, 5, 1, 6},
+    {"HALE", 0, 40, 0, 5, 1, 4},
+    {"SOLAR", 5, 70, 0, 5, 1, 4},
+    {"BRONZE", 3, 25, 0, 26, 1, 6},
+    {"VULCAN", 1, 13, 0, 5, 0, 1},
+    {"IRON", 4, 13, 0, 40, 0, 4},
+    {"LUNAR", 5, 25, 0, 5, 0, 8},
+    {"PINE", 5, 5, 0, 5, 0, 8},
+    {"LEATHER", 3, 5, 0, 10, 0, 3},
+    {"WOODEN", 4, 5, 0, 16, 0, 4},
+};
+
+void test_the_object_tables_are_section_10_2(void)
+{
+    TEST_ASSERT_EQUAL_FLOAT(25, num("count :dagg.adjtab"));
+    TEST_ASSERT_EQUAL_FLOAT(25, num("count :dagg.odb"));
+    TEST_ASSERT_EQUAL_FLOAT(25, num("count :dagg.xxx"));
+    TEST_ASSERT_EQUAL_FLOAT(18, num("count :dagg.omx"));
+
+    for (int i = 0; i < 18; i++)
+    {
+        const struct object_row *w = &SECTION_10_2[i];
+        char expr[96];
+        snprintf(expr, sizeof(expr), "first item %d :dagg.adjtab", i + 1);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(w->word, text(expr), w->word);
+        snprintf(expr, sizeof(expr), "item 2 (item %d :dagg.adjtab)", i + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(w->cls, num(expr), w->word);
+        snprintf(expr, sizeof(expr), "item 1 (item %d :dagg.odb)", i + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(w->cls, num(expr), w->word);
+        snprintf(expr, sizeof(expr), "item 2 (item %d :dagg.odb)", i + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(w->reveal, num(expr), w->word);
+        snprintf(expr, sizeof(expr), "item 3 (item %d :dagg.odb)", i + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(w->magoff, num(expr), w->word);
+        snprintf(expr, sizeof(expr), "item 4 (item %d :dagg.odb)", i + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(w->physoff, num(expr), w->word);
+        snprintf(expr, sizeof(expr), "item 1 (item %d :dagg.omx)", i + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(w->level, num(expr), w->word);
+        snprintf(expr, sizeof(expr), "item 2 (item %d :dagg.omx)", i + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(w->count, num(expr), w->word);
+    }
+}
+
+// The third time this port has been caught reading a macro instead of the
+// table it generates (LVLTAB at M1, CMDTAB at M2).  DTABAS.ASM's OBJXXX
+// macro names this object HOTH and the design's section 10.2 copied that;
+// TOKEN.ASM's ADJTAB, which is what PARSER matches and OBJNAM prints,
+// holds RIME.  HOTH is not a word this game knows.
+void test_the_ring_the_macro_names_is_not_the_ring_the_player_types(void)
+{
+    TEST_ASSERT_EQUAL_STRING("RIME", text("first item 7 :dagg.adjtab"));
+    // 7 rows of DIRTAB-style tokens, and HOTH matches none of them
+    TEST_ASSERT_EQUAL_FLOAT(-1, num("dagg.parse [H O T H] :dagg.adjtab"));
+    TEST_ASSERT_EQUAL_FLOAT(7, num("dagg.parse [R I M E] :dagg.adjtab"));
+}
+
+void test_the_special_objects_follow_the_eighteen(void)
+{
+    const char *specials[] = {"FINAL", "ENERGY", "ICE", "FIRE", "GOLD", "EMPTY", "DEAD"};
+    for (int i = 0; i < 7; i++)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), "first item %d :dagg.adjtab", 19 + i);
+        TEST_ASSERT_EQUAL_STRING(specials[i], text(expr));
+    }
+    // The three attack rings are 255/255 and always hit; FINAL is 0/0 and
+    // ends the game instead (PATTK.ASM, PINCAN.ASM:WINNER -- M5).
+    TEST_ASSERT_EQUAL_FLOAT(255, num("item 3 (item 20 :dagg.odb)"));
+    TEST_ASSERT_EQUAL_FLOAT(255, num("item 4 (item 20 :dagg.odb)"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num("item 3 (item 19 :dagg.odb)"));
+}
+
+// GENXXX's own weights, by class, and the six object outlines VOBJ.ASM
+// draws on the floor -- indexed by class, not type, so one torch outline
+// serves all four torches.
+void test_the_weights_and_outlines_are_by_class(void)
+{
+    const char *names[] = {"FLASK", "RING", "SCROLL", "SHIELD", "SWORD", "TORCH"};
+    const int weights[] = {5, 1, 10, 25, 25, 10};
+    for (int i = 0; i < 6; i++)
+    {
+        char expr[64];
+        snprintf(expr, sizeof(expr), "first item %d :dagg.gentab", i + 1);
+        TEST_ASSERT_EQUAL_STRING(names[i], text(expr));
+        TEST_ASSERT_EQUAL_FLOAT(weights[i], field("dagg.objwgt", i + 1));
+    }
+    TEST_ASSERT_EQUAL_FLOAT(6, num("count :dagg.fobj"));
+    for (int i = 0; i < 6; i++)
+        TEST_ASSERT_TRUE_MESSAGE(num("count item 1 :dagg.fobj") > 0, names[i]);
+    // FSWORD is the only object list with a pen lift in it (V$NEW between
+    // the blade and the hand guard); the other five are one closed run.
+    TEST_ASSERT_EQUAL_FLOAT(2, num("count item 5 :dagg.fobj"));
+    // FSHIEL's SVORG is not a pen lift, so its six points are one run
+    TEST_ASSERT_EQUAL_FLOAT(1, num("count item 4 :dagg.fobj"));
+    TEST_ASSERT_EQUAL_FLOAT(6, num("count item 1 (item 1 (item 4 :dagg.fobj))"));
+}
+
+//==========================================================================
+// Birth and the bag -- ONCE.ASM:CINI40/GAME30, OBIRTH.ASM.
+//==========================================================================
+
+void test_every_object_in_the_dungeon_is_created_and_creature_owned(void)
+{
+    build_synthetic_corridor();
+    run("dagg.makeobjects");
+    TEST_ASSERT_EQUAL_FLOAT(63, num(":dagg.ocbptr"));
+    for (int i = 1; i <= 63; i++)
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-1, field("dagg.ocown", i),
+                                        "an object was born unowned");
+    // Nothing is lying on the floor at the start of a game (section 7.3)
+    TEST_ASSERT_EQUAL_FLOAT(0, num("count :dagg.floor"));
+    // ...and there is room for GAMDAT's two on top, exactly
+    run("dagg.givebag");
+    TEST_ASSERT_EQUAL_FLOAT(65, num(":dagg.ocbptr"));
+    TEST_ASSERT_EQUAL_FLOAT(65, num(":dagg.ocbmax"));
+}
+
+// CINI44 walks DOWN from the object's first level and wraps, and it allows
+// a level 5 the dungeon does not have -- design section 19, decision 4.
+void test_the_distribution_walks_down_and_wraps_past_level_five(void)
+{
+    build_synthetic_corridor();
+    run("dagg.makeobjects");
+    // ABYE flasks: six of them starting at level 1, so 1 2 3 4 5 1
+    const int want[] = {1, 2, 3, 4, 5, 1};
+    for (int i = 0; i < 6; i++)
+        TEST_ASSERT_EQUAL_FLOAT(want[i], field("dagg.oclvl", 16 + i));
+}
+
+void test_the_player_starts_with_a_wooden_sword_and_a_pine_torch(void)
+{
+    start_game();
+    TEST_ASSERT_EQUAL_FLOAT(2, num("count :dagg.bag"));
+    TEST_ASSERT_EQUAL_STRING("WOODEN SWORD", text("dagg.objnam item 1 :dagg.bag"));
+    TEST_ASSERT_EQUAL_STRING("PINE TORCH", text("dagg.objnam item 2 :dagg.bag"));
+    // POBJWT's own `FDB 30+5` is those two: a 25 sword and a 10 torch
+    TEST_ASSERT_EQUAL_FLOAT(25 + 10, num(":dagg.objwt"));
+    // GAME30 clears P.OCREV, so both are revealed from the start
+    TEST_ASSERT_EQUAL_FLOAT(0, num("item (item 1 :dagg.bag) :dagg.ocrev"));
+    // and nothing is burning
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.ptorch"));
+}
+
+// GAMDAT is a table and not a constant -- ONCE.ASM has two of them, one
+// for a game and one for the attract mode (DEMDAT: iron sword, pine torch,
+// leather shield), and GAME20 picks between them with a pointer.  So it is
+// the seam a board uses to reach an object M3 otherwise cannot: nothing in
+// the dungeon is pickable until creatures exist to drop it (section 7.3).
+//
+// `make "dagg.gamdat [12 15]` before `daggorath` is a Vulcan ring and a
+// pine torch, which is what INCANT needs -- PINCAN reads P.OCXXX+1 and
+// never looks at P.OCREV, so GAME30's `CLR P.OCREV,X` does not spoil it.
+// REVEAL is not reachable this way and stays gated on M4, because GAME30
+// reveals everything it hands you.
+void test_gamdat_is_the_seam_a_board_uses_to_reach_a_ring(void)
+{
+    build_synthetic_corridor();
+    run("make \"dagg.plhand 0  make \"dagg.prhand 0  make \"dagg.ptorch 0");
+    run("make \"dagg.bag []  make \"dagg.floor []  make \"dagg.dspmod 0");
+    run("make \"dagg.gamdat [12 15]"); // VULCAN ring, PINE torch
+    run("dagg.makeobjects  dagg.givebag");
+
+    TEST_ASSERT_EQUAL_FLOAT(2, num("count :dagg.bag"));
+    TEST_ASSERT_EQUAL_STRING("VULCAN RING", text("dagg.objnam item 1 :dagg.bag"));
+    // Revealed, as GAME30 leaves everything it gives -- and the ring is
+    // still incantable, because the charge and the target type live in
+    // P.OCXXX, which the reveal does not touch.
+    TEST_ASSERT_EQUAL_FLOAT(0, num("item (item 1 :dagg.bag) :dagg.ocrev"));
+    TEST_ASSERT_EQUAL_FLOAT(21, num("item (item 1 :dagg.bag) :dagg.ocx1"));
+
+    type_line("PULL LEFT RING");
+    type_line("INCANT FIRE");
+    TEST_ASSERT_EQUAL_STRING("FIRE RING", text("dagg.objnam :dagg.plhand"));
+
+    // ...and it does not reach REVEAL, which is the honest half of this:
+    // there is nothing in the bag left to reveal.
+    mock_device_clear_output();
+    type_line("REVEAL LEFT");
+    TEST_ASSERT_EQUAL_STRING("FIRE RING", text("dagg.objnam :dagg.plhand"));
+}
+
+//==========================================================================
+// Names and REVEAL -- STATUS.ASM:OBJNAM, OBIRTH.ASM:GENVAL, PREVEA.ASM.
+//==========================================================================
+
+void test_an_unrevealed_object_shows_only_its_generic_name(void)
+{
+    start_game();
+    run("make \"dagg.ocbptr 0  make \"i dagg.obirth 3 0"); // MITHRIL
+    TEST_ASSERT_EQUAL_STRING("SHIELD", text("dagg.objnam :i"));
+    run(".setitem :i :dagg.ocrev 0");
+    TEST_ASSERT_EQUAL_STRING("MITHRIL SHIELD", text("dagg.objnam :i"));
+    TEST_ASSERT_EQUAL_STRING("EMPTY", text("dagg.objnam 0"));
+}
+
+// GENVAL: a new shield, sword or torch wears the LEATHER, WOODEN or PINE
+// numbers until it is revealed, keeping only its own reveal requirement.
+// A Mithril shield really does fight like a leather one until you know
+// what it is.
+void test_an_unrevealed_shield_wears_the_leather_shields_numbers(void)
+{
+    start_game();
+    run("make \"dagg.ocbptr 0  make \"i dagg.obirth 3 0"); // MITHRIL
+    TEST_ASSERT_EQUAL_FLOAT(140, num("item :i :dagg.ocrev"));   // its own
+    TEST_ASSERT_EQUAL_FLOAT(0, num("item :i :dagg.ocmgo"));     // LEATHER's
+    TEST_ASSERT_EQUAL_FLOAT(10, num("item :i :dagg.ocpho"));    // LEATHER's
+    TEST_ASSERT_EQUAL_FLOAT(108, num("item :i :dagg.ocx0"));    // LEATHER's filters
+    TEST_ASSERT_EQUAL_FLOAT(128, num("item :i :dagg.ocx1"));
+    // ...and a flask keeps its own from birth (GENVAL is -1 for a flask):
+    // you cannot see what it is, but drinking it does what it does.
+    run("make \"j dagg.obirth 5 0"); // THEWS
+    TEST_ASSERT_EQUAL_FLOAT(70, num("item :j :dagg.ocrev"));
+    TEST_ASSERT_EQUAL_STRING("FLASK", text("dagg.objnam :j"));
+}
+
+void test_reveal_needs_twenty_five_power_a_point_and_gives_the_numbers_back(void)
+{
+    start_game();
+    run("make \"dagg.ocbptr 0  make \"i dagg.obirth 3 0"); // MITHRIL, reveal 140
+    run("make \"dagg.plhand :i");
+
+    run("make \"dagg.ppow 3499  make \"dagg.tokens dagg.split [L E F T]");
+    run("make \"dagg.linptr 1  dagg.reveal");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(140, num("item :i :dagg.ocrev"),
+                                    "revealed one power short of 25 x 140");
+
+    run("make \"dagg.ppow 3500  make \"dagg.tokens dagg.split [L E F T]");
+    run("make \"dagg.linptr 1  dagg.reveal");
+    TEST_ASSERT_EQUAL_FLOAT(0, num("item :i :dagg.ocrev"));
+    TEST_ASSERT_EQUAL_STRING("MITHRIL SHIELD", text("dagg.objnam :i"));
+    TEST_ASSERT_EQUAL_FLOAT(13, num("item :i :dagg.ocmgo"));
+    TEST_ASSERT_EQUAL_FLOAT(26, num("item :i :dagg.ocpho"));
+    TEST_ASSERT_EQUAL_FLOAT(64, num("item :i :dagg.ocx0"));
+    TEST_ASSERT_EQUAL_FLOAT(64, num("item :i :dagg.ocx1"));
+}
+
+// The M3 gate, first half: "the section 10.2 table round-trips -- every
+// object can be found, revealed, named and used."  Every one of the
+// twenty-five types, born, revealed and named.
+void test_every_object_can_be_born_revealed_and_named(void)
+{
+    start_game();
+    for (int typ = 0; typ < 25; typ++)
+    {
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd),
+                 "make \"dagg.ocbptr 0  make \"i dagg.obirth %d 0"
+                 "  make \"dagg.plhand :i  make \"dagg.ppow 30000"
+                 "  make \"dagg.tokens dagg.split [L E F T]  make \"dagg.linptr 1"
+                 "  dagg.reveal",
+                 typ);
+        run(cmd);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("item :i :dagg.ocrev"),
+                                        "an object could not be revealed");
+        snprintf(cmd, sizeof(cmd), "first item %d :dagg.adjtab", typ + 1);
+        const char *adjective = text(cmd);
+        char want[64];
+        snprintf(cmd, sizeof(cmd), "first item (1 + item :i :dagg.occls) :dagg.gentab");
+        snprintf(want, sizeof(want), "%s %s", adjective, text(cmd));
+        TEST_ASSERT_EQUAL_STRING(want, text("dagg.objnam :i"));
+        // and the name fits a hand: the longest is fourteen characters
+        TEST_ASSERT_TRUE(strlen(want) <= 14);
+    }
+}
+
+//==========================================================================
+// GET, DROP, STOW, PULL -- PGET.ASM, and the floor OFIND reads.
+//==========================================================================
+
+// The command line is the only way in, exactly as it is for MOVE and TURN.
+void test_get_and_drop_move_the_weight_and_the_floor(void)
+{
+    start_game();
+    type_line("PULL RIGHT TORCH");
+    TEST_ASSERT_EQUAL_STRING("PINE TORCH", text("dagg.objnam :dagg.prhand"));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(35, num(":dagg.objwt"),
+                                    "PULL changed the weight, and it is still carried");
+
+    type_line("DROP RIGHT");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.prhand"));
+    TEST_ASSERT_EQUAL_FLOAT(25, num(":dagg.objwt"));
+    TEST_ASSERT_EQUAL_FLOAT(1, num("count :dagg.floor"));
+    TEST_ASSERT_EQUAL_FLOAT(5, num("item (item 1 :dagg.floor) :dagg.ocrow"));
+    TEST_ASSERT_EQUAL_FLOAT(5, num("item (item 1 :dagg.floor) :dagg.occol"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num("item (item 1 :dagg.floor) :dagg.ocown"));
+
+    type_line("GET RIGHT TORCH");
+    TEST_ASSERT_EQUAL_STRING("PINE TORCH", text("dagg.objnam :dagg.prhand"));
+    TEST_ASSERT_EQUAL_FLOAT(35, num(":dagg.objwt"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num("count :dagg.floor"));
+}
+
+// OFIND only answers for the cell you are standing on, on this level.
+void test_a_dropped_object_stays_where_it_was_dropped(void)
+{
+    start_game();
+    type_line("PULL RIGHT TORCH");
+    type_line("DROP RIGHT");
+    run("make \"dagg.col 6");
+    type_line("GET RIGHT TORCH");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":dagg.prhand"),
+                                    "picked up an object from the next cell along");
+    run("make \"dagg.col 5  make \"dagg.level 1");
+    type_line("GET RIGHT TORCH");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":dagg.prhand"),
+                                    "picked up an object from another level");
+}
+
+// VIEW52: an object on the floor is drawn twice, once under each light
+// channel, and its outline comes from its class.
+void test_an_object_on_the_floor_is_drawn_in_the_view(void)
+{
+    start_game();
+    type_line("PULL RIGHT TORCH");
+    type_line("DROP RIGHT");
+    run("make \"dagg.light 8  make \"dagg.mlight 8");
+
+    mock_device_clear_graphics();
+    run("dagg.redraw :dagg.norscl");
+    int with_object = mock_device_line_count();
+
+    run("make \"dagg.floor []");
+    mock_device_clear_graphics();
+    run("dagg.redraw :dagg.norscl");
+    TEST_ASSERT_TRUE_MESSAGE(with_object > mock_device_line_count(),
+                             "the cell walk never draws the objects on the floor");
+    // FTORCH is one run of four points -- three strokes -- and VIEW52 draws
+    // it twice, once with MAGFLG set and once without
+    TEST_ASSERT_EQUAL_FLOAT(6, with_object - mock_device_line_count());
+}
+
+// The sword is the one object list with a PEN LIFT in it -- VOBJ.ASM's
+// FSWORD is a blade and then a `V$NEW` and then a hand guard -- so it is
+// the only one whose stroke count says the generator's V$NEW decode came
+// out right rather than merely plausible.  A board saw this one: `D R`
+// put a sword on the ground and it read as a sword.
+void test_a_dropped_sword_draws_its_two_runs_and_stops_when_picked_up(void)
+{
+    start_game();
+    type_line("PULL RIGHT SWORD");
+    type_line("DROP RIGHT");
+    run("make \"dagg.light 8  make \"dagg.mlight 8");
+
+    mock_device_clear_graphics();
+    run("dagg.redraw :dagg.norscl");
+    int with_sword = mock_device_line_count();
+
+    // GET takes it off the floor, and the next redraw stops drawing it --
+    // which is dagg.floor.del and OFIND's own filter, both at once.
+    type_line("GET RIGHT SWORD");
+    TEST_ASSERT_EQUAL_FLOAT(0, num("count :dagg.floor"));
+    // GET redraws through dagg.pupdat, which recomputes the light from the
+    // torch -- and there is none burning here, so put the fixture's light
+    // back before measuring again.
+    run("make \"dagg.light 8  make \"dagg.mlight 8");
+    mock_device_clear_graphics();
+    run("dagg.redraw :dagg.norscl");
+    int without = mock_device_line_count();
+
+    // Two runs of two points is two strokes, and VIEW52 draws the list
+    // twice -- so four, where the single-run torch above is six.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, with_sword - without,
+                                    "FSWORD's pen lift did not survive the generator");
+}
+
+void test_stow_and_pull_leave_the_weight_alone(void)
+{
+    start_game();
+    type_line("PULL LEFT SWORD");
+    float carried = num(":dagg.objwt");
+    type_line("STOW LEFT");
+    TEST_ASSERT_EQUAL_FLOAT(carried, num(":dagg.objwt"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.plhand"));
+    // PSTOW0 pushes at the head, so it is back at the front of the bag
+    TEST_ASSERT_EQUAL_STRING("WOODEN SWORD", text("dagg.objnam item 1 :dagg.bag"));
+}
+
+void test_a_full_hand_refuses_and_an_empty_one_has_nothing_to_give(void)
+{
+    start_game();
+    type_line("PULL RIGHT TORCH");
+    mock_device_clear_output();
+    type_line("PULL RIGHT SWORD");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(mock_device_get_output(), "??") != NULL,
+                             "pulled into a hand that was already full");
+    TEST_ASSERT_EQUAL_STRING("PINE TORCH", text("dagg.objnam :dagg.prhand"));
+
+    mock_device_clear_output();
+    type_line("DROP LEFT");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(mock_device_get_output(), "??") != NULL,
+                             "dropped something out of an empty hand");
+}
+
+//==========================================================================
+// PAROBJ -- PARSER.ASM.  <generic>, or <adjective> <generic> with the two
+// agreeing on class.
+//==========================================================================
+
+// The line buffer is a list of one-character words, so a space in it is a
+// `char 32` element and not a gap in a list literal -- which is what
+// dagg.split is splitting on.  Built the way dagg.human builds it.
+static bool parses(const char *tokens)
+{
+    char cmd[96];
+    run("make \"dagg.linbuf []");
+    for (const char *p = tokens; *p; p++)
+    {
+        snprintf(cmd, sizeof(cmd),
+                 "make \"dagg.linbuf lput dagg.key char %d :dagg.linbuf",
+                 (int)(unsigned char)*p);
+        run(cmd);
+    }
+    run("make \"dagg.tokens dagg.split :dagg.linbuf  make \"dagg.linptr 1");
+    return strcmp(text("dagg.parobj"), "true") == 0;
+}
+
+void test_parobj_takes_a_generic_or_an_agreeing_adjective(void)
+{
+    start_game();
+    TEST_ASSERT_TRUE_MESSAGE(parses("TORCH"), "a bare generic");
+    TEST_ASSERT_EQUAL_STRING("false", text(":dagg.speflg"));
+    TEST_ASSERT_EQUAL_FLOAT(5, num(":dagg.objcls"));
+
+    TEST_ASSERT_TRUE_MESSAGE(parses("PINE TORCH"), "an adjective and its generic");
+    TEST_ASSERT_EQUAL_STRING("true", text(":dagg.speflg"));
+    TEST_ASSERT_EQUAL_FLOAT(15, num(":dagg.objtyp"));
+
+    // POBJ10's class comparison: the adjective and the generic have to be
+    // the same kind of thing, which is why ADJTAB carries a class.
+    TEST_ASSERT_FALSE_MESSAGE(parses("PINE SWORD"), "PINE SWORD parsed");
+    // A bare adjective fails because PARSER then finds no generic at all
+    TEST_ASSERT_FALSE_MESSAGE(parses("PINE"), "a bare adjective parsed");
+    TEST_ASSERT_FALSE_MESSAGE(parses(""), "a missing object parsed");
+    // Prefixes work here as everywhere else
+    TEST_ASSERT_TRUE_MESSAGE(parses("TO"), "a prefix of a generic");
+    TEST_ASSERT_TRUE_MESSAGE(parses("MI SH"), "prefixes of both");
+}
+
+// A generic name takes the first match in OCB order, which for the bag is
+// the order PSTOW0 built it in.
+void test_a_generic_name_takes_the_first_of_its_class(void)
+{
+    start_game();
+    type_line("PULL LEFT TORCH");
+    TEST_ASSERT_EQUAL_STRING("PINE TORCH", text("dagg.objnam :dagg.plhand"));
+    type_line("STOW LEFT");
+    // A Solar torch on top of it: a generic PULL now takes the Solar one
+    run("make \"dagg.ocbptr 0  make \"i dagg.obirth 10 0  .setitem :i :dagg.ocown 1"
+        "  make \"dagg.bag fput :i :dagg.bag  .setitem :i :dagg.ocrev 0");
+    type_line("PULL LEFT TORCH");
+    TEST_ASSERT_EQUAL_STRING("SOLAR TORCH", text("dagg.objnam :dagg.plhand"));
+    type_line("STOW LEFT");
+    // ...and a specific one reaches past it
+    type_line("PULL LEFT PINE TORCH");
+    TEST_ASSERT_EQUAL_STRING("PINE TORCH", text("dagg.objnam :dagg.plhand"));
+}
+
+//==========================================================================
+// Light and torches -- design section 8.3, PUPDAT.ASM:PSUB10,
+// COMPLR.ASM:BURNER.
+//==========================================================================
+
+// PRLITE is zero and COMDAT.ASM never sets it, so the dungeon is black
+// until something is burning.  This is why the ROM's own attract mode
+// opens PULL RIGHT TORCH / USE RIGHT (TOKEN.ASM:AUTTAB).
+void test_you_start_in_the_dark_and_a_torch_is_the_only_light(void)
+{
+    start_game();
+    mock_device_clear_graphics();
+    run("dagg.pupdat :dagg.norscl");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.light"));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, mock_device_line_count(),
+                                    "the dungeon was lit with no torch burning");
+
+    type_line("PULL RIGHT TORCH");
+    type_line("USE RIGHT");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(7, num(":dagg.light"), "a pine torch is 7 regular");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":dagg.mlight"), "a pine torch is 0 magic");
+    // PUSE12 stows the torch it lights, so your hand is free again and
+    // the torch is back in the bag, burning
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.prhand"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num("count :dagg.floor"));
+    TEST_ASSERT_EQUAL_FLOAT(2, num("count :dagg.bag"));
+
+    mock_device_clear_graphics();
+    run("dagg.pupdat :dagg.norscl");
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0, "a lit torch shows nothing");
+}
+
+// PPULL clears PTORCH when it takes the burning torch back into a hand,
+// which is the only way to put a torch out.  PDROP does not need to,
+// because USE stows it and PULL is the only way back out of the bag.
+void test_pulling_the_burning_torch_puts_it_out(void)
+{
+    start_game();
+    type_line("PULL RIGHT TORCH");
+    type_line("USE RIGHT");
+    TEST_ASSERT_TRUE(num(":dagg.ptorch") > 0);
+    type_line("PULL RIGHT TORCH");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.ptorch"));
+    run("dagg.pupdat :dagg.norscl");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.light"));
+}
+
+// The M3 gate, second half.  BURNER's `CMPA #5 / BGT` marks a torch dead
+// at FIVE minutes to go, not at zero -- so a fifteen-minute Pine torch is
+// called DEAD after ten -- and each light value is clamped down to the
+// timer as it falls, so it dims before it dies and goes on dimming for
+// the five minutes after.
+void test_a_pine_torch_dies_at_five_minutes(void)
+{
+    start_game();
+    type_line("PULL RIGHT TORCH");
+    type_line("USE RIGHT");
+    run("make \"i :dagg.ptorch");
+    TEST_ASSERT_EQUAL_FLOAT(15, num("item :i :dagg.ocx0"));
+
+    // Minutes 1..15.  The light holds at 7 while the timer is above it and
+    // then tracks the timer down, so the last two minutes of a live Pine
+    // torch are already dimmer than the first eight -- and it goes on
+    // dimming for the five minutes it spends called DEAD, because BURNER's
+    // only stopping condition is a timer of zero.
+    const int light[] = {7, 7, 7, 7, 7, 7, 7, 7, 6, 5, 4, 3, 2, 1, 0};
+    for (int minute = 1; minute <= 15; minute++)
+    {
+        char why[64];
+        run("make \"dagg.now :dagg.burner.due  dagg.burner");
+        snprintf(why, sizeof(why), "minute %d", minute);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(15 - minute, num("item :i :dagg.ocx0"), why);
+        run("dagg.setlight");
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(light[minute - 1], num(":dagg.light"), why);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(minute < 10 ? "PINE TORCH" : "DEAD TORCH",
+                                         text("dagg.objnam :i"), why);
+    }
+    // BURN99's `TST P.OCXXX / BEQ` -- a burnt-out torch is left alone
+    run("make \"dagg.now :dagg.burner.due  dagg.burner");
+    TEST_ASSERT_EQUAL_FLOAT(0, num("item :i :dagg.ocx0"));
+}
+
+// Is the arithmetic right?  COMPLR.ASM:BURNER transcribed into C, the way
+// test_the_heart_rate_tracks_hupdats_own_division transcribes HUPD20 -- so
+// the Logo and the ROM have to agree by arithmetic and not because the same
+// person wrote both of them the same way.  Every torch, every minute of its
+// life, all three of its bytes and its name.
+struct torch_state
+{
+    int timer, regular, magic;
+    bool dead;
+};
+
+static void burner_step(struct torch_state *s)
+{
+    if (s->timer == 0) // BURN99: `LDA P.OCXXX,U / BEQ` -- a burnt-out
+        return;        // torch is left alone
+    s->timer--;
+    if (!(s->timer > 5)) // `CMPA #5 / BGT BURN10`
+        s->dead = true;
+    if (s->timer < s->regular) // `CMPA P.OCXXX+1,U / BGE BURN20`
+        s->regular = s->timer;
+    if (s->timer < s->magic) // `CMPA P.OCXXX+2,U / BGE BURN99`
+        s->magic = s->timer;
+}
+
+void test_every_torch_burns_the_way_burner_says_it_does(void)
+{
+    // SOLAR, LUNAR, PINE and the DEAD torch: type, and XXXTAB's three bytes
+    static const struct
+    {
+        int type;
+        const char *name;
+        struct torch_state start;
+    } torches[] = {
+        {10, "SOLAR", {60, 13, 11, false}},
+        {14, "LUNAR", {30, 10, 4, false}},
+        {15, "PINE", {15, 7, 0, false}},
+        {24, "DEAD", {0, 0, 0, true}},
+    };
+
+    for (size_t k = 0; k < sizeof torches / sizeof torches[0]; k++)
+    {
+        char cmd[192], why[96];
+        start_game();
+        // Born and then REVEALED -- PREV00's own two steps, the OCBFIL and
+        // then the clear.  Marking it revealed without the re-fill would
+        // leave it wearing a pine torch's XXXTAB (see the next test).
+        snprintf(cmd, sizeof(cmd),
+                 "make \"dagg.ocbptr 0  make \"i dagg.obirth %d 0"
+                 "  dagg.ocbfil :i (item :i :dagg.octyp)"
+                 "  .setitem :i :dagg.ocrev 0  make \"dagg.ptorch :i",
+                 torches[k].type);
+        run(cmd);
+        struct torch_state want = torches[k].start;
+        // XXXTAB reached the OCB intact in the first place
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(want.timer, num("item :i :dagg.ocx0"),
+                                        torches[k].name);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(want.regular, num("item :i :dagg.ocx1"),
+                                        torches[k].name);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(want.magic, num("item :i :dagg.ocx2"),
+                                        torches[k].name);
+
+        // One minute past the end of the longest torch there is
+        for (int minute = 1; minute <= 61; minute++)
+        {
+            burner_step(&want);
+            run("make \"dagg.now :dagg.burner.due  dagg.burner");
+            snprintf(why, sizeof(why), "%s torch, minute %d", torches[k].name, minute);
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(want.timer, num("item :i :dagg.ocx0"), why);
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(want.regular, num("item :i :dagg.ocx1"), why);
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(want.magic, num("item :i :dagg.ocx2"), why);
+            char name[32];
+            snprintf(name, sizeof(name), "%s TORCH",
+                     want.dead ? "DEAD" : torches[k].name);
+            TEST_ASSERT_EQUAL_STRING_MESSAGE(name, text("dagg.objnam :i"), why);
+            // and the light the viewer actually gets is the sum PSUB10 makes
+            run("dagg.setlight");
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(want.regular, num(":dagg.light"), why);
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(want.magic, num(":dagg.mlight"), why);
+        }
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, want.timer, torches[k].name);
+    }
+}
+
+// OBIRTH.ASM:GENVAL puts every new torch in a PINE torch's clothes, and
+// for a torch that is not only its light but its LIFETIME: an unrevealed
+// Solar torch burns fifteen minutes at 7/0, not sixty at 13/11, and there
+// is no way to tell it from the real thing while it does.  PREVEA's
+// OCBFIL is what gives the numbers back -- including a full timer, so
+// revealing a torch you have already been burning refills it.
+void test_an_unrevealed_torch_burns_as_a_pine_torch_until_you_reveal_it(void)
+{
+    start_game();
+    run("make \"dagg.ocbptr 0  make \"i dagg.obirth 10 0"); // SOLAR
+    TEST_ASSERT_EQUAL_STRING("TORCH", text("dagg.objnam :i"));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(15, num("item :i :dagg.ocx0"), "PINE's timer");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(7, num("item :i :dagg.ocx1"), "PINE's regular light");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("item :i :dagg.ocx2"), "PINE's magic light");
+    // ...and its own reveal requirement is what OBIRTH kept
+    TEST_ASSERT_EQUAL_FLOAT(70, num("item :i :dagg.ocrev"));
+
+    // Burn it half way down, then reveal it: PREV00's OCBFIL re-fills all
+    // three bytes from SOLAR, so the timer comes back full.
+    run("make \"dagg.ptorch :i");
+    for (int minute = 1; minute <= 7; minute++)
+        run("make \"dagg.now :dagg.burner.due  dagg.burner");
+    TEST_ASSERT_EQUAL_FLOAT(8, num("item :i :dagg.ocx0"));
+
+    run("make \"dagg.plhand :i  make \"dagg.ppow 30000");
+    run("make \"dagg.tokens dagg.split [L E F T]  make \"dagg.linptr 1  dagg.reveal");
+    TEST_ASSERT_EQUAL_STRING("SOLAR TORCH", text("dagg.objnam :i"));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(60, num("item :i :dagg.ocx0"),
+                                    "REVEAL did not refill the torch");
+    TEST_ASSERT_EQUAL_FLOAT(13, num("item :i :dagg.ocx1"));
+    TEST_ASSERT_EQUAL_FLOAT(11, num("item :i :dagg.ocx2"));
+}
+
+// A torch is called DEAD five minutes before it stops giving light, so the
+// three phases do not line up: a Lunar torch still has its full magic 4 for
+// two minutes AFTER it is named dead, and PATT22 is already throwing away
+// three hits in four by then (`CMPA #T.TOR5`, which reads the NAME and not
+// the light).  That gap is the ROM's, not a rounding of it.
+void test_a_dead_torch_still_gives_light_and_still_fights_as_darkness(void)
+{
+    start_game();
+    run("make \"dagg.ocbptr 0  make \"i dagg.obirth 14 0"  // LUNAR: 30, 10, 4
+        "  dagg.ocbfil :i (item :i :dagg.octyp)"
+        "  .setitem :i :dagg.ocrev 0  make \"dagg.ptorch :i");
+    for (int minute = 1; minute <= 25; minute++)
+        run("make \"dagg.now :dagg.burner.due  dagg.burner");
+    // Minute 25: the timer is 5, so it is named dead...
+    TEST_ASSERT_EQUAL_FLOAT(5, num("item :i :dagg.ocx0"));
+    TEST_ASSERT_EQUAL_STRING("DEAD TORCH", text("dagg.objnam :i"));
+    // ...and it is still lighting the dungeon, magic channel at full
+    run("dagg.setlight");
+    TEST_ASSERT_EQUAL_FLOAT(5, num(":dagg.light"));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(4, num(":dagg.mlight"),
+                                    "a dead Lunar torch lost its magic light early");
+    // Five more minutes and there is nothing left
+    for (int minute = 26; minute <= 30; minute++)
+        run("make \"dagg.now :dagg.burner.due  dagg.burner");
+    run("dagg.setlight");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.light"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.mlight"));
+}
+
+// SOLAR is the one torch with a magic channel, and design section 8.3's
+// "a magical torch shows you secret doors that regular light will not" is
+// VIEW22 drawing the secret-door list under MLIGHT and the wall under
+// RLIGHT.  Two lists, two numbers, one range.
+void test_the_magic_channel_lights_a_secret_door_the_regular_one_does_not(void)
+{
+    build_synthetic_corridor();
+    set_cell(4, 5, 2 + (2 << 6)); // (4,5): N and W secret doors, E/S passage
+    run("make \"dagg.row 4  make \"dagg.col 5  make \"dagg.dir 0");
+
+    // Regular light reaches range 0 and magic light does not: the wall
+    // draws, the secret door does not.
+    run("make \"dagg.light 7  make \"dagg.mlight 0");
+    mock_device_clear_graphics();
+    run("dagg.redraw :dagg.norscl");
+    int regular_only = mock_device_line_count();
+
+    run("make \"dagg.light 7  make \"dagg.mlight 7");
+    mock_device_clear_graphics();
+    run("dagg.redraw :dagg.norscl");
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > regular_only,
+                             "magic light showed nothing the regular light did not");
+}
+
+//==========================================================================
+// USE -- PUSE.ASM.  Every failure past the hand parse is silent.
+//==========================================================================
+
+static void put_in_left_hand(int type)
+{
+    char cmd[160];
+    snprintf(cmd, sizeof(cmd),
+             "make \"dagg.ocbptr 0  make \"i dagg.obirth %d 0"
+             "  .setitem :i :dagg.ocown 1"
+             "  .setitem :i :dagg.ocrev 0  make \"dagg.plhand :i",
+             type);
+    run(cmd);
+}
+
+void test_the_three_flasks_do_what_section_10_2_says(void)
+{
+    start_game();
+    put_in_left_hand(5); // THEWS
+    type_line("USE LEFT");
+    TEST_ASSERT_EQUAL_FLOAT(1160, num(":dagg.ppow"));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("EMPTY FLASK", text("dagg.objnam :dagg.plhand"),
+                                     "a used flask keeps its class and loses its name");
+
+    start_game();
+    run("make \"dagg.pdam 100");
+    put_in_left_hand(9); // HALE
+    type_line("USE LEFT");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.pdam"));
+
+    start_game();
+    put_in_left_hand(8); // ABYE
+    type_line("USE LEFT");
+    // SCAL16 is radix-7, so 102/128 of 160 and not 102/256
+    TEST_ASSERT_EQUAL_FLOAT(127, num(":dagg.pdam"));
+}
+
+// An emptied flask is always revealed (`CLR P.OCREV,U`), which is the game
+// telling you what you just drank after it is too late.
+void test_an_emptied_flask_is_always_revealed(void)
+{
+    start_game();
+    run("make \"dagg.ocbptr 0  make \"i dagg.obirth 5 0"
+        "  .setitem :i :dagg.ocown 1  make \"dagg.plhand :i");
+    TEST_ASSERT_EQUAL_STRING("FLASK", text("dagg.objnam :i"));
+    type_line("USE LEFT");
+    TEST_ASSERT_EQUAL_STRING("EMPTY FLASK", text("dagg.objnam :i"));
+}
+
+//==========================================================================
+// The map and the two scrolls -- PUSE.ASM:USC100/USC200, MAPPER.ASM,
+// design section 13.
+//==========================================================================
+
+void test_an_unrevealed_scroll_does_nothing(void)
+{
+    start_game();
+    run("make \"dagg.ocbptr 0  make \"i dagg.obirth 7 0"
+        "  .setitem :i :dagg.ocown 1  make \"dagg.plhand :i");
+    TEST_ASSERT_TRUE(num("item :i :dagg.ocrev") > 0);
+    type_line("USE LEFT");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":dagg.dspmod"),
+                                    "an unrevealed scroll put the map up");
+}
+
+void test_a_revealed_scroll_puts_the_map_up_and_stops_the_heart_being_drawn(void)
+{
+    start_game();
+    put_in_left_hand(4); // SEER
+    mock_device_clear_graphics();
+    type_line("USE LEFT");
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":dagg.dspmod"));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", text(":dagg.mapflg"),
+                                     "a seer scroll shows walls only");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", text(":dagg.heartf"),
+                                     "the heart is still being drawn under the map");
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_line_count() > 0, "the map drew nothing");
+    // MAPP50's "X marks the spot", at the centre of the player's own cell:
+    // (5,5) is x = -160 + 50 + 5 and y = 160 - 35 - 3.
+    TEST_ASSERT_TRUE_MESSAGE(
+        mock_device_has_line_from_to(-108.0f, 120.0f, -102.0f, 124.0f, 0.5f),
+        "the map does not mark where you are standing");
+    // The map covers the whole band, so there is no status line on it
+    const MockDeviceState *state = mock_device_get_state();
+    int labels = state->label.count;
+    run("dagg.pupdat :dagg.norscl");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(labels, mock_device_get_state()->label.count,
+                                  "the map wrote a status line over itself");
+
+    // ...and a Vision scroll shows the walls without what is on them
+    start_game();
+    put_in_left_hand(7); // VISION
+    type_line("USE LEFT");
+    TEST_ASSERT_EQUAL_STRING("false", text(":dagg.mapflg"));
+}
+
+// One stroke per RUN of rock, not one a cell -- design section 13's own
+// choice, and the reason dagg.map.row counts with a variable instead of
+// `repcount`: `repcount` answers the innermost REPEAT, and inside this
+// procedure's `foreach` that is dagg.mapper's own row loop, so every run
+// would start and end in the same place.
+void test_the_map_draws_one_stroke_a_run_of_rock(void)
+{
+    build_zero_maze(); // every cell open: no rock, no strokes
+    run("make \"dagg.level 0  make \"dagg.row 0  make \"dagg.col 0");
+    run("dagg.enter.level 0");
+    set_cell(3, 4, 255);
+    set_cell(3, 5, 255);
+    set_cell(3, 6, 255);
+    set_cell(3, 20, 255);
+
+    mock_device_clear_graphics();
+    run("setpensize 7  dagg.map.row 3  setpensize 1");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, mock_device_line_count(),
+                                  "a run of three cells is not one stroke");
+    // A cell is 10 x 7: columns 4-6 span x -120..-90, and row 3's centre
+    // is y = 160 - 21 - 3.
+    TEST_ASSERT_TRUE(mock_device_has_line_from_to(-120.0f, 136.0f, -90.0f, 136.0f, 0.5f));
+    TEST_ASSERT_TRUE(mock_device_has_line_from_to(40.0f, 136.0f, 50.0f, 136.0f, 0.5f));
+
+    // ...and a row that ends in rock closes its last run at column 31
+    mock_device_clear_graphics();
+    set_cell(3, 31, 255);
+    run("setpensize 7  dagg.map.row 3  setpensize 1");
+    TEST_ASSERT_TRUE(mock_device_has_line_from_to(150.0f, 136.0f, 160.0f, 136.0f, 0.5f));
+}
+
+// HMAN10: the map comes down on the first keystroke after it went up,
+// before that keystroke is even buffered.
+void test_the_map_comes_down_on_the_next_keystroke(void)
+{
+    start_game();
+    put_in_left_hand(4);
+    type_line("USE LEFT");
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":dagg.dspmod"));
+    run("dagg.human dagg.key char 76"); // "L"
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.dspmod"));
+    TEST_ASSERT_EQUAL_STRING("true", text(":dagg.heartf"));
+    // and the L still got buffered
+    TEST_ASSERT_EQUAL_FLOAT(1, num("count :dagg.linbuf"));
+}
+
+//==========================================================================
+// INCANT -- PINCAN.ASM.  The one place in the parser that wants the whole
+// word, and the only command that reads both hands.
+//==========================================================================
+
+void test_incant_needs_the_whole_word_and_the_right_one(void)
+{
+    start_game();
+    put_in_left_hand(12); // VULCAN -> FIRE
+    type_line("INCANT FIR");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("VULCAN RING", text("dagg.objnam :dagg.plhand"),
+                                     "a prefix was enough for INCANT");
+    type_line("INCANT ICE");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("VULCAN RING", text("dagg.objnam :dagg.plhand"),
+                                     "the wrong word transformed the ring");
+    type_line("INCANT FIRE");
+    TEST_ASSERT_EQUAL_STRING("FIRE RING", text("dagg.objnam :dagg.plhand"));
+}
+
+// The transformed ring keeps its three charges (FIRE has no XXXTAB row, so
+// OCBFIL leaves P.OCXXX+0 alone) and loses the word that made it, so it
+// cannot be done twice.
+void test_an_incanted_ring_keeps_its_charges_and_cannot_be_done_twice(void)
+{
+    start_game();
+    put_in_left_hand(12);
+    TEST_ASSERT_EQUAL_FLOAT(3, num("item :dagg.plhand :dagg.ocx0"));
+    type_line("INCANT FIRE");
+    TEST_ASSERT_EQUAL_FLOAT(3, num("item :dagg.plhand :dagg.ocx0"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num("item :dagg.plhand :dagg.ocx1"));
+    TEST_ASSERT_EQUAL_FLOAT(255, num("item :dagg.plhand :dagg.ocmgo"));
+    TEST_ASSERT_EQUAL_FLOAT(255, num("item :dagg.plhand :dagg.ocpho"));
+    type_line("INCANT FIRE");
+    TEST_ASSERT_EQUAL_STRING("FIRE RING", text("dagg.objnam :dagg.plhand"));
+}
+
+void test_incant_reads_both_hands(void)
+{
+    start_game();
+    run("make \"dagg.ocbptr 0  make \"i dagg.obirth 6 0  .setitem :i :dagg.ocown 1"  // RIME -> ICE
+        "  .setitem :i :dagg.ocrev 0  make \"dagg.prhand :i");
+    type_line("INCANT ICE");
+    TEST_ASSERT_EQUAL_STRING("ICE RING", text("dagg.objnam :dagg.prhand"));
+}
+
+//==========================================================================
+// EXAMINE and LOOK -- PEXAM.ASM, PLOOK.ASM.  DSPMOD is sticky: the listing
+// replaces the view and stays until LOOK, which is why LOOK is a command.
+//==========================================================================
+
+void test_examine_lists_the_floor_and_the_bag(void)
+{
+    start_game();
+    type_line("PULL RIGHT TORCH");
+    type_line("DROP RIGHT");
+
+    int before = mock_device_get_state()->label.count;
+    type_line("EXAMINE");
+    TEST_ASSERT_EQUAL_FLOAT(2, num(":dagg.dspmod"));
+    const MockDeviceState *state = mock_device_get_state();
+    // IN THIS ROOM, PINE TORCH, the bar, BACKPACK, WOODEN SWORD, and the
+    // status line last
+    TEST_ASSERT_EQUAL_INT(6, state->label.count - before);
+    TEST_ASSERT_EQUAL_UINT(40, strlen(state->label.last_text));
+
+    // It stays up: another command redraws the listing, not the view
+    mock_device_clear_graphics();
+    type_line("MOVE");
+    TEST_ASSERT_EQUAL_FLOAT(2, num(":dagg.dspmod"));
+
+    type_line("LOOK");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.dspmod"));
+}
+
+// The 19 rows carry over from the ROM unchanged; the columns do not.
+// EXAMIN's numbers are all fractions of its screen width -- both headers
+// centred, the rule the full width, the second entry half way across --
+// so they are recomputed for 40 rather than left at 32 with eight columns
+// of nothing down the right-hand side.
+void test_the_examine_screen_is_laid_out_for_forty_columns(void)
+{
+    start_game();
+    const MockDeviceState *state = mock_device_get_state();
+
+    // The rule is the full width of the screen, starting at column 0
+    TEST_ASSERT_EQUAL_UINT(40, strlen(text("dagg.exbar")));
+    run("dagg.write.at 4 0 dagg.exbar");
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, -160.0f, state->label.last_x);
+
+    // Both headers centred: (40 - 12) / 2 and (40 - 8) / 2
+    run("make \"dagg.exrow 0  make \"dagg.excol 0  dagg.examin");
+    run("dagg.write.at 0 14 [IN THIS ROOM]");
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, -160.0f + 8 * 14, state->label.last_x);
+    run("dagg.write.at 0 16 [BACKPACK]");
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, -160.0f + 8 * 16, state->label.last_x);
+
+    // Two entries to a line, the second half way across -- and the longest
+    // name in the game still ends inside the screen from there.
+    run("make \"dagg.exrow 0  make \"dagg.excol 0");
+    run("make \"dagg.ocbptr 0  make \"i dagg.obirth 3 0  .setitem :i :dagg.ocrev 0");
+    run("dagg.prtobj :i \"false");
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, -160.0f, state->label.last_x);
+    TEST_ASSERT_EQUAL_FLOAT(20, num(":dagg.excol"));
+    run("dagg.prtobj :i \"false");
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, state->label.last_x);
+    TEST_ASSERT_EQUAL_STRING("MITHRIL SHIELD", state->label.last_text);
+    TEST_ASSERT_TRUE(20 + (int)strlen(state->label.last_text) <= 40);
+    // ...and the pair wraps to the next row rather than to a third column
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.excol"));
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":dagg.exrow"));
+}
+
+// EXAM30 highlights the burning torch in inverse video (`COM P.TXINV,U`),
+// which is the same three-argument `write` the status bar uses.
+void test_examine_highlights_the_burning_torch(void)
+{
+    start_game();
+    type_line("PULL RIGHT TORCH");
+    type_line("USE RIGHT");
+    run("make \"dagg.dspmod 2");
+    run("dagg.examin");
+    // Nothing on the floor, one torch and one sword in the bag: the last
+    // thing written is the status line, so count the writes instead.
+    TEST_ASSERT_TRUE(mock_device_get_state()->label.count > 0);
+    // The torch is the head of the bag (USE stowed it), drawn opaque
+    run("make \"dagg.bag (list :dagg.ptorch)  make \"dagg.exrow 0  make \"dagg.excol 0");
+    run("dagg.prtobj :dagg.ptorch (:dagg.ptorch = :dagg.ptorch)");
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL_STRING("PINE TORCH", state->label.last_text);
+    TEST_ASSERT_EQUAL_FLOAT(num(":dagg.bg"), (float)state->label.last_colour);
+    TEST_ASSERT_EQUAL_FLOAT(num(":dagg.ink"), (float)state->label.last_background);
+}
+
+// The exact sequence a board reported: the torch LEAVES the backpack
+// listing when you PULL it and comes back in reverse video when you USE
+// it.  Three separate pieces of PGET.ASM/PUSE.ASM agreeing --
+// PPULL unlinking it from the bag and clearing PTORCH, PUSE12's PSTOW0
+// pushing it back at the HEAD, and EXAM32's `CMPX PTORCH / COM P.TXINV,U`
+// picking out that one row.
+void test_the_torch_leaves_the_listing_when_pulled_and_returns_lit(void)
+{
+    start_game();
+    run("make \"dagg.dspmod 2");
+
+    // In the bag to start with, and nothing is burning, so the row is
+    // transparent.  (The LAST write of a listing is always the status
+    // line, which is opaque on every level -- so a row has to be measured
+    // as a row.)
+    TEST_ASSERT_EQUAL_FLOAT(2, num("count :dagg.bag"));
+    run("make \"dagg.exrow 0  make \"dagg.excol 0");
+    run("dagg.prtobj (item 2 :dagg.bag) ((item 2 :dagg.bag) = :dagg.ptorch)");
+    TEST_ASSERT_EQUAL_STRING("PINE TORCH", mock_device_get_state()->label.last_text);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1, mock_device_get_state()->label.last_background,
+                                  "an unlit torch was drawn opaque");
+
+    // PULL takes it out of the listing altogether
+    type_line("PULL LEFT TORCH");
+    TEST_ASSERT_EQUAL_FLOAT(1, num("count :dagg.bag"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.ptorch"));
+    TEST_ASSERT_EQUAL_STRING("WOODEN SWORD", text("dagg.objnam item 1 :dagg.bag"));
+
+    // USE puts it back -- at the head, because PSTOW0 pushes there -- and
+    // lights it
+    type_line("USE LEFT");
+    TEST_ASSERT_EQUAL_FLOAT(2, num("count :dagg.bag"));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("PINE TORCH", text("dagg.objnam item 1 :dagg.bag"),
+                                     "the used torch did not go back on top of the bag");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.plhand"));
+    TEST_ASSERT_TRUE(num(":dagg.ptorch") > 0);
+
+    // ...and it is the one row of the listing drawn in reverse video.  The
+    // bag is walked head-first, so it is the FIRST backpack entry, and the
+    // sword after it goes back to transparent.
+    run("make \"dagg.exrow 0  make \"dagg.excol 0");
+    run("dagg.prtobj :dagg.ptorch (:dagg.ptorch = :dagg.ptorch)");
+    const MockDeviceState *state = mock_device_get_state();
+    TEST_ASSERT_EQUAL_STRING("PINE TORCH", state->label.last_text);
+    TEST_ASSERT_EQUAL_FLOAT(num(":dagg.bg"), (float)state->label.last_colour);
+    TEST_ASSERT_EQUAL_FLOAT(num(":dagg.ink"), (float)state->label.last_background);
+
+    run("dagg.prtobj (item 2 :dagg.bag) \"false");
+    TEST_ASSERT_EQUAL_STRING("WOODEN SWORD", state->label.last_text);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1, state->label.last_background,
+                                  "the highlight leaked onto the next entry");
+}
+
+//==========================================================================
+// The status line, now that there is something to put in it -- STATUX.
+//==========================================================================
+
+void test_the_status_line_names_both_hands_and_still_measures_forty(void)
+{
+    start_game();
+    TEST_ASSERT_EQUAL_STRING("EMPTY", text("dagg.objnam :dagg.plhand"));
+    TEST_ASSERT_EQUAL_UINT(40, rendered_width("dagg.status.line"));
+
+    // The two longest names in the game, one in each hand: 14 + 14 of 40
+    run("make \"dagg.ocbptr 0");
+    run("make \"i dagg.obirth 3 0  .setitem :i :dagg.ocrev 0  make \"dagg.plhand :i");
+    run("make \"j dagg.obirth 16 0  .setitem :j :dagg.ocrev 0  make \"dagg.prhand :j");
+    TEST_ASSERT_EQUAL_UINT(40, rendered_width("dagg.status.line"));
+    mock_device_clear_output();
+    run("type dagg.status.line");
+    TEST_ASSERT_EQUAL_STRING("MITHRIL SHIELD            LEATHER SHIELD",
+                             mock_device_get_output());
+}
+
+//==========================================================================
+// The whole game, started and stopped.  Every other test drives a piece of
+// `daggorath` and this is the only one that runs it -- which is where a
+// typo in the init sequence would otherwise hide, because nothing else
+// calls dagg.makeobjects, dagg.givebag and dagg.setup.heart in order
+// against the real maze.  ESC is the one key that ends dagg.play.
+//==========================================================================
+
+void test_the_game_starts_and_stops(void)
+{
+    mock_device_set_input("\x1b");
+    run("daggorath");
+    TEST_ASSERT_EQUAL_STRING("true", text(":dagg.over"));
+    // ONCE.ASM:GAME10's own start, and CINI40 + GAME30's 63 + 2 objects
+    TEST_ASSERT_EQUAL_FLOAT(16, num(":dagg.row"));
+    TEST_ASSERT_EQUAL_FLOAT(11, num(":dagg.col"));
+    TEST_ASSERT_EQUAL_FLOAT(65, num(":dagg.ocbptr"));
+    TEST_ASSERT_EQUAL_FLOAT(2, num("count :dagg.bag"));
+    TEST_ASSERT_EQUAL_FLOAT(35, num(":dagg.objwt"));
+    // and it starts in the dark, with nothing burning
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.ptorch"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.light"));
+}
+
+//==========================================================================
 // M2 -- the budgets (design section 17).  A warm redraw spends nothing:
 // the status line is built out of `word` and `dagg.spaces` a redraw at a
 // time, and every intermediate it makes is the SAME word as last time, so
@@ -1035,6 +2220,17 @@ static float nodes_for_redraws(int count)
     return num(":n0") - num(":n1");
 }
 
+static float atoms_for_redraws(int count)
+{
+    char cmd[192];
+    snprintf(cmd, sizeof(cmd),
+             "make \"a0 atoms  repeat %d [dagg.redraw :dagg.norscl]  make \"a1 atoms",
+             count);
+    run(cmd);
+    run(cmd);
+    return num(":a0") - num(":a1");
+}
+
 void test_a_warm_redraw_spends_no_nodes_and_no_atoms(void)
 {
     build_synthetic_corridor();
@@ -1048,6 +2244,60 @@ void test_a_warm_redraw_spends_no_nodes_and_no_atoms(void)
     run("make \"a0 atoms  repeat 1000 [dagg.redraw :dagg.norscl]  make \"a1 atoms");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":a0"), num(":a1"),
                                     "the redraw interned a word -- the status line is not warm");
+}
+
+// M3 put two more walks inside the redraw -- OFIND over the floor and
+// SETFAD per vector list -- and neither may allocate either.  OFIND is a
+// cursor rather than a list for exactly this reason.
+void test_a_warm_redraw_over_an_object_spends_nothing_either(void)
+{
+    start_game();
+    run("make \"dagg.light 8  make \"dagg.mlight 8");
+    type_line("PULL RIGHT TORCH");
+    type_line("DROP RIGHT");
+    TEST_ASSERT_EQUAL_FLOAT(1, num("count :dagg.floor"));
+
+    run("repeat 5 [dagg.redraw :dagg.norscl]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(nodes_for_redraws(100), nodes_for_redraws(1000),
+                                    "the object pass conses");
+    // Measured at two lengths for the same reason the nodes are: the first
+    // redraw over a given object mints the words for its own dash periods,
+    // and that fixed cost would otherwise read as a leak.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(atoms_for_redraws(100), atoms_for_redraws(1000),
+                                    "the object pass interns a word every redraw");
+}
+
+//==========================================================================
+// The global table -- section 14's second budget. It is 254 slots and the
+// design does not expect it to bind (this game has no frame to buy, so
+// nothing is in the flat namespace to make it faster), but M3 put twelve
+// parallel OCB lists and thirty-odd names into it in one go and a count
+// that is never taken is a count that surprises somebody later.
+//==========================================================================
+
+void test_the_game_fits_the_global_table(void)
+{
+    const int at_load = var_global_count(true);
+    // Play far enough that every procedure which mints a name has run.
+    start_game();
+    type_line("PULL RIGHT TORCH");
+    type_line("USE RIGHT");
+    type_line("EXAMINE");
+    type_line("LOOK");
+    type_line("MOVE");
+    type_line("TURN LEFT");
+    put_in_left_hand(4); // a seer scroll: the map
+    type_line("USE LEFT");
+    run("dagg.human dagg.key char 76");
+    run("dagg.burner  dagg.luknew  dagg.tick");
+
+    const int peak = var_global_count(true);
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "daggorath peaks at %d globals of %d, leaving %d",
+             peak, MAX_GLOBAL_VARIABLES, MAX_GLOBAL_VARIABLES - peak);
+    TEST_ASSERT_TRUE_MESSAGE(peak <= MAX_GLOBAL_VARIABLES - 16, msg);
+    TEST_ASSERT_TRUE_MESSAGE(peak >= at_load, "globals went down while playing");
 }
 
 //==========================================================================
@@ -1122,6 +2372,7 @@ int main(void)
     RUN_TEST(test_dirtab_holds_back_and_not_backward);
     RUN_TEST(test_a_command_reaches_its_handler_through_the_typed_line);
     RUN_TEST(test_backspace_unbuffers_and_stops_at_the_start);
+    RUN_TEST(test_the_command_line_carries_its_own_cursor);
     RUN_TEST(test_the_key_conversion_is_play10s);
     RUN_TEST(test_a_full_line_buffer_submits_itself);
     RUN_TEST(test_typing_does_nothing_while_unconscious);
@@ -1133,7 +2384,51 @@ int main(void)
     RUN_TEST(test_the_tick_beats_only_when_the_beat_is_due);
     RUN_TEST(test_the_recovery_task_reschedules_itself_at_the_heart_rate);
     RUN_TEST(test_clock_and_restore_round_trip_on_the_mock);
+    RUN_TEST(test_the_object_tables_are_section_10_2);
+    RUN_TEST(test_the_ring_the_macro_names_is_not_the_ring_the_player_types);
+    RUN_TEST(test_the_special_objects_follow_the_eighteen);
+    RUN_TEST(test_the_weights_and_outlines_are_by_class);
+    RUN_TEST(test_every_object_in_the_dungeon_is_created_and_creature_owned);
+    RUN_TEST(test_the_distribution_walks_down_and_wraps_past_level_five);
+    RUN_TEST(test_the_player_starts_with_a_wooden_sword_and_a_pine_torch);
+    RUN_TEST(test_gamdat_is_the_seam_a_board_uses_to_reach_a_ring);
+    RUN_TEST(test_an_unrevealed_object_shows_only_its_generic_name);
+    RUN_TEST(test_an_unrevealed_shield_wears_the_leather_shields_numbers);
+    RUN_TEST(test_reveal_needs_twenty_five_power_a_point_and_gives_the_numbers_back);
+    RUN_TEST(test_every_object_can_be_born_revealed_and_named);
+    RUN_TEST(test_get_and_drop_move_the_weight_and_the_floor);
+    RUN_TEST(test_a_dropped_object_stays_where_it_was_dropped);
+    RUN_TEST(test_an_object_on_the_floor_is_drawn_in_the_view);
+    RUN_TEST(test_a_dropped_sword_draws_its_two_runs_and_stops_when_picked_up);
+    RUN_TEST(test_stow_and_pull_leave_the_weight_alone);
+    RUN_TEST(test_a_full_hand_refuses_and_an_empty_one_has_nothing_to_give);
+    RUN_TEST(test_parobj_takes_a_generic_or_an_agreeing_adjective);
+    RUN_TEST(test_a_generic_name_takes_the_first_of_its_class);
+    RUN_TEST(test_you_start_in_the_dark_and_a_torch_is_the_only_light);
+    RUN_TEST(test_pulling_the_burning_torch_puts_it_out);
+    RUN_TEST(test_a_pine_torch_dies_at_five_minutes);
+    RUN_TEST(test_an_unrevealed_torch_burns_as_a_pine_torch_until_you_reveal_it);
+    RUN_TEST(test_every_torch_burns_the_way_burner_says_it_does);
+    RUN_TEST(test_a_dead_torch_still_gives_light_and_still_fights_as_darkness);
+    RUN_TEST(test_the_magic_channel_lights_a_secret_door_the_regular_one_does_not);
+    RUN_TEST(test_the_three_flasks_do_what_section_10_2_says);
+    RUN_TEST(test_an_emptied_flask_is_always_revealed);
+    RUN_TEST(test_an_unrevealed_scroll_does_nothing);
+    RUN_TEST(test_a_revealed_scroll_puts_the_map_up_and_stops_the_heart_being_drawn);
+    RUN_TEST(test_the_map_draws_one_stroke_a_run_of_rock);
+    RUN_TEST(test_the_map_comes_down_on_the_next_keystroke);
+    RUN_TEST(test_incant_needs_the_whole_word_and_the_right_one);
+    RUN_TEST(test_an_incanted_ring_keeps_its_charges_and_cannot_be_done_twice);
+    RUN_TEST(test_incant_reads_both_hands);
+    RUN_TEST(test_examine_lists_the_floor_and_the_bag);
+    RUN_TEST(test_the_examine_screen_is_laid_out_for_forty_columns);
+    RUN_TEST(test_examine_highlights_the_burning_torch);
+    RUN_TEST(test_the_torch_leaves_the_listing_when_pulled_and_returns_lit);
+    RUN_TEST(test_the_status_line_names_both_hands_and_still_measures_forty);
+    RUN_TEST(test_the_game_starts_and_stops);
     RUN_TEST(test_a_warm_redraw_spends_no_nodes_and_no_atoms);
+    RUN_TEST(test_a_warm_redraw_over_an_object_spends_nothing_either);
+    RUN_TEST(test_the_game_fits_the_global_table);
     RUN_TEST(test_the_game_fits_the_procedure_table);
     return UNITY_END();
 }
