@@ -1,24 +1,32 @@
-; Dungeons of Daggorath -- P17 M1: the dungeon and the view.
+; Dungeons of Daggorath -- P17 M1: the dungeon and the view, and M2: the
+; command line and the clock.
 ;
 ;   load "daggorath
 ;   daggorath
 ;
-; docs/daggorath-design.md is the design; this file is M1's slice of it --
-; section 15: "the cell walk, the architectural lists, MOVE and TURN with
-; both animations, the grey ramp, the inverted levels including the status
-; bar, and hw.setcpu "fast with restore.clock behind it."
+; docs/daggorath-design.md is the design; this file is M1 and M2's slice of
+; it -- section 15: M1 is "the cell walk, the architectural lists, MOVE and
+; TURN with both animations, the grey ramp, the inverted levels including
+; the status bar, and hw.setcpu "fast with restore.clock behind it"; M2 is
+; "the scheduler of section 5, the parser (PARSER.ASM/TOKEN.ASM), the text
+; furniture of sections 4.1b-4.1c, the heart drawn and beating, fainting,
+; damage recovery, death."
 ;
-; M1 does NOT include (see the M1 plan's scope note, and each is a later
-; milestone by design section 15):
+; This file does NOT include (each is a later milestone by design section
+; 15):
+;   - objects, the bag, both hands, torches and the two light channels
+;     (M3) -- the status line names both hands, but nothing ever puts
+;     anything in one, so both read EMPTY (STATUS.ASM's own M$EMPT), and
+;     the fade reads off a fixed ambient light (`dagg.light`) rather than
+;     RLIGHT from a burning torch.
+;   - creatures, peeks, combat (M4) -- no CFIND/PDRAW, and no LUKNEW in
+;     the scheduler because nothing sets NEWLUK yet.
 ;   - ladders/holes/VFTTAB (M5) -- the forward view always draws the plain
-;     ceiling line (VERT.ASM:CELINE); dagg.redraw never looks up a vertical
-;     feature table because there isn't one yet.
-;   - creatures, peeks, objects, torches (M3/M4) -- no CFIND/OFIND/PDRAW,
-;     and the fade uses a fixed ambient light constant (`dagg.light`)
-;     rather than RLIGHT/MLIGHT from a burning torch.
-;   - the heart, the parsed command line, the scheduler (M2) -- `dagg.move`
-;     and `dagg.turn` are plain procedures a caller invokes directly, not
-;     yet driven by a typed command.
+;     ceiling line (VERT.ASM:CELINE).
+;   - sound (M6) -- the heart beats and is drawn, but the thump on voices
+;     0 and 4 (design section 9.4) is M6's.
+;   - thirteen of the fifteen commands, which is why `dagg.soon` exists:
+;     MOVE and TURN are the two this file can already act on.
 ;
 ; The maze and the architectural vector lists are generated into this file
 ; by scripts/gen_daggorath.py -- see the marked block below. There is no
@@ -40,7 +48,16 @@ make "dagg.bakscl [156 100 65 40 26 16 10 6 3 1]
 ; VECTOR.ASM's fade table (design section 8), the dash column -- P18 M2's
 ; `setpendash` makes a dotted stroke cost the same as a solid one, so dots
 ; are M1's default (the grey alternative is M1a, optional, not built here).
-make "dagg.dash [1 2 3 5 9 17 33 65]
+;
+; It is BITMSK read through two of VECTOR.ASM's own quirks. SETFAX loads
+; `BITMSK+8` indexed by A, and A only ever reaches -6 there (the `CMPA #-7
+; / BLE` above it takes the darkness branch first), so the six entries used
+; are BIT0 through BIT5 -- 1, 2, 4, 8, 16, 32. VECTOR then does `INC
+; VCTFAD` before loading FADCNT from it, so the PERIOD is one more than the
+; table byte: 2, 3, 5, 9, 17, 33. There is no 65 -- design section 8 lists
+; one, reading BITMSK as though A reached -7, and that entry is unreachable
+; because -7 is already total darkness.
+make "dagg.dash [1 2 3 5 9 17 33]
 
 ; No torches yet (M3), so the fade reads off a fixed ambient light rather
 ; than RLIGHT -- 8, "typical dungeon level 1 or 2" per VIEWER.ASM's own
@@ -331,11 +348,12 @@ end
 
 ; SETFAX, VCTLST.ASM (design section 8): outputs whether this range draws
 ; at all, and sets the dash period as a side effect when it does.
+; `CMPA #-7 / BLE SFAD30` is total darkness at MINUS SEVEN, not past it.
 to dagg.setfade :range
   local "a
   make "a (:dagg.light - 7) - :range
   if not (:a < 0) [setpendash 1  output true]
-  if :a < -7 [output false]
+  if not (:a > -7) [output false]
   setpendash item ((0 - :a) + 1) :dagg.dash
   output true
 end
@@ -421,19 +439,38 @@ end
 ; is what erases it) -- so this is `write`, not `setcursor`+`type` the way
 ; battlezone/berzerk's HUD works. Do not "fix" this back to `setcursor`.
 ;
-; No hands/objects yet (M3), so the line is position/direction rather than
-; an invented inventory.
+; STATUX, STATUS.ASM: the left hand's object at column 0, the right hand's
+; right-justified to the last column, the heart between them, and the whole
+; row drawn in the OPPOSITE polarity to the view above it -- which is the
+; three-argument `write` P18 M1 exists for. The CoCo justifies to columns 0
+; and 31 of 32; ours is 0 and 39 of 40, design section 4.1's identity.
+;
+; It is one 40-character string and one `write`, not two writes of the two
+; names, because STATUX inverts the whole status row and not just the cells
+; a glyph lands in: the spaces between the hands are part of the bar.
+;
+; Nothing puts an object in a hand until M3, so both names are M$EMPT.
 
-make "dagg.dirnames [NORTH EAST SOUTH WEST]
+make "dagg.lhand "EMPTY
+make "dagg.rhand "EMPTY
+
+to dagg.spaces :n
+  local "s
+  make "s "
+  repeat :n [make "s word :s char 32]
+  output :s
+end
+
+to dagg.status.line
+  output (word :dagg.lhand
+               dagg.spaces (40 - ((count :dagg.lhand)
+                                  + (count :dagg.rhand)))
+               :dagg.rhand)
+end
 
 to dagg.status
-  local "text
-  make "text (sentence "LEVEL (:dagg.level + 1)
-                        "ROW :dagg.row "COL :dagg.col
-                        (item (:dagg.dir + 1) :dagg.dirnames))
-  pu (setpos -150 -55) pd
-  (write :text :dagg.status.fg :dagg.status.bg)
-  pu
+  pu (setpos -160 -55)
+  (write dagg.status.line :dagg.status.fg :dagg.status.bg)
 end
 
 ;==========================================================================
@@ -456,6 +493,9 @@ to dagg.enter.level :level
     make "dagg.status.fg 254  make "dagg.status.bg 0
   ]
   setbg :dagg.bg
+  ; The heart is a turtle wearing an `fe` (own-pen-colour) costume, so its
+  ; polarity is one `setpc` on turtle 1 -- NLVL50 flips it with the bar.
+  ask 1 [setpc :dagg.status.fg]
 end
 
 ;==========================================================================
@@ -469,6 +509,20 @@ end
 ; not reproduced pixel-for-pixel -- this draws each stroke, pauses, then
 ; erases it with `pe`, which is this codebase's own eraser (gen_rocks.py's
 ; own note: "`pe` still erases correctly"), not the ROM's polarity flip.
+;
+; TURN00 does FOUR things before the first stroke, and M1 did only the
+; first: set the scale to 1:1, set range 0's fade, ERASE THE CURRENT SCREEN
+; (`SWI ZFLIP`), and draw LINES -- two full-width horizontals at rows 16
+; and 136. The sweep plays on THAT picture, not over the view, and the
+; view for the new direction is built invisibly (PREVU/PUPSUB) and shown
+; afterwards. Drawing the sweep over the finished view instead means every
+; `pe` stroke gouges a full-height stripe out of it: long lines come back
+; with holes in them and short ones -- the distant ones -- disappear
+; outright.
+
+; LINES, PTURN.ASM: rows 16 and 136, the full 256 across, in the ys/xs run
+; form dagg.draw.run takes.
+make "dagg.turnlines [[[16 16] [0 255]] [[136 136] [0 255]]]
 
 to dagg.range8 :start :step
   local "out
@@ -477,53 +531,76 @@ to dagg.range8 :start :step
   output :out
 end
 
+; LRTU10 starts at 8 and adds 32 while the high byte is zero -- 8, 40, ...
+; 232, eight strokes. RLTU10 starts at 248 and subtracts 32 while the
+; result stays positive -- 248, 216, ... 24, also eight.
+;
+; `wait 13` is the one number in this file that is an estimate rather than
+; a transcription: VECTOR's inner loop is roughly fifty 0.895 MHz cycles a
+; point, a stroke is 118 points, and TURN10 draws it and then erases it, so
+; the CoCo spends ~13 ms a stroke and ~105 ms on a sweep. It is the number
+; to tune on a board if the whoosh reads too fast or too slow.
 to dagg.turnsweep :dir
   local "y0 local "y1 local "positions
   dagg.setscale 1 :dagg.norscl
+  ignore dagg.setfade 0
+  clean
+  setpc :dagg.ink
+  dagg.draw.runs :dagg.turnlines
   make "y0 :dagg.c - (:dagg.k * 17)
   make "y1 :dagg.c - (:dagg.k * 135)
   ifelse :dir = "lr [
-    make "positions dagg.range8 0 32
+    make "positions dagg.range8 8 32
   ] [
     make "positions dagg.range8 248 -32
   ]
-  setpc :dagg.ink
-  setpendash 1  ; dagg.redraw leaves the last range's fade behind
   foreach :positions [[cocox]
     local "x
     make "x (:dagg.k * :cocox) - :dagg.kx0
     pu (setpos :x :y0)
     pd (setpos :x :y1)
-    wait 2
+    refresh
+    wait 13
     pe (setpos :x :y0)
     pu
   ]
 end
 
-to dagg.turn.commit :newdir
-  make "dagg.dir :newdir
+; PTUR90 and PMOV90 both end `DEC UPDATE / SYNC` -- build the view for
+; where the player now is and put it on the screen. It is the LAST thing
+; a movement command does, after any animation, never before it.
+to dagg.show
   dagg.redraw :dagg.norscl
   refresh
 end
 
-to dagg.turn :which
-  if :which = "left [
-    dagg.turn.commit modulo (:dagg.dir - 1) 4
+; PTURN parses its own second token off the line (design section 15's
+; parser is M2's, and this is its first customer): DIRTAB row 1 LEFT,
+; 2 RIGHT, 4 AROUND, and everything else -- including UP, DOWN, BACK and
+; a missing token -- is ERRCMD2.
+to dagg.turn
+  local "n
+  make "n dagg.parse dagg.gettok :dagg.dirtab
+  if :n = 1 [
+    make "dagg.dir modulo (:dagg.dir - 1) 4
     dagg.turnsweep "lr
+    dagg.show
     stop
   ]
-  if :which = "right [
-    dagg.turn.commit modulo (:dagg.dir + 1) 4
+  if :n = 2 [
+    make "dagg.dir modulo (:dagg.dir + 1) 4
     dagg.turnsweep "rl
+    dagg.show
     stop
   ]
-  if :which = "around [
-    dagg.turn.commit modulo (:dagg.dir + 2) 4
+  if :n = 4 [
+    make "dagg.dir modulo (:dagg.dir + 2) 4
     dagg.turnsweep "rl
     dagg.turnsweep "rl
+    dagg.show
     stop
   ]
-  pr [TURN wants LEFT RIGHT or AROUND]
+  dagg.cmderr
 end
 
 ;==========================================================================
@@ -547,8 +624,7 @@ to dagg.move.forward
   dagg.redraw :dagg.hlfscl
   refresh
   if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
-  dagg.redraw :dagg.norscl
-  refresh
+  dagg.show
 end
 
 to dagg.move.backward
@@ -560,8 +636,7 @@ to dagg.move.backward
   dagg.redraw :dagg.bakscl
   refresh
   if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
-  dagg.redraw :dagg.norscl
-  refresh
+  dagg.show
 end
 
 ; Sidestep: PMOV30/40 -- step, redraw, and only on SUCCESS play the
@@ -574,19 +649,443 @@ to dagg.move.side :reldir
   make "ncol dagg.step.col :dagg.col :dir
   make "ok dagg.stepok :nrow :ncol
   if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
-  dagg.redraw :dagg.norscl
-  refresh
   if :ok [
     ifelse :reldir = 1 [dagg.turnsweep "rl] [dagg.turnsweep "lr]
   ]
+  dagg.show
 end
 
-to dagg.move :which
-  if :which = "forward [dagg.move.forward  stop]
-  if :which = "backward [dagg.move.backward  stop]
-  if :which = "left [dagg.move.side 3  stop]
-  if :which = "right [dagg.move.side 1  stop]
-  pr [MOVE wants FORWARD BACKWARD LEFT or RIGHT]
+; PMOVE, PTURN.ASM. A missing direction is forward (PARSER outputs 0 and
+; PMOVE's BLT/BGT both fall through), DIRTAB row 3 BACK is a step back,
+; rows 1 and 2 sidestep, and AROUND/UP/DOWN are ERRCMD2.
+;
+; PMOV90 charges the energy on every accepted MOVE, blocked or not, and
+; then calls HUPDAT -- so a corridor you cannot get out of still kills you.
+to dagg.move
+  local "n
+  make "n dagg.parse dagg.gettok :dagg.dirtab
+  if :n = 0 [dagg.move.forward  dagg.move.cost  stop]
+  if :n = 3 [dagg.move.backward  dagg.move.cost  stop]
+  if :n = 2 [dagg.move.side 1  dagg.move.cost  stop]
+  if :n = 1 [dagg.move.side 3  dagg.move.cost  stop]
+  dagg.cmderr
+end
+
+; PMOV90: (weight / 8) + 3, accumulated as damage. POBJWT starts at 35
+; (COMDAT.ASM's `FDB 30+5`) and only GET/DROP move it, so until M3 the
+; step costs a flat 7.
+to dagg.move.cost
+  make "dagg.pdam :dagg.pdam + (int (:dagg.objwt / 8)) + 3
+  dagg.hupdat
+end
+
+;==========================================================================
+; The player -- COMDAT.ASM's ONCE-only init block and ONCE.ASM:GAME10.
+;
+; PPOW is stored there as `FCB $17,160` and GAME10's `CLR PPOW` clears the
+; high byte before a real game, so the player starts at 160 power. POBJWT
+; is `FDB 30+5`.
+
+make "dagg.ppow 160
+make "dagg.pdam 0
+make "dagg.objwt 35
+make "dagg.heartr 46
+make "dagg.faint "false
+make "dagg.olight 8
+make "dagg.hearts "false
+make "dagg.heartf "true
+make "dagg.over "false
+
+;==========================================================================
+; The heart -- design section 4.1a: turtle 1 wearing one of two costumes,
+; because the compositor draws turtles OVER the picture and the redraw's
+; `clean` therefore never has to repair it. It is the fastest-moving thing
+; in the game (twenty times a second at the faint threshold) and it must
+; cost nothing.
+;
+; The two glyph pairs are SWCHAR.ASM:SPCTAB's small and large hearts,
+; I.SHL/I.SHR and I.LHL/I.LHR, transcribed as one 16-bit row mask a scan
+; line -- the CoCo draws each as two 8-pixel character cells side by side,
+; which is 16 pixels, and our own status cell is 8 wide by 10 tall, so the
+; pair lands on exactly two cells here too. Eight rows because that is
+; putsh's minimum dimension (the ROM's glyph is seven).
+;
+;        small                     large
+;   ................    0   ................       0
+;   ........#.#.....  160   .......##.##....     432
+;   .......#####....  496   ......#######...    1016
+;   .......#####....  496   ......#######...    1016
+;   ........###.....  224   .......#####....     496
+;   .........#......   64   ........###.....     224
+;   ................    0   .........#......      64
+;   ................    0   ................       0
+
+make "dagg.heart.small [0 160 496 496 224 64 0 0]
+make "dagg.heart.large [0 432 1016 1016 496 224 64 0]
+
+; `fe` is "the wearing turtle's own pen colour" and `ff` is transparent, so
+; one pair of costumes serves both polarities of design section 4.3 -- the
+; level flip is a `setpc` on turtle 1, not a second pair of shapes.
+to dagg.shrow :mask
+  local "s
+  make "s item (1 + bitand (lshift :mask -15) 1) [ff fe]
+  repeat 15 [
+    make "s word :s
+      item (1 + bitand (lshift :mask (repcount - 15)) 1) [ff fe]
+  ]
+  output :s
+end
+
+to dagg.putheart :slot :rows
+  local "out
+  make "out []
+  foreach :rows [[m] make "out lput dagg.shrow :m :out]
+  putsh :slot :out
+end
+
+; Centred between the two hand names, on the same character row the status
+; line is written to: turtle x 0 is device column 160, which is columns 19
+; and 20 of the forty.
+to dagg.setup.heart
+  dagg.putheart 1 :dagg.heart.small
+  dagg.putheart 2 :dagg.heart.large
+  make "dagg.hearts "false
+  make "dagg.heartf "true
+  ask 1 [
+    setrot "fixed
+    pu (setpos 0 -55)
+    setpc :dagg.status.fg
+    setsh 1
+    st
+  ]
+end
+
+; CLK30, COMMON.ASM: count HEARTC down a jiffy at a time and, at zero,
+; reload it from HEARTR and toggle the glyph. Scheduling the next beat is
+; the same thing without the countdown, and it is what section 5 asks for.
+;
+; `COM HEARTS` toggles rather than cycling small-large-small, so the drawn
+; period is two beats. HEARTF is cleared while a scroll puts the map up
+; (PUSE.ASM:USC210) -- the beat carries on, the picture of it stops.
+;
+; The thump itself is M6 (design section 9.4): voices 0 and 4 are reserved
+; for it so nothing can flush it.
+to dagg.beat
+  make "dagg.heart.due :dagg.now + (:dagg.heartr * 16.667)
+  make "dagg.hearts not :dagg.hearts
+  if :dagg.heartf [
+    ifelse :dagg.hearts [ask 1 [setsh 2]] [ask 1 [setsh 1]]
+    refresh
+  ]
+end
+
+;==========================================================================
+; HUPDAT -- HUPDAT.ASM:HUPDAX, the heart rate, fainting, waking and death.
+;
+; The comment in the ROM reads J = (P * 64) / (P + 2D) - 19, and the code
+; does NOT compute that. HUPD20 divides by repeated subtraction and bumps
+; the count BEFORE testing for the borrow, so the subtraction that goes
+; negative is counted too: J = floor(64P / (P + 2D)) + 1 - 19. At the start
+; (P 160, D 0) that is 46 jiffies -- 766 ms, 78 beats a minute -- where
+; design section 9.4's paraphrase of the ROM's own comment says 45, 750 ms
+; and 80. The ROM is the authority (design section 1), so this is 46.
+to dagg.hupdat
+  make "dagg.heartr ((int ((64 * :dagg.ppow)
+                           / (:dagg.ppow + (2 * :dagg.pdam)))) + 1) - 19
+  ifelse :dagg.faint [
+    if :dagg.heartr > 4 [dagg.faint.up]
+  ] [
+    if not (:dagg.heartr > 3) [dagg.faint.down]
+  ]
+  if :dagg.pdam > :dagg.ppow [dagg.death]
+end
+
+; HUPD30: the light is walked down one step at a time with a full redraw at
+; each until the screen is black, then the keyboard buffer is thrown away.
+; The beat keeps time through it -- that is what the CoCo's IRQ did for
+; free while the game task blocked, and it is why `dagg.heart.tick` is
+; separate from `dagg.tick` (design section 9.4).
+to dagg.faint.down
+  ct
+  make "dagg.olight :dagg.light
+  until [:dagg.light < -7] [
+    make "dagg.light :dagg.light - 1
+    dagg.redraw :dagg.norscl
+    refresh
+    dagg.heart.tick
+  ]
+  clean
+  refresh
+  make "dagg.faint "true
+  until [not key?] [ignore rc]
+end
+
+; HUPD42, and it walks back one step FURTHER than it walked down: the ROM
+; increments and then tests `CMPA OLIGHT / BLE`, so it leaves at OLIGHT + 1.
+; That is the ROM's arithmetic, not a transcription slip.
+to dagg.faint.up
+  until [:dagg.light > :dagg.olight] [
+    dagg.redraw :dagg.norscl
+    refresh
+    dagg.heart.tick
+    make "dagg.light :dagg.light + 1
+  ]
+  make "dagg.faint "false
+  dagg.prompt
+end
+
+; DEATH: the wizard fades in, the status line goes, and the ROM sits in
+; `BRA *` until a keystroke restarts the game. WIZ1's vector list is M4's
+; creature data, so what M2 owns is the bar going, the message arriving,
+; and the loop ending.
+to dagg.death
+  make "dagg.over "true
+  make "dagg.heartf "false
+  ask 1 [ht]
+  pr []
+  type char 32
+  pr [YET ANOTHER DOES NOT RETURN...]
+end
+
+;==========================================================================
+; The scheduler -- design section 5. The ROM's CLOCK IRQ drives five queues
+; and a ready list; ours is one pass over the timers that exist, each a
+; global holding the `ticks` value it is next due at. `ticks` is
+; milliseconds and monotonic; a jiffy is 16.667 ms.
+;
+; Only two timers exist at M2. LUKNEW (twice a second) has nothing to do
+; until a creature or a burning torch sets NEWLUK, and BURNER (once a
+; minute) needs a torch, so both arrive with their own milestones rather
+; than as empty procedures here.
+;
+; `dagg.heart.tick` is deliberately separate: it is the IRQ's half of the
+; work, the half a long blocking effect has to keep calling.
+
+make "dagg.now 0
+make "dagg.heart.due 0
+make "dagg.hslow.due 0
+
+to dagg.heart.tick
+  make "dagg.now ticks
+  if not (:dagg.now < :dagg.heart.due) [dagg.beat]
+end
+
+to dagg.tick
+  dagg.heart.tick
+  if not (:dagg.now < :dagg.hslow.due) [dagg.hslow]
+end
+
+; HSLOW, COMPLR.ASM: recover a 64th of the damage and reschedule HEARTR
+; jiffies out, so recovery runs at the heart's own rate and is slowest
+; exactly when you are most hurt. ASRD6 shifts a NEGATED damage right six
+; places, which floors a negative number, so the ROM recovers
+; ceil(damage / 64) -- one point of damage still heals. The reschedule
+; reads HEARTR after HUPDAT, not before.
+to dagg.hslow
+  make "dagg.pdam :dagg.pdam - (int ((:dagg.pdam + 63) / 64))
+  if :dagg.pdam < 0 [make "dagg.pdam 0]
+  dagg.hupdat
+  make "dagg.hslow.due ticks + (:dagg.heartr * 16.667)
+end
+
+;==========================================================================
+; The parser -- PARSER.ASM and TOKEN.ASM.
+;
+; A token matches a table entry when it is a PREFIX of that entry's word
+; (PARS12 stops comparing when the token runs out), and two matches are an
+; error rather than a preference (PARS20's `TST PARFLG / BNE PARS90`). So
+; M is MOVE and Z is neither ZLOAD nor ZSAVE. The four-letter names in
+; DTABAS.ASM's CMDXXX macro -- ATTK, INCN, REVE -- are assembler symbols
+; and are NOT what the parser matches: CMDTAB holds the full words, and
+; ATTK is not a prefix of ATTACK.
+;
+; FULFLG is set when the token is the whole word, which is what INCANT
+; needs (M3) and nothing else looks at.
+
+make "dagg.fulflg "false
+
+to dagg.prefix? :tok :cmd
+  if (count :tok) > (count :cmd) [output "false]
+  repeat count :tok [
+    if not ((item repcount :tok) = (item repcount :cmd)) [output "false]
+  ]
+  output "true
+end
+
+; PARSER's own three answers: 0 for a null token (PARS92 stores D = 0),
+; -1 for no match or two matches (PARS90 stores NEGONE), otherwise the
+; entry's 1-based row. Callers test `BLE` where a null token is illegal and
+; `BLT` where it is not, which is exactly `:n < 1` against `:n < 0`.
+to dagg.parse :tok :table
+  local "hit local "cmd
+  make "dagg.fulflg "false
+  if empty? :tok [output 0]
+  make "hit 0
+  repeat count :table [
+    make "cmd first item repcount :table
+    if dagg.prefix? :tok :cmd [
+      if :hit > 0 [make "dagg.fulflg "false  output -1]
+      make "hit repcount
+      if (count :tok) = (count :cmd) [make "dagg.fulflg "true]
+    ]
+  ]
+  if :hit = 0 [output -1]
+  output :hit
+end
+
+; CMDTAB and DISPAT, TOKEN.ASM/DTABAS.ASM, in the ROM's own order and
+; paired with the instruction that runs each -- design section 14's third
+; rule, one `run` over a table row rather than fifteen procedures.
+; It arrives in seven statements because `load` runs a file a LINE at a
+; time, so a list literal that spans lines is not a thing this dialect can
+; be given; seven `se`s that run once at load read better than one
+; 320-character line.
+make "dagg.cmdtab [[ATTACK [dagg.soon]] [CLIMB [dagg.soon]] [DROP [dagg.soon]]]
+make "dagg.cmdtab se :dagg.cmdtab [[EXAMINE [dagg.soon]] [GET [dagg.soon]]]
+make "dagg.cmdtab se :dagg.cmdtab [[INCANT [dagg.soon]] [LOOK [dagg.soon]]]
+make "dagg.cmdtab se :dagg.cmdtab [[MOVE [dagg.move]] [PULL [dagg.soon]]]
+make "dagg.cmdtab se :dagg.cmdtab [[REVEAL [dagg.soon]] [STOW [dagg.soon]]]
+make "dagg.cmdtab se :dagg.cmdtab [[TURN [dagg.turn]] [USE [dagg.soon]]]
+make "dagg.cmdtab se :dagg.cmdtab [[ZLOAD [dagg.soon]] [ZSAVE [dagg.soon]]]
+
+; DIRTAB. The string T.BAK labels is BACK, not BACKWARD -- the CoCo manual
+; prints MOVE BACKWARD and the table does not hold it, so that spelling
+; fails the prefix test and MOVE BACK, MOVE BA and MOVE B all pass it.
+make "dagg.dirtab [[LEFT] [RIGHT] [BACK] [AROUND] [UP] [DOWN]]
+
+;==========================================================================
+; The line buffer and the tokens.
+;
+; LINBUF is 32 characters and HMAN20 falls into the carriage-return path
+; when it fills, so a 32-character line submits itself. It is held here as
+; a list of one-character words rather than as one growing word: a word
+; interns, and a keystroke at a time would put every prefix of every line
+; ever typed into the word table.
+
+make "dagg.sp char 32
+make "dagg.linbuf []
+make "dagg.tokens []
+make "dagg.linptr 1
+
+; GETTOK, PARSER.ASM: leading spaces are eaten and runs of them separate,
+; which is what splitting on non-empty runs does.
+to dagg.split :chars
+  local "out local "tok
+  make "out []
+  make "tok []
+  foreach :chars [[c]
+    ifelse :c = :dagg.sp [
+      if not empty? :tok [make "out lput :tok :out  make "tok []]
+    ] [
+      make "tok lput :c :tok
+    ]
+  ]
+  if not empty? :tok [make "out lput :tok :out]
+  output :out
+end
+
+to dagg.gettok
+  if :dagg.linptr > count :dagg.tokens [output []]
+  make "dagg.linptr :dagg.linptr + 1
+  output item (:dagg.linptr - 1) :dagg.tokens
+end
+
+;==========================================================================
+; The text window -- design section 4.1c. The one thing that changes
+; BETWEEN pictures rather than with them is the command line, so lines 24
+; to 31 carry the messages and the prompt and nothing else. The status line
+; is in the picture (see dagg.status) and does not live here.
+
+; PROMPT, MISC.ASM: M$PROM1 is I.CR then I.DOT, and M$CURS draws an
+; underline and backs over it. Our text window has a real cursor, so the
+; prompt is the newline and the period.
+to dagg.prompt
+  pr []
+  type char 46
+end
+
+; CMDERR, PARSER.ASM: two I.QUES, printed where the echoed line stopped,
+; and the rest of the line thrown away (HMAN70 resets LINPTR).
+to dagg.cmderr
+  type word char 63 char 63
+end
+
+; The thirteen commands whose milestones are still ahead. Each row of
+; dagg.cmdtab loses this as its own milestone lands; the table is complete
+; from M2 because the PARSER's ambiguity rule depends on it -- Z has to be
+; ambiguous and M has to not be.
+to dagg.soon
+  pr [NOT YET]
+end
+
+;==========================================================================
+; HUMAN -- HUMAN.ASM:PLAY10/HUMAN. Echo the character, buffer it, handle
+; backspace, and on carriage return parse and dispatch.
+
+; PLAY10's ASCII-to-internal conversion: carriage return and backspace get
+; their own codes, A-Z survive as themselves, and everything else becomes a
+; space (the `CLRB` fallthrough). ESC is this port's one addition, because
+; the ROM's death loop is `BRA *` and a Logo game has to let go.
+to dagg.key :c
+  local "a
+  make "a ascii :c
+  if :a = 27 [output "esc]
+  if :a = 13 [output "cr]
+  if :a = 10 [output "cr]
+  if :a = 8 [output "bs]
+  if :a = 127 [output "bs]
+  make "c uppercase :c
+  make "a ascii :c
+  if and (:a > 64) (:a < 91) [output :c]
+  output char 32
+end
+
+to dagg.human :c
+  if :c = "esc [make "dagg.over "true  stop]
+  if :dagg.faint [stop]
+  if :c = "bs [
+    if empty? :dagg.linbuf [stop]
+    make "dagg.linbuf bl :dagg.linbuf
+    type char 8
+    stop
+  ]
+  if :c = "cr [dagg.enter  stop]
+  type :c
+  make "dagg.linbuf lput :c :dagg.linbuf
+  if (count :dagg.linbuf) = 32 [dagg.enter]
+end
+
+; HMAN30/HMAN50/HMAN70: terminate the buffer, reset the pointer, dispatch
+; on the first token, then prompt -- unless we are unconscious, in which
+; case there is no prompt to give.
+to dagg.enter
+  make "dagg.tokens dagg.split :dagg.linbuf
+  make "dagg.linbuf []
+  make "dagg.linptr 1
+  dagg.dispatch
+  if :dagg.over [stop]
+  if :dagg.faint [stop]
+  dagg.prompt
+end
+
+to dagg.dispatch
+  local "n
+  make "n dagg.parse dagg.gettok :dagg.cmdtab
+  if :n = 0 [stop]
+  if :n < 0 [dagg.cmderr  stop]
+  run item 2 (item :n :dagg.cmdtab)
+end
+
+;==========================================================================
+; The game loop -- design section 5. Input is polled and never blocked on:
+; `readchar` would stop the world and `pollkeys` discards the characters,
+; and this is a typing game.
+
+to dagg.play
+  until [:dagg.over] [
+    dagg.tick
+    if key? [dagg.human dagg.key rc]
+  ]
 end
 
 ;==========================================================================
@@ -613,27 +1112,44 @@ end
 ; Entry points. No `erall` here -- that is the operator's job before
 ; `load`, same convention as tests/logo/p17m0's own header.
 ;
-; No scheduler/parser yet (M2), so `daggorath` sets up the picture and
-; returns; `dagg.move`/`dagg.turn` are called directly from here on.
+; `daggorath` is GAME10 through GAME50: set the player where the ROM sets
+; him, build the level, then fall into the scheduler. It returns when the
+; player quits or dies, and puts the screen back the way it found it.
 
 ; ONCE.ASM:GAME10 -- `LDD #$100B / STD PROW` -- row 16, column 11, facing
 ; north, which is where docs/DungeonsOfDaggorath/Levels/level1.svg draws the
 ; player's blue dot. COMDAT.ASM's `FCB 12 / FCB 22` is the attract-mode
 ; DEMO's start; GAME10 overwrites it, and (12,22) is not a carved cell.
+;
+; GAME50 makes the initial view, fakes the prompt and falls into the
+; scheduler, which is the last three statements here.
 to daggorath
   make "dagg.row 16  make "dagg.col 11  make "dagg.dir 0
+  make "dagg.ppow 160  make "dagg.pdam 0  make "dagg.objwt 35
+  make "dagg.light 8  make "dagg.olight 8
+  make "dagg.faint "false  make "dagg.over "false
+  make "dagg.linbuf []  make "dagg.tokens []  make "dagg.linptr 1
   splitscreen
   window
+  ct
   ht
   setrefresh "manual
   ignore clock
   dagg.enter.level 0
+  dagg.setup.heart
+  dagg.hupdat
+  make "dagg.heart.due ticks
+  make "dagg.hslow.due ticks + (:dagg.heartr * 16.667)
   dagg.redraw :dagg.norscl
   refresh
+  dagg.prompt
+  dagg.play
+  daggorath.quit
 end
 
 to daggorath.quit
   restore.clock
+  ask 1 [ht  setsh 0]
   setrefresh "auto
   setpendash 1
   setpc 254

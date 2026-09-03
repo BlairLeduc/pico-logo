@@ -2444,7 +2444,9 @@ the game is not started.
 Status: **design drafted 2026-09-02; M0 confirmed on a Pico Plus 2 W,
 2026-09-02 — gate PASSES at 53.2 ms against the 100 ms budget; M1 written the
 same day and confirmed on hardware 2026-09-03, after three bugs that the host
-had recorded as done.** "No board needed for a Logo-only milestone" is what
+had recorded as done; M2 written and confirmed on a Pico Plus 2 W 2026-09-03,
+a run that found two more M1 bugs in the turn animation ([B84](bugs.md),
+[B85](bugs.md)).** "No board needed for a Logo-only milestone" is what
 this entry used to say, and it was wrong three times over — see M1 below.
 Pico 2 and Pico 2 W still to run M0, though nothing in the result is expected
 to be board-specific. `tests/logo/p17m0` timed all three of section 6.3's list
@@ -2514,6 +2516,76 @@ and §15 for the rest of the porting notes — a `MAKDOR` retry bug caught by an
 infinite loop in the generator, `LVLTAB`'s seed table turning out to be a
 sliding window rather than five independent seeds, and an O(n²) list build
 that had to become two `item` lookups.
+
+**M2 — the command line and the clock. Written 2026-09-03; green on the host,
+and the two things it corrects are both places the design read a macro instead
+of the data it generates.** The scheduler of design §5, the parser
+(`PARSER.ASM`/`TOKEN.ASM`), the text furniture of §4.1b–§4.1c, the heart drawn
+and beating, fainting, damage recovery and death. 53 tests, all passing.
+
+**The heart is 46 jiffies at full health, not 45.** `HUPDAT.ASM` opens with
+`J = (P * 64) / (P + 2D) - 19` as a comment and the code below it computes
+something one larger: `HUPD20` divides by repeated subtraction and does
+`INC T6` *before* the `BCC`, so the subtraction that goes negative is counted.
+766 ms and 78 beats a minute, and half-damaged is 14 jiffies rather than 13.
+The gate asked for the rate to track the formula "within a jiffy" over a
+scripted damage ramp; it tracks it **exactly**, because the test's oracle is
+`HUPD20` itself transcribed into C rather than the closed form the Logo
+evaluates — the two agree by arithmetic, not by transcription, which is the
+only way that test could have caught this.
+
+**And "four-letter abbreviations" was never how the parser works.**
+`DTABAS.ASM`'s `CMDXXX` macro carries `ATTK`, `INCN`, `REVE`, `ZSAV` beside
+each command, and those are *assembler symbols*. `TOKEN.ASM`'s `CMDTAB` holds
+the **full words**, `PARS12` stops comparing when the token runs out, and two
+matches are an error rather than a preference — so the game takes **any
+unambiguous prefix**, `M` is `MOVE`, `Z` is neither `ZLOAD` nor `ZSAVE`, and
+`ATTK` matches nothing at all. This is the same mistake in the same place as
+M1's `LVLTAB` "five seeds": **the macro is not the table.** `T.BAK`'s string
+is `BACK`, so the manual's `MOVE BACKWARD` does not parse either.
+
+Three ROM behaviours were kept that a tidier port loses: `PMOV90` charges
+`(weight / 8) + 3` damage on every accepted `MOVE` **whether or not the step
+happened**; `HSLOW` recovers `ceil(damage / 64)` (`ASRD6` floors a *negated*
+damage) and reschedules at the heart's own rate, so healing is slowest exactly
+when you are most hurt; and `HUPD42` walks the light back one step **further**
+than fainting walked it down. Two things the port decided for itself: the line
+buffer is a list of one-character words rather than a growing word, because a
+word interns and a keystroke at a time would put every prefix of every line
+ever typed into the arena `nodes` reports on; and `CMDTAB` arrives as seven
+`se` statements because **`load` runs a file a line at a time**, so a list
+literal cannot span lines. The one departure from the ROM is ESC — `DEATH`
+ends in `BRA *` and `PLAY10` turns every non-letter into a space, so there is
+no key that means stop.
+
+**Run on a Pico Plus 2 W the same day, and the board found two more M1 bugs
+— both in the turn animation.** "I remember animation when turning but is
+missing from the port", "in the distance some lines are not drawn (or
+erased?)", "when I `turn right` I see dots (breaks) on the horizontal lines":
+three faces of one thing. `PTURN.ASM:TURN00` **erases the screen** and draws
+two horizontal lines before the sweep, and `PREVU`/`PUPSUB` build the new view
+*in the backplane* so `PTUR90` can flip it in **after** the animation. M1 had
+it inside out — new view drawn and presented, then the sweep run over it — so
+each stroke's `pe` cut a full-height stripe out of the finished picture: long
+lines holed, short (distant) ones erased outright. And none of it read as
+motion, because the game runs `setrefresh "manual` and the sweep never called
+`refresh`; the damage only reached the panel on the next heartbeat's refresh,
+which is why the corruption showed and the movement did not.
+[B84](bugs.md), and [B85](bugs.md) with it: the fade table had a **seventh
+period of 65 the ROM cannot reach** — `SFAD10`'s `CMPA #-7 / BLE` takes the
+darkness branch before `BITMSK`'s `BIT6` is ever indexed, and `VECTOR`'s
+`INC VCTFAD` means the period is one *more* than the table byte. Six levels,
+1–33, dark at −7. The design's §6.4 and §8 are corrected with the code.
+
+58 tests, and the four animation gates were each checked against the old code
+before the fix. **Confirmed on a Pico Plus 2 W 2026-09-03 with the fixes in** —
+the view, the status bar with the heart beating in it, the scrolling command
+line and both animations, with the sweep's estimated ~13 ms a stroke reading
+right and needing no tuning. What the board has *not* exercised is the half of
+M2 you cannot reach by playing: fainting is 153 damage and death 161, twenty-
+three walks into a wall at seven damage a `MOVE`, so both stay host-tested
+against `HUPD20` and the faint set piece's sixteen back-to-back redraws remain
+uncosted on hardware.
 
 A faithful port of the 1982 DynaMicro game from **its own 6809 source**, 9,866
 lines of it, kept under `docs/DungeonsOfDaggorath/` with the grant of licence
@@ -2622,8 +2694,8 @@ rule — down a hole or a ladder, up a ladder only — gives 1↔2 and 2↔3 by 
 and 4 → 5 by holes that cannot be climbed back up. None of it is a special case
 in the ROM, and none of it will be here.
 
-M0 and M1 done; M1a (the dot fade, optional) and M2–M6 still ahead, gates in
-the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) went
+M0, M1 and M2 done; M1a (the grey ramp, optional and decided by a pair of
+eyes) and M3–M6 still ahead, gates in the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) went
 first** (decided 2026-09-02): its M0–M2 are the procedure table, the opaque
 `write` and the dashed pen, and P17 M1 wanted all three — a status line it can
 invert, a file it can grow into, and a fade it can draw the way the ROM draws

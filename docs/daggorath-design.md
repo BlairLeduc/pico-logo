@@ -333,6 +333,17 @@ to tick                       ; one pass of the scheduler
 end
 ```
 
+**M2 built two of those four, and the two it left out are empty rather than
+deferred.** `LUKNEW` has nothing to do until a creature or a burning torch
+sets `NEWLUK` (M4, M3) and `BURNER` needs a torch, so they arrive with the
+things that give them work instead of as procedures that do nothing.
+`HSLOW` is not on the second queue at all: `COMPLR.ASM` returns `HEARTR` and
+`Q.JIF`, so damage recovery runs at the heart's own rate — it is a jiffy task
+that reschedules itself a heartbeat out. And `heart.tick` is a **separate
+entry point** from `tick`, not just its first line, because it is the half a
+long blocking effect keeps calling (§9.4) and re-entering the whole scheduler
+from inside `HUPDAT` would recurse straight back into it.
+
 Each timer is a global holding the wall-clock `ticks` value it is next due at,
 which is what the ROM's countdown fields are. `ticks` is milliseconds and
 monotonic; a jiffy is 16.67 ms.
@@ -463,6 +474,24 @@ no rotation.
 step, then the step and the real frame. Two redraws per `MOVE`, which is what
 §12's budget is cut against. A side-step draws a single sweeping line instead.
 
+**And the order is load-bearing, which this section did not say and M1 got
+backwards** ([B84](bugs.md), reported off a board during M2). `PREVU` sets
+`PDIR` and calls `PUPSUB`, which builds the new view **in the backplane** —
+invisibly; the sweep then plays on the *visible* screen, which `TURN00` has
+just blanked down to those two horizontal lines; and only `PTUR90`'s
+`DEC UPDATE / SYNC` flips the new view in. So the sequence is **turn, animate,
+show** — never draw the new picture and then animate over it, because the
+erase half of each stroke would cut a full-height stripe out of it. `PMOV30`
+and `PMOV40` are the same shape (`PSTEP` builds, `RLTURN`/`LRTURN` animates,
+`PMOV90` shows), and a *blocked* side-step skips the animation but still
+shows. We have no backplane, but we do not need one: the animation begins by
+erasing the screen anyway, so "build invisibly, then flip" and "animate on a
+blank screen, then draw" put the same pixels in front of the player.
+
+The strokes are at CoCo columns **8, 40 … 232** left-to-right (`LRTU10` loads
+`#8`) and **248, 216 … 24** right-to-left, so the two sweeps are not mirror
+images of each other.
+
 ---
 
 ## 7. The world
@@ -592,7 +621,7 @@ comparison, and it produces the whole shape of the game.
 A := (magic? MLIGHT : RLIGHT) - 7 - RANGE
 A >= 0   ->  full brightness
 A <= -7  ->  invisible, draw nothing
-else     ->  VCTFAD := BITMSK[8+A]        ; 1, 2, 4, 8, 16, 32, 64
+else     ->  VCTFAD := BITMSK[8+A]        ; 1, 2, 4, 8, 16, 32
 ```
 
 and `VECTOR.ASM` then plots **one pixel in every `VCTFAD`+1** along the line.
@@ -607,8 +636,17 @@ On a one-bit display that dot fraction *is* the grey level. So:
 | −4 | 1/9 | 28 |
 | −5 | 1/17 | 15 |
 | −6 | 1/33 | 8 |
-| −7 | 1/65 | 4 |
-| ≤ −8 | 0 | — draw nothing |
+| ≤ −7 | 0 | — draw nothing |
+
+**There are six fade levels and no 1/65** — an earlier version of this table
+had seven and put the cutoff at −8, which is the pseudocode above read
+backwards. `SFAD10` does `DECB` and *then* `CMPA #-7 / BLE SFAD30`, so A = −7
+takes the darkness branch before `LDB A,X` is ever reached and `BITMSK`'s
+`BIT6` is unreachable data. The `+1` is not decoration either: `VECTOR` does
+`INC VCTFAD` before it loads `FADCNT` and `DEC VCTFAD` again at `VECT99`, so
+the byte in the table is one *less* than the period. Corrected 2026-09-03
+([B85](bugs.md)) while confirming [B84](bugs.md); M1 had shipped the
+seven-entry reading.
 
 **The `VCTFAD` column is the whole of the fade, and P18 M2 gives it to us
 verbatim.** `setpendash (VCTFAD + 1)` plots one pixel in every *n* along a
@@ -785,9 +823,20 @@ and large.
 HEARTR  =  (64 * PPOW) / (PPOW + 2 * PDAM)  -  19      jiffies between beats
 ```
 
-At the start (`PPOW` 160, `PDAM` 0) that is 45 jiffies — **750 ms, 80 beats a
-minute**. Half-damaged it is 13 jiffies. At `HEARTR ≤ 3` you faint; you come
-round above 4; and you die when `PDAM > PPOW`.
+**That is the comment at the head of `HUPDAT.ASM`, and the code below it
+computes something one larger.** `HUPD20` divides by repeated subtraction and
+does `INC T6` *before* `BCC`, so the subtraction that goes negative is counted
+too: the quotient is `floor(64P / (P + 2D)) + 1`. At the start (`PPOW` 160,
+`PDAM` 0) that is **46 jiffies — 766 ms, 78 beats a minute**, not the 45, 750
+and 80 this paragraph used to claim; half-damaged it is 14, not 13. §1's rule
+decides it — where the design and the ROM disagree the ROM is right — and M2
+ships the ROM's arithmetic with `HUPD20` itself, transcribed into C, as the
+test's oracle rather than the closed form the Logo evaluates.
+
+At `HEARTR ≤ 3` you faint (`HUPD30`, `CMPA #3 / BGT`); you come round *above*
+4 (`HUPD40`, `CMPA #4 / BLE`), which is deliberately not the same number; and
+you die when `PDAM > PPOW`. At 160 power those three thresholds are 153, 142
+and 161 damage, so **fainting is the last eight points before dying**.
 
 Ours is a short low thump on voices 0/4 with a percussive envelope, and the
 same tick redraws the heart at its other size. **The beat is the game's clock
@@ -1260,13 +1309,102 @@ is left is the alternative: eight `setpalette` entries and the other half of one
 both modes, at a fresh Solar torch and a dying Pine one — which is the one gate
 in this design decided by a pair of eyes.*
 
-**M2 — the command line and the clock.**
-The scheduler of §5, the parser (`PARSER.ASM`/`TOKEN.ASM` — four-letter
-abbreviations, `FULFLG` for `INCANT`), the text furniture of §4.1b–§4.1c, the heart
+**M2 — the command line and the clock. Done 2026-09-03; not yet seen on a
+board.**
+The scheduler of §5, the parser (`PARSER.ASM`/`TOKEN.ASM` — any unambiguous
+prefix, `FULFLG` for `INCANT`), the text furniture of §4.1b–§4.1c, the heart
 drawn and beating, fainting, damage recovery, death. *Gate: the heart's rate
 tracks `HUPDAT`'s formula within a jiffy over a scripted damage ramp; the
 `write`-n status line survives a redraw and every line of it measures 40
 columns or fewer.*
+
+**The gate is met exactly rather than within a jiffy, and the reason is that
+the oracle changed.** `test_the_heart_rate_tracks_hupdats_own_division` runs a
+nine-point damage ramp against `HUPD20`'s repeated-subtraction loop
+transcribed into C, not against the closed form the Logo evaluates, so the two
+have to agree by arithmetic and not by transcription. They agree to the
+jiffy at every point — and in agreeing they contradict this design's own §9.4,
+which had paraphrased the ROM's *comment*: the beat is 46 jiffies at full
+health and not 45. §9.4 now records the ROM's arithmetic and why. The status
+line measures 40 columns by `type` against the mock with the output cleared,
+survives a redraw (it is written *inside* `dagg.redraw`, because §4.1b's
+`clean` is the only eraser there is), and lands at column 0 of the character
+row the status band starts on.
+
+**"Four-letter abbreviations" was a misreading of the wrong table, and it is
+the second time this design has been caught reading a macro instead of the
+data.** `DTABAS.ASM`'s `CMDXXX` macro carries a four-letter name beside each
+command — `ATTK`, `INCN`, `REVE`, `ZSAV` — and those are *assembler symbols*
+(`T.ATTK`, `M$ATTK`), not what the player types. `TOKEN.ASM`'s `CMDTAB` holds
+the **full words**, and `PARSER.ASM:PARS12` stops comparing when the *token*
+runs out, so a command matches on any prefix and `ATTK` matches nothing at all
+because it is not one. Two matches are an error rather than a preference
+(`PARS20`'s `TST PARFLG / BNE PARS90`), which is why `Z` is neither `ZLOAD`
+nor `ZSAVE` while `M` is `MOVE`. This is the same shape of mistake as
+`LVLTAB`'s "five seeds" at M1: the macro is not the table.
+
+**`T.BAK`'s string is `BACK`.** The CoCo manual prints `MOVE BACKWARD`;
+`TOKEN.ASM` holds four characters, so `BACKWARD` fails the prefix test
+outright and `BACK`, `BA` and `B` all pass it.
+
+**Three ROM behaviours were kept that a tidier port would have lost.**
+`PMOV90` charges `(weight / 8) + 3` damage on every accepted `MOVE` *whether
+or not the step happened*, so walking into a wall costs what walking costs.
+`HSLOW` recovers `ceil(damage / 64)` — `ASRD6` shifts a **negated** damage
+right six places, which floors, so one point of damage still heals — and
+reschedules itself `HEARTR` jiffies out, reading `HEARTR` *after* `HUPDAT`, so
+recovery is slowest exactly when you are most hurt. And `HUPD42` walks the
+light back one step *further* than `HUPD30` walked it down (it increments,
+then tests `CMPA OLIGHT / BLE`), so you wake up at `OLIGHT + 1`; that is the
+ROM's arithmetic and it is not corrected here.
+
+**Two things the port had to decide for itself.** The line buffer is a **list
+of one-character words**, not a growing word: a word interns, and buffering a
+keystroke at a time as one word would put every prefix of every line ever
+typed into the word table, which [P15](roadmap.md#p15--berzerk-design-first)
+found is the **same arena** `nodes` reports on. That is what
+`test_a_warm_redraw_spends_no_nodes_and_no_atoms` guards: it measures at two
+loop lengths and compares them, because running any instruction list costs a
+node or two of its own and a fixed cost would otherwise read as a leak. And **`load` runs a file a line at a time**, so a list
+literal cannot span lines: the fifteen-row `CMDTAB` arrives as seven `se`
+statements rather than one 320-character line, which is a shape the maze block
+had already been forced into for a different reason (§7.4).
+
+**The one departure from the ROM is ESC.** `DEATH` ends in `BRA *` and
+`PLAY10` turns everything that is not a letter into a space, so there is no
+key that means "stop"; `dagg.key` intercepts 27 before the conversion, which
+is `logo/games/berzerk`'s own convention.
+
+**Run on a Pico Plus 2 W the same day, and it found two more M1 bugs — both
+in the turn animation, and both invisible to the host for the reason M1's own
+post-mortem names: the mock has no oracle for what a picture looks like after
+something erases part of it.** The report was *"I remember animation when
+turning but is missing from the port"* and *"in the distance some lines are
+not drawn (or erased?)"*, followed by *"when I `turn right` I see dots
+(breaks) on the horizontal lines"* — which is one bug wearing three faces.
+M1 drew the new view, presented it, and *then* ran the sweep over it, so every
+stroke's `pe` cut a full-height stripe through the finished picture: long
+lines came back holed, short ones (the distant ones) were erased end to end.
+And none of it read as motion, because the game runs `setrefresh "manual` and
+the sweep never called `refresh` — the damage sat unpresented until the next
+heartbeat put it on the panel. §6.4 now records the ordering that was missing
+from it. [B84](bugs.md), with [B85](bugs.md) — a seventh fade period the ROM
+cannot reach — found while confirming it against `VCTLST.ASM`.
+
+58 tests, all passing; the four animation gates were each checked against the
+old code before the fix. **Confirmed on a Pico Plus 2 W 2026-09-03 with the
+fixes in**: the view, the status bar with the heart beating in it, the
+scrolling command line, and both animations. The sweep's dwell — `wait 13`,
+the one number in the file that is an estimate rather than a transcription
+(`VECTOR` at roughly fifty 0.895 MHz cycles a point, 118 points, drawn and
+erased) — reads right at that value and was not tuned.
+
+**What the board has still not exercised is the half of M2 you cannot reach by
+playing it.** Fainting is 153 damage and death is 161, which at seven damage a
+`MOVE` is twenty-three steps of walking into a wall; both are host-tested
+against `HUPD20` and neither has been seen on a panel. The faint set piece in
+particular is sixteen full redraws back-to-back and its cost is a board's to
+report, so it stays on M3's list rather than being counted as done here.
 
 **M3 — objects.**
 OCBs, the bag, two hands, `GET` `PULL` `STOW` `DROP` `EXAMINE` `USE` `REVEAL`
