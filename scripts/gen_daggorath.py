@@ -473,6 +473,126 @@ def read_object_tables():
     return generics, objects, genval
 
 
+def read_creature_table():
+    """CREXXX, DTABAS.ASM: the twelve creatures, as
+    [(vector list, move delay, attack delay, magoff, magdef, physoff,
+    physdef, power), ...] -- CDBTAB and FWDCRE both generated from it.
+
+    There is no second table to cross-check this one against, and that is
+    a fact about the game rather than a gap here: TOKEN.ASM holds no
+    creature names, because the game never prints one (PEXAM.ASM's EXAM10
+    says !CREATURE! and nothing else, and the map draws a mark).  So the
+    OBJXXX/ADJTAB pairing that caught HOTH-versus-RIME has no analogue --
+    CREXXX is the only statement of either table, and nothing can disagree
+    with it.
+    """
+    rows = read_dtabas_macro("CREXXX")
+    assert len(rows) == 12, rows
+    out = []
+    for args in rows:
+        assert len(args) == 8, args
+        out.append((args[0], *(int(a) for a in args[1:])))
+    return out
+
+
+COMDAT_PATH = REPO_ROOT / "docs" / "DungeonsOfDaggorath" / "COMDAT.ASM"
+
+_FCB_NUMBERS = re.compile(r"^(?:CMTTAB)?\s+FCB\s+([0-9]+(?:,[0-9]+)*)\s*$")
+
+
+def read_creature_matrix():
+    """CMTTAB, COMDAT.ASM: five rows of twelve, the population of each
+    level at power-on -- section 10.1's table.  The ROM copies it into
+    CMXLND once (RAMDAT's INI block) and then MUTATES it: PATTK.ASM's
+    PATT40 decrements the entry of anything you kill and COMCRE.ASM's
+    CREGEN increments a random one every five minutes, so the count a
+    level is rebuilt from is not the count it was built from.
+    """
+    text = COMDAT_PATH.read_text()
+    body = text[text.index("\nCMTTAB"):text.index("\nCMTEND")]
+    rows = [[int(v) for v in m.group(1).split(",")]
+            for m in (_FCB_NUMBERS.match(line) for line in body.splitlines())
+            if m]
+    assert len(rows) == 5 and all(len(r) == 12 for r in rows), rows
+    return rows
+
+
+# EXPAND.ASM again, but for a MESSAGE rather than a table row.  The packed
+# form is the same -- five bits of count and then five-bit codes, MSB first
+# -- with two differences that only show up here.
+#
+# The count is one LESS than the number of codes.  In a table the field after
+# the count is the object CLASS and the count is the letters after it, so
+# `count + 1` fields follow either way; a message has no class, so its first
+# code is simply its first character and the count reads one short.  M4
+# transcribed `!CREATURE!` by eye and happened to be right, which is not the
+# same as knowing.
+#
+# And the alphabet runs past Z.  0 is I.SP, 1-26 are A-Z, and everything
+# above that is CD.ASM's own "Internal Character Codes" block, transcribed:
+# the source's comments write I.CR as `^`.  (The four heart glyphs at $20-$23
+# and I.BS at $24 do not fit five bits and never appear in a packed string.)
+_MESSAGE_EXTRA = {
+    0x1B: "!",   # I.EXCL
+    0x1C: "_",   # I.BAR, the underline the cursor is drawn with
+    0x1D: "?",   # I.QUES
+    0x1E: ".",   # I.DOT
+    0x1F: "\n",  # I.CR
+}
+
+
+def read_message(packed):
+    """One OUTSTI string, as the text it prints."""
+    bits = "".join(format(b, "08b") for b in packed)
+    count = int(bits[0:5], 2)
+    out = ""
+    for i in range(count + 1):
+        v = int(bits[5 + 5 * i:10 + 5 * i], 2)
+        if v in _MESSAGE_EXTRA:
+            out += _MESSAGE_EXTRA[v]
+        else:
+            out += chr(ord("A") + v - 1) if v else " "
+    return out
+
+
+def read_messages(path, name):
+    """The `FCB %xxxxxxxx` run that follows a named label in one source file.
+
+    The messages are not a table and have no label of their own -- they are
+    bytes inline after `SWI / FCB OUTSTI` -- so they are found by the routine
+    they sit in and read in source order.
+    """
+    text = (REPO_ROOT / "docs" / "DungeonsOfDaggorath" / path).read_text()
+    body = text[text.index("\n%s" % name):]
+    out, packed, seen = [], [], False
+    for line in body.splitlines():
+        m = _FCB_BITS.match(line)
+        if m:
+            packed.append(int(m.group(1), 2))
+            seen = True
+        elif seen and packed:
+            out.append(read_message(packed))
+            packed, seen = [], False
+    return out
+
+
+def check_message_strings():
+    """The four strings logo/games/daggorath prints from the ROM's own bytes.
+
+    Like CMDTAB and DIRTAB these stay written out in the game file -- they
+    are three `write`s and a `type`, not data -- and like them they are
+    checked here rather than trusted.  M2's missing cursor (B87) and M4's
+    missing `!!!` (B88) were both the same mistake: the ROM's byte stream
+    carries something the port read past.
+    """
+    examine = read_messages("PEXAM.ASM", "EXAMIN")
+    assert examine[:3] == ["IN THIS ROOM\n", "!CREATURE!\n", "BACKPACK\n"], examine[:3]
+    # PATT24, printed every time the player's blow lands -- the only
+    # feedback a hit has until M6 gives it a sound.
+    attack = read_messages("PATTK.ASM", "PATT24")
+    assert attack[0] == "!!!", attack[0]
+
+
 def check_command_tables():
     """CMDTAB and DIRTAB, decoded, against what logo/games/daggorath holds.
 
@@ -512,6 +632,15 @@ GENVAL_SYMBOLS = [None, None, None, "T.SHI4", "T.SWO3", "T.TOR4"]
 
 V_ABS, V_RTS, V_JSR, V_REL, V_JMP, V_END, V_NEW = 0x00, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF
 
+# Not a ROM byte: the assembler's own fall-through, where one list simply
+# runs off its end into the label below it (D3.ASM's "SGINT2 falls thru to
+# SGIANT", D4.ASM's KNIGT2 and WIZ2).  It is NOT the same as V$JMP, which
+# drops into VCTNEW and clears DRWFLG -- a fall-through emits no control
+# code at all, so the pen state carries.  SGINT2 depends on that: its last
+# absolute pair is the bottom of the axe blade and SGIANT's own SVORG is
+# the top of it, so the blade is closed by the vector ACROSS the seam.
+V_FALL = "FALL"
+
 
 def _decode_relative_byte(byte):
     """VCTLST.ASM:VCTREL's nybble extraction: high nybble dy, low nybble dx,
@@ -537,17 +666,25 @@ def decode(name, raw_table, memo=None):
     by anything in this file's RAW table -- M1 only draws CELINE, the plain
     ceiling line, not the ladder/hole lists (M5, once VFTTAB exists) -- so
     they are left unimplemented rather than guessed at.
+
+    V$FALL is this file's own marker for an assembler fall-through and is
+    handled by SPLICING the target's tokens in where it stands, which is
+    exactly what the assembler does: no control code runs, so the pen and
+    the running (y, x) both carry across the seam.
     """
     if memo is None:
         memo = {}
     if name in memo:
         return memo[name]
-    tokens = raw_table[name]
+    tokens = list(raw_table[name])
     runs, cur = [], []
     y = x = 0
     i = 0
     while i < len(tokens):
         t = tokens[i]
+        if t == V_FALL:
+            tokens[i:i + 2] = list(raw_table[tokens[i + 1]])
+            continue
         if t == V_END:
             break
         if t == V_NEW:
@@ -583,6 +720,37 @@ def decode(name, raw_table, memo=None):
         runs.append(cur)
     memo[name] = runs
     return runs
+
+
+def sv(*points):
+    """missing-macros.asm's SVORG/SVECT pair, as the bytes they assemble.
+
+    SVORG emits an absolute (y, x) and V$REL; each SVECT emits one byte
+    holding two signed nybbles, `((delta / 2) & $F)` each, high nybble dy;
+    SVNEW emits V$ABS and closes the run.  So this takes the ABSOLUTE
+    coordinates D3.ASM/D4.ASM actually write -- which is what a reader can
+    check against the ROM -- and packs them the way the assembler does,
+    leaving decode() to unpack them through VCTREL exactly as the ROM's own
+    display-list processor would.  A creature is 20 to 70 points and there
+    are fourteen lists of them; hand-packing 600 nybble pairs would have
+    been six hundred chances to be wrong about a number nothing checks.
+
+    The asserts are the assembler's implicit contract: SVECT halves the
+    delta and keeps four bits, so an odd or out-of-range step encodes as
+    something else entirely and silently.  Every SVECT in D3.ASM and
+    D4.ASM is inside them.
+    """
+    y, x = points[0]
+    out = [y, x, V_REL]
+    for ny, nx in points[1:]:
+        dy, dx = ny - y, nx - x
+        assert dy % 2 == 0 and dx % 2 == 0, f"SVECT {ny},{nx}: odd delta"
+        assert -16 <= dy <= 14, f"SVECT {ny},{nx}: dy {dy} out of range"
+        assert -16 <= dx <= 14, f"SVECT {ny},{nx}: dx {dx} out of range"
+        out.append((((dy // 2) & 0xF) << 4) | ((dx // 2) & 0xF))
+        y, x = ny, nx
+    out.append(V_ABS)
+    return out
 
 
 # VARC.ASM, transcribed verbatim (comments give the source line's own
@@ -642,10 +810,153 @@ RAW = {
     "FSWORD": [114, 80, 124, 100, V_NEW,
                118, 82, 114, 86, V_END],
     "FTORCH": [118, 60, V_REL, 0xF7, 0xFF, 0x2A, V_ABS, V_END],
+
+    # D3.ASM and D4.ASM -- the twelve creatures FWDCRE indexes by type,
+    # plus the two shared bodies SGIANT and KNIGHT, which are not creatures
+    # of their own: SGINT1 (club) and SGINT2 (axe) are one giant with two
+    # weapons, KNIGT1 (orange crest) and KNIGT2 (red crest) one knight with
+    # two, and WIZ1's crescent sceptre is drawn on top of WIZ0's wizard.
+    # Written with sv() from the source's own absolute coordinates -- see
+    # its docstring for why these are not hand-packed nybbles.
+    #
+    # WIZ2 (the star sceptre) is transcribed nowhere, because CREXXX does
+    # not name it: the two wizards this game has are WIZ0 and WIZ1.
+    "SPIDER": (sv((124, 160), (116, 164), (120, 168), (116, 176), (120, 184),
+                  (124, 176), (120, 168), (120, 176), (120, 184), (116, 188),
+                  (124, 192))                                # outside legs
+               + sv((124, 168), (116, 170), (120, 172), (122, 176),
+                    (120, 180), (116, 182), (124, 184))      # inner legs/mouth
+               + [V_END]),
+
+    "VIPER": ([132, 130, 112, 122, 92, 124, 94, 126, 94, 130, 92, 132,
+               112, 130, 128, 140, 132, 136, 132, 114, 120, 108, 106, 118,
+               120, 112, 124, 116, 124, 126, V_NEW]          # body and neck
+              + sv((100, 120), (96, 120), (92, 124), (88, 120), (84, 120),
+                   (82, 122), (86, 126), (82, 122), (82, 134), (86, 130),
+                   (82, 134), (84, 136), (88, 136), (92, 132), (96, 136),
+                   (100, 136))                               # head
+              + [V_END]),
+
+    "SGINT1": (sv((104, 98), (98, 112), (92, 120), (94, 128), (96, 132),
+                  (102, 132), (104, 126), (104, 120), (102, 114), (106, 100))
+               + [V_JMP, "SGIANT"]),                         # club
+
+    "SGINT2": ([104, 98, 94, 124, 96, 126, 106, 100, V_NEW,  # axe handle
+                102, 132, 92, 114, 102, 118, 110, 114,       # axe blade
+                V_FALL, "SGIANT"]),
+
+    "SGIANT": (sv((102, 132), (102, 136), (112, 148), (122, 160), (124, 174),
+                  (120, 170), (120, 174), (116, 162), (106, 152), (96, 142),
+                  (92, 130), (88, 118))                      # left leg
+               + sv((78, 92), (70, 96), (80, 98), (86, 94), (78, 92),
+                    (76, 84), (84, 88), (86, 94))            # face
+               + sv((106, 90), (108, 86), (110, 88), (108, 94), (120, 98),
+                    (126, 84), (122, 88), (122, 80), (118, 88), (102, 76),
+                    (98, 80))                                # right leg
+               + sv((86, 84), (96, 92), (108, 102), (112, 98), (104, 86),
+                    (94, 74), (82, 76), (76, 84), (72, 80), (74, 84),
+                    (68, 88), (70, 94), (66, 96), (70, 96), (68, 108),
+                    (72, 116), (86, 120), (96, 104), (92, 100), (84, 110),
+                    (74, 106))                               # arm and head
+               + [V_END]),
+
+    "BLOB": (sv((82, 130), (86, 114), (100, 108), (110, 106), (120, 106),
+                (130, 96), (128, 106), (132, 104), (126, 114), (128, 128),
+                (130, 142), (128, 148), (132, 152), (128, 154), (130, 162),
+                (124, 156), (108, 154), (92, 148), (86, 138), (82, 130))
+             + sv((86, 130), (92, 136), (98, 138), (100, 128), (86, 130),
+                  (92, 120), (102, 118), (100, 128))         # eyes
+             + [108, 116, 114, 118, 120, 144, V_END]),       # mouth
+
+    "KNIGT1": (sv((34, 124), (34, 132), (36, 130), (36, 126), (34, 124))
+               + [80, 142, 64, 136, 46, 146, 64, 156, 82, 140, 76, 136,
+                  64, 146, 58, 140, V_JMP, "KNIGHT"]),       # crest, left arm
+
+    "KNIGT2": (sv((30, 126), (40, 126), (40, 124), (36, 124))
+               + [44, 150, 52, 166, 76, 164, 92, 150, 76, 136, 52, 134,
+                  44, 150, V_NEW, V_FALL, "KNIGHT"]),        # crest, shield
+
+    "KNIGHT": ([80, 140, 128, 152, 132, 160, 132, 144, 126, 144, 84, 130,
+                V_NEW,                                       # left leg
+                84, 126, 126, 110, 132, 110, 132, 92, 128, 102, 80, 116,
+                V_NEW]                                       # right leg
+               + sv((80, 140), (86, 128), (80, 114), (64, 120), (58, 116),
+                    (46, 110), (42, 122), (30, 124), (26, 128), (30, 132),
+                    (42, 134), (46, 146), (42, 134), (46, 134), (52, 128),
+                    (46, 122), (42, 122))                    # torso
+               + [52, 128]                                   # chin of helm
+               + sv((20, 128), (20, 124), (24, 126), (24, 130), (20, 132),
+                    (20, 128))                               # plume
+               + sv((74, 102), (70, 102), (70, 106), (64, 106), (64, 90),
+                    (70, 90), (70, 94), (74, 94), (74, 96), (80, 96),
+                    (80, 100), (74, 100), (74, 102), (58, 116))
+               + [46, 110, 64, 102, 64, 100, 30, 102, 20, 98, 30, 94,
+                  64, 96, 64, 98, 20, 98, V_END]),           # arm and blade
+
+    "SCORP": (sv((112, 74), (108, 74), (104, 70), (108, 62), (116, 66),
+                 (118, 74), (120, 82), (124, 82), (124, 74), (116, 66),
+                 (120, 70), (120, 62), (124, 66))            # tail and body
+              + sv((124, 90), (120, 90), (120, 82), (124, 74), (128, 74),
+                   (128, 82))                                # front legs
+              + [V_END]),
+
+    # The bridge of the nose is an absolute pair standing on its own before
+    # SVORG, so the eye run starts one point EARLIER than the SVORG says.
+    "WRAITH": ([62, 68, 68, 88, 56, 100, V_NEW, 74, 90]      # eyebrows
+               + sv((70, 74), (76, 80), (74, 90), (72, 100), (64, 102),
+                    (74, 90), (86, 94), (86, 90))            # eyes
+               + sv((100, 80), (90, 86), (92, 100), (98, 108), (94, 98),
+                    (94, 86), (100, 80))                     # mouth
+               + [V_END]),
+
+    "BALROG": ([80, 124, 94, 114, 110, 120, 132, 112, 104, 78, 132, 48,
+                68, 72, 84, 32, 22, 88, 52, 114, 92, 128, 52, 142,
+                22, 168, 88, 224, 68, 184, 132, 208, 112, 178, 132, 144,
+                110, 136, 94, 142, 80, 132, V_NEW]           # legs and wings
+               + sv((132, 112), (124, 122), (110, 126), (100, 122),
+                    (92, 128), (100, 134), (110, 130), (124, 134),
+                    (132, 144))                              # inside of legs
+               + sv((82, 122), (96, 106), (92, 92), (76, 86), (72, 78),
+                    (78, 84), (78, 76), (82, 84), (96, 88), (104, 102),
+                    (100, 116))                              # tail
+               + sv((22, 168), (26, 162), (18, 166), (24, 160), (30, 160),
+                    (38, 150), (46, 140), (42, 134), (32, 138), (18, 132),
+                    (32, 134), (38, 128), (32, 122), (18, 124), (32, 118),
+                    (42, 122), (54, 128), (42, 134), (46, 128), (42, 122),
+                    (46, 116), (38, 106), (30, 96), (24, 96), (18, 90),
+                    (26, 94), (22, 88))                      # arms and head
+               + [V_END]),
+
+    "WIZ0": (sv((64, 124), (72, 120), (64, 120), (78, 110), (64, 102),
+                (58, 110), (54, 118), (50, 120), (46, 122), (40, 116),
+                (42, 108), (28, 120), (28, 126))
+             + sv((28, 130), (28, 136), (36, 146), (50, 148), (44, 136),
+                  (46, 132), (48, 134), (44, 136))
+             + [48, 134, 54, 142, 116, 164, 132, 132, 130, 118, 120, 94,
+                90, 110, 132, 132, 72, 106, V_NEW]           # cape, sceptre
+             + sv((64, 102), (66, 100), (56, 94), (54, 96), (64, 102))
+             + sv((66, 102), (68, 98), (74, 102), (76, 104), (90, 110))
+             + [88, 112, 72, 120, V_NEW]                     # cape to armpit
+             + [62, 132, 20, 128, 52, 122, 64, 122, 60, 124, 114, 128,
+                80, 130, 68, 130, 62, 132, V_NEW]            # hat and beard
+             + sv((40, 130), (38, 128), (40, 124), (42, 126), (40, 130),
+                  (46, 128), (50, 128), (50, 126), (42, 126), (40, 124),
+                  (46, 126))                                 # face detail
+             + [V_END]),
+
+    "WIZ1": (sv((46, 98), (50, 100), (54, 98), (58, 92), (56, 86), (48, 82),
+                (40, 86), (38, 90), (40, 94), (40, 92), (42, 88), (48, 86),
+                (52, 88), (54, 92), (50, 98), (46, 98))      # crescent point
+             + sv((104, 154), (108, 156), (112, 154), (116, 148), (114, 142),
+                  (106, 138), (98, 142), (96, 146), (98, 150), (98, 148),
+                  (100, 144), (106, 142), (110, 146), (112, 150), (108, 154),
+                  (104, 154))                                # crescent on cape
+             + [V_JMP, "WIZ0"]),
 }
 
-# Fixed order: the Logo loader reads this many records, in this order, by
-# position -- see logo/games/daggorath's `dagg.load` for the matching read.
+# Fixed order: the order the generated block writes them out in, and the
+# order docs/DungeonsOfDaggorath/daggdata-reference.txt lists them for
+# eyeball review.
 VECTOR_LIST_ORDER = [
     "LPASAG", "LDOOR", "LSDOOR", "LWALL",
     "FPASAG", "FDOOR", "FSDOOR", "FWALL",
@@ -654,6 +965,9 @@ VECTOR_LIST_ORDER = [
     "CELINE",
     # FWDOBJ's own order, which is GENXXX's, which is the class number.
     "FFLASK", "FRING", "FSCROL", "FSHIEL", "FSWORD", "FTORCH",
+    # FWDCRE's own order, which is CREXXX's, which is the creature type.
+    "SPIDER", "VIPER", "SGINT1", "BLOB", "KNIGT1", "SGINT2",
+    "SCORP", "KNIGT2", "WRAITH", "BALROG", "WIZ0", "WIZ1",
 ]
 
 FWDOBJ = ["FFLASK", "FRING", "FSCROL", "FSHIEL", "FSWORD", "FTORCH"]
@@ -727,7 +1041,48 @@ def object_table_lines(generics, objects, genval, decoded):
     return lines
 
 
-def game_data_lines(mazes, decoded, generics, objects, genval):
+def creature_table_lines(creatures, matrix, decoded):
+    """CDBTAB, CMTTAB and FWDCRE, as Logo statements -- section 10.1.
+
+    A creature's seven constants are read out of `dagg.cdb` by TYPE rather
+    than copied into every CCB the way CBIRTH's `JSR COPY` does, because
+    nothing in the game ever writes one: DAMAGE only ever touches
+    P.ATDAM.  That is seven fewer thirty-two-element lists to carry and to
+    keep in step.
+
+    The vector lists go out one RUN to a line.  A creature is up to seventy
+    points and BALROG's arms alone are twenty-seven, so a whole creature on
+    one line is six hundred characters against LOAD_MAX_LINE's 256; a run
+    is the largest piece that always fits, and `lput` of eight of them
+    costs nothing worth counting.
+    """
+    lines = []
+    # CDB, CD.ASM: power, magic offense/defense, physical offense/defense,
+    # movement delay, attack delay -- the ATB fields first, in P.ATxxx
+    # order, so `dagg.attack` and `dagg.damage` read a creature and the
+    # player through the same field numbers.
+    lines.append('make "dagg.cdb []')
+    for _, tmv, tat, mgo, mgd, pho, phd, power in creatures:
+        lines.append('make "dagg.cdb lput [%d %d %d %d %d %d %d] :dagg.cdb'
+                     % (power, mgo, mgd, pho, phd, tmv, tat))
+    lines.append('make "dagg.cmt []')
+    for row in matrix:
+        lines.append('make "dagg.cmt lput [%s] :dagg.cmt'
+                     % " ".join(str(v) for v in row))
+    lines.append('make "dagg.fwdcre []')
+    for name, *_ in creatures:
+        lines.append('make "v []')
+        for run in decoded[name]:
+            ys = " ".join(str(y) for y, _ in run)
+            xs = " ".join(str(x) for _, x in run)
+            lines.append('make "v lput [[%s] [%s]] :v' % (ys, xs))
+        lines.append('make "dagg.fwdcre lput :v :dagg.fwdcre')
+    lines.append('make "v []')
+    return lines
+
+
+def game_data_lines(mazes, decoded, generics, objects, genval,
+                    creatures, matrix):
     """The Logo statements that put the maze and the vector lists in memory.
 
     One statement to a line, because `load` only buffers `to ... end`
@@ -771,6 +1126,7 @@ def game_data_lines(mazes, decoded, generics, objects, genval):
                       ("dagg.celine", "CELINE")):
         lines.append(f'make "{var} [{runs_literal(name)}]')
     lines.extend(object_table_lines(generics, objects, genval, decoded))
+    lines.extend(creature_table_lines(creatures, matrix, decoded))
     return lines
 
 
@@ -806,7 +1162,7 @@ def write_reference(mazes, decoded, tables, path):
         for run in runs:
             lines.append("  " + " -> ".join(f"({y},{x})" for y, x in run))
 
-    generics, objects, genval = tables
+    generics, objects, genval, creatures, matrix = tables
     lines.append("")
     lines.append("classes (GENTAB word, OBJWGT weight):")
     for i, (word, weight) in enumerate(generics):
@@ -823,6 +1179,16 @@ def write_reference(mazes, decoded, tables, path):
                      f"{physoff:7d} {level:5d} {count:5d} {special}")
     lines.append("")
     lines.append(f"GENVAL (by class): {genval}")
+    lines.append("")
+    lines.append("creatures (CREXXX vector list, CDBTAB):")
+    lines.append("   # list   move attack magoff magdef physoff physdef power")
+    for i, (name, tmv, tat, mgo, mgd, pho, phd, power) in enumerate(creatures):
+        lines.append(f"  {i:2d} {name:6s} {tmv:4d} {tat:6d} {mgo:6d} "
+                     f"{mgd:6d} {pho:7d} {phd:7d} {power:5d}")
+    lines.append("")
+    lines.append("CMTTAB (population by displayed level):")
+    for level, row in enumerate(matrix, start=1):
+        lines.append(f"  {level}: " + " ".join(f"{v:2d}" for v in row))
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -917,8 +1283,10 @@ def main():
     check_maze(mazes[0], start_row=16, start_col=11)
 
     decoded = {name: decode(name, RAW) for name in VECTOR_LIST_ORDER}
-    tables = read_object_tables()
+    tables = read_object_tables() + (read_creature_table(),
+                                     read_creature_matrix())
     check_command_tables()
+    check_message_strings()
 
     longest = write_game_data(mazes, decoded, tables, GAME_PATH)
     REFERENCE_PATH.parent.mkdir(parents=True, exist_ok=True)

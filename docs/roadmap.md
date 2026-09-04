@@ -2449,7 +2449,8 @@ a run that found two more M1 bugs in the turn animation ([B84](bugs.md),
 [B85](bugs.md)); M3 written and confirmed on a Pico Plus 2 W the same day
 over four board runs, 103 tests — the first milestone here to come up right on
 a board the first time, and the only defect those runs found was M2's missing
-command-line cursor ([B87](bugs.md)).** "No board needed for a Logo-only milestone" is what
+command-line cursor ([B87](bugs.md)); M4 written 2026-09-03, 141 tests, host
+only — no board has seen a creature yet.** "No board needed for a Logo-only milestone" is what
 this entry used to say, and it was wrong three times over — see M1 below.
 Pico 2 and Pico 2 W still to run M0, though nothing in the result is expected
 to be board-specific. `tests/logo/p17m0` timed all three of section 6.3's list
@@ -2745,11 +2746,200 @@ economy arriving early rather than a limit of the port, but it is what makes M4
 the milestone that turns this into something you can play for longer than a
 torch.
 
-**The budgets, both taken.** 100 procedures of 192, and **108 globals of 254**
-at the peak — the global count is taken here for the first time, because M3 put
-twelve parallel lists and thirty-odd names into that table in one go. A warm
-redraw still spends **zero** nodes and zero atoms with an object on the floor,
-which is what `OFIND` being a cursor rather than a list buys.
+**M4 — creatures. Written 2026-09-03, 144 tests; a Pico Plus 2 W saw the
+first four of them the same day and found the one thing no host test could.** The CCB table,
+`CMOVE` and its preference walk, the peek-a-boo, combat both ways, creature
+loot, death, `CREGEN`, `!CREATURE!` on the inventory screen and the map's
+creature marks. `scripts/gen_daggorath.py` grew `D3.ASM`/`D4.ASM`'s twelve
+creature outlines with the two shared bodies behind them, plus `CDBTAB` and
+`CMTTAB`. **The viper, the blob, the stone giant and the spider all read as
+themselves on a panel**, which is §11.2's asked-for reference render made by
+an eye: `sv()` reconstructs the `SVORG`/`SVECT` nybbles from the source's own
+absolute coordinates and a wrong one gives something that looks almost
+correct, so four recognisable creatures is what says the decode came out
+right rather than merely plausible. Still unanswered by a board: the peek
+mark, and whether a busy level's redraw stays inside 100 ms.
+
+**And the board's other two sentences were both about the same line.**
+*"I cannot attack yet"* was [B88](bugs.md), and the port could. Every blow that landed did its damage;
+nothing said so. `PATT24` is a sound **and** a message — `SWI ISOUND / FCB
+A$KLK2` and then `SWI OUTSTI` with three packed bytes — and M4 ported the
+sound site and read past the string beside it. With M6's noises still to come
+that left a hit and a miss producing identical output, so the only visible
+difference between a working ATTACK and an unimplemented one was that the
+unimplemented one printed `NOT YET`. The string is **`!!!`**, and it is now
+*decoded* rather than transcribed: `read_message()` and
+`check_message_strings()` read all four strings this game prints out of the
+ROM, which is M3's structural repair applied to the one kind of data this
+port had still been copying by eye. The decoder immediately earned itself —
+**the count field is one less than the number of characters**, because a
+table's count is the letters *after* the class field and a message has no
+class, so its first character sits in the class slot. `!CREATURE!`, `IN THIS
+ROOM` and `BACKPACK` all check out; `!!!` was the one that was missing.
+
+**Then, once a hit had something to say: *"There should be a space before
+the hit `!!!`"* — [B89](bugs.md), and it is [B87](bugs.md)'s lesson arriving
+from the other direction.** `HMAN30` is `CLRA / SWI OUTCHR` and M2 read it as
+"erase the old cursor" and emitted a backspace; the character `CLRA` clears A
+to is not a control code, because `CD.ASM` opens its Internal Character Codes
+with **`I.SP EQU $00`**. The ROM writes a *space* over the cursor and
+advances, so every command's output on a CoCo starts one column clear of the
+line you typed — `.ATTACK LEFT !!!`, never run together. B87 was the ROM's
+`I.BS` moving a cursor where ours clears a cell, so copying the bytes would
+have drawn nothing; this is the same seam the other way, where not copying
+one lost a space. The rule that covers both: **`OUTCHR` takes internal codes,
+not ASCII, and the two alphabets disagree at exactly the places this game
+uses.** The message decoder now carries all five printable internal codes
+rather than the two M4 needed, so M5 and M6's speeches decode without another
+reading of the same table.
+
+**And a third report, which is two findings wearing one sentence:** *"the
+game moves faster than a real Color Computer — creatures move and attack
+faster, and even the walking animations seem a bit fast."* The **animation
+was simply wrong**: `wait 13` rested on an estimate of fifty 0.895 MHz cycles
+a point, and counted properly `VECTOR`'s inner loop is **~175** — 195 µs a
+pixel, 118 pixels a stroke, and `TURN10` is *two* `VECTOR` calls because
+`BSR TURN12` falls into `TURN12 JSR VECTOR`. So a sweep is **~370 ms, not
+~105**, three and a half times too fast, which is what a pair of eyes said.
+(The clock is 0.895 MHz for certain: `ONCE.ASM` sets the SAM to `$2046` and
+bits R1 R0 are `00`.) The **creature clock is right**: `COMMON.ASM:ROLTAB`
+rolls the jiffy counter at 6, so a tenth is 100 ms and a spider's 23 is 2.3 s
+with nothing scaled anywhere. One real correction came out of checking it —
+the ROM re-queues a TCB *after* the routine returns, so a creature's next
+delay counts from when its turn **ended**, and the redraw a creature standing
+on you triggers is charged to that creature. **The rest is not a
+transcription error.** With `VECTOR` costed properly a CoCo `VIEWER` redraw is
+hundreds of milliseconds, and the ROM's cooperative scheduler runs creature
+tasks only in the gaps between redraws; our board redraws in 40–80 ms and
+meets every timer on time. Faithful numbers, faster machine — and whether to
+ship the ROM's *numbers* or the ROM's *feel* is a design question, not
+something to settle by quietly scaling a table.
+
+**The answer to the pace is a knob, and the design says why it is not a
+rewrite** (design §19, decision 0). `:dagg.pace` multiplies every creature
+delay in `dagg.creature.delay` and nowhere else, so it moves creature turns
+without touching the heart, the torch, `CREGEN` or the player's own commands.
+Modelling the CoCo's redraw cost so the throttle re-emerges was considered and
+rejected: it fights §12.1, which bought responsiveness for the player's
+commands on purpose, and slowing the machine back down would take that away
+too. **The board came back with 2** — *"`dagg.pace 2` seems closer to the
+original"* — so 2 is the default and 1 is the raw table. That is a measurement
+against a memory of the original, which is the only instrument this question
+has, and it is written down rather than left as taste.
+
+**And playing it found the milestone's real defect** ([B91](bugs.md)):
+*"Out of space in dagg.cmov90"*, a few minutes in. **`.setitem` interns every
+new number it is given** — 12 atoms and 3 nodes apiece, measured, against a
+32 KB word table that nothing frees — and M4 stored each creature's next turn
+as a `ticks`-based **deadline**, a number the interpreter had never seen,
+thirty times a second across a populated level. That is ~360 bytes a second:
+**the whole table in ninety seconds**, which is how long the board lasted. The
+ROM does not store deadlines. `CD.ASM`'s `P.TCTIM` is a *countdown* that
+`QUESCN` decrements once per scan, and ported properly it holds 1..62 tenths —
+small integers the mazes interned long ago — so the scheduler now allocates
+**nothing at all**. More faithful *and* free, which is the shape this port
+keeps finding when it stops paraphrasing.
+
+**Why the budgets missed it is the lesson.** M4 had three allocation tests and
+**every one of them measured a redraw**; nothing measured the scheduler, which
+is the part that runs thirty times a second for ever. And a host test cannot
+reproduce the leak even now — the mock clock is frozen, so a deadline is the
+same number every turn and interns once — so the new gate insists on the
+*property* instead: a creature's timer is a small integer, never a clock
+reading, for every creature type at four paces. One residual is named rather
+than assumed: `dagg.ccdam` really does hold a different value every landed
+blow, measured at 1,232 atoms a hundred blows in the worst case the game can
+reach (a ring on a crescent wizard) — ~2,600 blows against 32 KB, three orders
+of magnitude off the timer, and bounded by its own test.
+
+**And one interpreter bug fell out of the fix** ([B90](bugs.md), open): a
+zero-arg reporter on the left of an infix operator with a **user-defined**
+call inside the parenthesised right operand fails to parse —
+`(ticks + (100 * dagg.cc :y 7))` answers `) without (` at run time, while the
+same form with a variable on the left, or a primitive on the right, is fine.
+The game binds `ticks` to a local, which is the workaround and reads better;
+the parser is worth fixing properly, because a parse error raised at run time
+from code that looks correct is the worst kind to meet on a board.
+
+**The test that should have existed did not, and that is the lesson.** Every
+M4 test built a synthetic corridor and called `dagg.pattk.swing` or `dagg.cmove`
+directly. There was no test of the whole path — the real dungeon, the real
+scheduler, a creature closing on the player from the next cell, and `ATTACK
+LEFT` typed at the command line — and that is exactly the test that fails on
+the shipped code. It exists now.
+
+**The gate's first half is met exactly and the arithmetic is the reason.**
+`ATTACK`'s index runs 97 % against something nearly dead to 21 % against
+something fifteen times your size, measured over 2,000 rolls against a
+reproducible draw, with the zero-bonus midpoint sitting at 50 % between them.
+The second half is met to the limit a host can reach: all thirty-two
+creatures take their turn off one pass of the tick, and a warm redraw with a
+creature in the view and another behind the peek spends **zero** nodes and
+zero atoms. The 100 ms is a board's, the same caveat M0 carries.
+
+**`CFIND` had to stop being a walk, and that is this milestone's one real
+design decision.** A redraw asks it **thirty** times — `VIEW30` once a range,
+`PDRAW` twice — and the ROM's answer is a scan of 32 CCBs. In Logo that is 96
+`item`s a call, which at P13 §13 L2's measured `item` is ~2.7 ms and **~80 ms
+of a 100 ms redraw** before a wall is drawn. So creature position is held a
+second time in a 32 × 32 grid of CCB numbers and `CFIND` is two `item`s. It
+is exact and not approximate — two live creatures can never share a cell,
+because `CWALK` asks before it moves and `CBIRTH` before it places — and it
+costs nothing in the word table, because the only numbers it ever stores are
+0 to 32 and the mazes have already interned those. The same trade as M3's
+`dagg.floor` against `OFIND`'s flat walk, except that one was an optimisation
+and this one is the budget.
+
+**Three ROM behaviours kept, and one correction to the design.** `CMOV90`
+**falls into** `CMOV92`, so a creature that walks onto you is rescheduled at
+its ATTACK delay before it has hit you once — a spider goes from 2.3 s to
+1.1 s the moment it arrives. Picking an object up is a creature's **whole
+turn**, which is what the head of `CRETUR.ASM` means by "the human can delay
+creature attacks by dropping objects" — and a scorpion and both wizards are
+the exceptions that will not stop for loot. `CWLK20`'s sonar is the ROM's:
+heard within eight cells one way and two the other, half the time, at
+`255 − 31 × range`, and a creature past either gate does not even ask for a
+redraw. The correction is the **swing cost**: design §10.3 wrote it as
+`power * (magoff+physoff) / 1024`, and `PATT10` floors the offense by eight
+*first* — so an empty hand costs nothing at all — and its `RORA` keeps the
+ninth bit of the sum, so a ring's 510 indexes **63, not 31**, and a ring
+swing costs **half your own power**. Two in a row faint you. It fell out of a
+test that could not get a Fire ring to its third charge.
+
+**And the fourth "the macro is not the table" is the one that cannot
+happen.** M1's `LVLTAB`, M2's `CMDTAB` and M3's `HOTH`/`RIME` were each this
+design reading a `DTABAS.ASM` macro instead of the table it generates, and
+M3's repair was to decode `TOKEN.ASM`'s strings and cross-check them by
+class. `CREXXX` has no partner to check against, and that is a fact about the
+game rather than a gap: **it never prints a creature's name.** `PEXAM.ASM`
+says `!CREATURE!` and the map draws a mark, so there is no `ADJTAB` row for a
+monster. `CREXXX` generates `CDBTAB` and `FWDCRE` both, and the vector list
+beside each row is what says the plain wizard wears `WIZ0` and the crescent
+one `WIZ1` — and that `WIZ2`, the star sceptre, is not a creature this game
+has.
+
+**Sound sites, not sounds.** §9.3's range gate, coin toss and volume belong
+with the movement they gate and landed here; every sound site in the game now
+calls one `dagg.sound` with `SOUNDS.ASM`'s own `SNDTAB` index and volume,
+which records them so a host test can read them back. M6 fills in §9.2's
+generator behind the index and nothing else moves.
+
+**Three budgets now, and the new one is the one to watch.** 100 procedures
+of 192 at M3 and **130 at M4**; 108 globals of 254 at M3's peak and **134 at
+M4's**. The third is the **node pool**, taken for the first time at M4
+because M4 is where it started to move: nodes and atoms grow toward each
+other inside one 128 KB block, and `daggorath` leaves **7,698 free cells at
+load against M3's 14,277**, 7,207 once level 1 is built and populated. Only
+1,685 of that six thousand is the twelve creature outlines and about 1,056
+the occupancy grid; **most of the rest is the bodies of thirty new
+procedures**, which is a cost this tree has never had to count before. M5 and
+M6 are still ahead and the last two milestones cost about six thousand each,
+so `test_the_game_leaves_room_to_play_in` is written now, with the trend in
+its comment — running out on a board is an out-of-memory panic, and a failing
+test is the warning. A warm redraw still spends **zero**
+nodes and zero atoms with an object on the floor, which is what `OFIND` being
+a cursor rather than a list buys — and still zero at M4 with a creature in
+the view and another behind the peek, which is what the occupancy grid buys.
 
 A faithful port of the 1982 DynaMicro game from **its own 6809 source**, 9,866
 lines of it, kept under `docs/DungeonsOfDaggorath/` with the grant of licence
@@ -2861,8 +3051,8 @@ rule — down a hole or a ladder, up a ladder only — gives 1↔2 and 2↔3 by 
 and 4 → 5 by holes that cannot be climbed back up. None of it is a special case
 in the ROM, and none of it will be here.
 
-M0, M1, M2 and M3 done; M1a (the grey ramp, optional and decided by a pair of
-eyes) and M4–M6 still ahead, gates in the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) went
+M0 through M4 done, M4 on the host only; M1a (the grey ramp, optional and
+decided by a pair of eyes) and M5–M6 still ahead, gates in the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) went
 first** (decided 2026-09-02): its M0–M2 are the procedure table, the opaque
 `write` and the dashed pen, and P17 M1 wanted all three — a status line it can
 invert, a file it can grow into, and a fade it can draw the way the ROM draws

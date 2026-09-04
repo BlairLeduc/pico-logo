@@ -3,7 +3,8 @@
 //  Copyright 2026 Blair Leduc. See LICENSE for details.
 //
 //  Tests for Dungeons of Daggorath (logo/games/daggorath), P17 M1 (the
-//  dungeon and the view) and M2 (the command line and the clock).
+//  dungeon and the view), M2 (the command line and the clock), M3
+//  (objects) and M4 (creatures).
 //  docs/daggorath-design.md section 17 lists what a host test can check
 //  without a board -- the maze tables, the transform, the cell walk, the
 //  fade table, the heart, the text widths -- and this mirrors that list
@@ -90,6 +91,14 @@ static void load_file(const char *path)
 void setUp(void)
 {
     test_scaffold_setUp_with_device_and_hardware();
+    // The mock's `random` is a constant 42 unless a test asks otherwise,
+    // and M4 gave this game a routine that spins on it: COMCRE.ASM's
+    // FNDCEL draws cells until it finds one that is not rock, exactly as
+    // the ROM does, so a source that never changes its answer never
+    // finds one.  Every test here gets a walking one; the two that need
+    // a REPRODUCIBLE draw use `rerandom`, which takes the interpreter off
+    // the device source altogether.
+    set_mock_random_walking(true);
     load_file(DAGGORATH_SOURCE);
     run_string("splitscreen  window");
 }
@@ -898,12 +907,15 @@ void test_the_command_line_carries_its_own_cursor(void)
     run("dagg.human dagg.key char 8");
     TEST_ASSERT_EQUAL_STRING("", mock_device_get_output());
 
-    // HMAN30 erases the cursor before the command prints anything where it
-    // was standing -- and then the next prompt puts a fresh one up
+    // HMAN30's `CLRA / SWI OUTCHR` writes internal character 0, and
+    // `I.SP EQU $00` (CD.ASM) is the SPACE -- so the cursor is overwritten
+    // by a space and everything the command then prints starts one column
+    // clear of the line you typed.  Ours backspaces onto the underline
+    // first because our cursor sits past it, not on it.
     run("make \"dagg.linbuf []");
     mock_device_clear_output();
     run("dagg.enter");
-    TEST_ASSERT_EQUAL_STRING("\b\n._", mock_device_get_output());
+    TEST_ASSERT_EQUAL_STRING("\b \n._", mock_device_get_output());
 }
 
 // PLAY10: anything that is not A-Z, a space, a return or a backspace
@@ -2268,6 +2280,1198 @@ void test_a_warm_redraw_over_an_object_spends_nothing_either(void)
 }
 
 //==========================================================================
+// M4 -- creatures.  design section 15's gate is "the section 10.3 combat
+// arithmetic matches hand-computed cases at both ends of the index range;
+// 32 creatures schedule without the redraw missing its 100 ms."  The
+// timing half is a board's (tests/logo/p17m0's caveat again: `ticks` is
+// milliseconds and the host is far faster than the target), so what is
+// checked here is that 32 creatures all take their turn and that a redraw
+// with one in view still allocates nothing.
+//==========================================================================
+
+// CBIRTH places a creature at random by design (design section 7.2), and
+// a level has five hundred open cells, so every behavioural test below
+// puts its creature where it wants it instead.
+static void put_creature(int slot, int type, int row, int col)
+{
+    char cmd[320];
+    snprintf(cmd, sizeof(cmd),
+             ".setitem %d :dagg.ccuse 1  .setitem %d :dagg.cctyp %d"
+             "  .setitem %d :dagg.ccrow %d  .setitem %d :dagg.cccol %d"
+             "  .setitem %d :dagg.ccdir 0  .setitem %d :dagg.ccdam 0"
+             "  .setitem %d :dagg.ccobj []  .setitem %d :dagg.cctim 999"
+             "  dagg.ccput %d %d %d",
+             slot, slot, type, slot, row, slot, col, slot, slot,
+             slot, slot, row, col, slot);
+    run(cmd);
+}
+
+static int live_creatures(void)
+{
+    run("make \"n 0  repeat :dagg.ccbmax "
+        "[if not (0 = item repcount :dagg.ccuse) [make \"n :n + 1]]");
+    return (int)num(":n");
+}
+
+//==========================================================================
+// The generated tables -- section 10.1
+//==========================================================================
+
+// docs/daggorath-design.md section 10.1, in CREXXX order, which is the
+// creature type.  Columns as `dagg.cdb` holds them: power, magic offense,
+// magic defense, physical offense, physical defense, movement delay,
+// attack delay.
+static const int CREATURES[12][7] = {
+    {32, 0, 255, 128, 255, 23, 11},   // 0  spider
+    {56, 0, 255, 80, 128, 15, 7},     // 1  viper
+    {200, 0, 255, 52, 192, 29, 23},   // 2  stone giant, club
+    {304, 0, 255, 96, 167, 31, 31},   // 3  blob
+    {504, 0, 128, 96, 60, 13, 7},     // 4  knight I
+    {704, 0, 128, 128, 48, 17, 13},   // 5  stone giant, axe
+    {400, 255, 128, 255, 128, 5, 4},  // 6  scorpion
+    {800, 0, 64, 255, 8, 13, 7},      // 7  knight II
+    {800, 192, 16, 192, 8, 3, 3},     // 8  wraith
+    {1000, 255, 5, 255, 3, 4, 3},     // 9  balrog
+    {1000, 255, 6, 255, 0, 13, 7},    // 10 wizard, plain
+    {8000, 255, 6, 255, 0, 13, 7},    // 11 wizard, crescent
+};
+
+void test_the_creature_table_is_section_10_1(void)
+{
+    TEST_ASSERT_EQUAL_FLOAT(12, num("count :dagg.cdb"));
+    for (int typ = 0; typ < 12; typ++)
+    {
+        for (int f = 0; f < 7; f++)
+        {
+            char expr[96], msg[96];
+            snprintf(expr, sizeof(expr), "item %d (item %d :dagg.cdb)", f + 1, typ + 1);
+            snprintf(msg, sizeof(msg), "creature %d field %d", typ, f + 1);
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(CREATURES[typ][f], num(expr), msg);
+        }
+    }
+}
+
+// CMTTAB, COMDAT.ASM -- section 10.1's populations by displayed level.
+// Level 5 is 31 creatures, which is why the CCB table is 32: CREGEN gets
+// exactly one slot.
+void test_the_creature_matrix_is_cmttab(void)
+{
+    static const int CMT[5][12] = {
+        {9, 9, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0},
+        {2, 4, 0, 6, 6, 6, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 4, 0, 6, 8, 4, 0, 0, 1, 0},
+        {0, 0, 0, 0, 0, 0, 8, 6, 6, 4, 0, 0},
+        {2, 2, 2, 2, 2, 2, 2, 4, 4, 8, 0, 1},
+    };
+    TEST_ASSERT_EQUAL_FLOAT(5, num("count :dagg.cmt"));
+    int total = 0;
+    for (int level = 0; level < 5; level++)
+    {
+        for (int typ = 0; typ < 12; typ++)
+        {
+            char expr[96];
+            snprintf(expr, sizeof(expr), "item %d (item %d :dagg.cmt)", typ + 1, level + 1);
+            TEST_ASSERT_EQUAL_FLOAT(CMT[level][typ], num(expr));
+        }
+    }
+    for (int typ = 0; typ < 12; typ++)
+        total += CMT[4][typ];
+    TEST_ASSERT_EQUAL_INT(31, total);
+    TEST_ASSERT_EQUAL_FLOAT(32, num(":dagg.ccbmax"));
+}
+
+// D3.ASM/D4.ASM through the generator's V$JMP and fall-through paths.  A
+// wrong nybble gives something that looks almost right (design section
+// 11.2), so what is pinned here is the run STRUCTURE -- the count of runs
+// a list decodes into is a direct function of how many pen lifts and
+// chains the decoder saw.
+void test_every_creature_has_the_vector_list_its_shape_needs(void)
+{
+    static const int RUNS[12] = {2, 2, 5, 3, 8, 5, 2, 8, 3, 4, 8, 10};
+    TEST_ASSERT_EQUAL_FLOAT(12, num("count :dagg.fwdcre"));
+    for (int typ = 0; typ < 12; typ++)
+    {
+        char expr[96], msg[64];
+        snprintf(expr, sizeof(expr), "count item %d :dagg.fwdcre", typ + 1);
+        snprintf(msg, sizeof(msg), "creature %d run count", typ);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(RUNS[typ], num(expr), msg);
+    }
+}
+
+// SGINT1/SGINT2 are one giant with two weapons, KNIGT1/KNIGT2 one knight
+// with two crests, and WIZ1 is WIZ0 with a crescent drawn on top -- three
+// shared bodies, reached by V$JMP twice and by an assembler fall-through
+// once.  Whichever way it got there, the LAST run is the shared body's.
+void test_the_two_giants_the_two_knights_and_the_wizard_share_a_body(void)
+{
+    run("make \"a last item 3 :dagg.fwdcre");  // SGINT1, via V$JMP
+    run("make \"b last item 6 :dagg.fwdcre");  // SGINT2, via fall-through
+    TEST_ASSERT_EQUAL_STRING(text(":a"), text(":b"));
+    run("make \"a last item 5 :dagg.fwdcre");  // KNIGT1, via V$JMP
+    run("make \"b last item 8 :dagg.fwdcre");  // KNIGT2, via fall-through
+    TEST_ASSERT_EQUAL_STRING(text(":a"), text(":b"));
+    run("make \"a last item 11 :dagg.fwdcre"); // WIZ0
+    run("make \"b last item 12 :dagg.fwdcre"); // WIZ1, via V$JMP
+    TEST_ASSERT_EQUAL_STRING(text(":a"), text(":b"));
+}
+
+// The one place where a fall-through is NOT the same as a V$JMP.  V$JMP
+// drops into VCTNEW and clears DRWFLG; running off the end of a list into
+// the label below it emits no control code at all, so the pen carries.
+// SGINT2's axe blade ends at (110,114) and SGIANT's own SVORG is
+// (102,132) -- the top of the blade -- so the blade is CLOSED by the
+// vector across the seam.  SGINT1 reaches the same body through V$JMP and
+// its leg run therefore starts clean at twelve points.
+void test_the_axe_blade_is_closed_by_the_fall_through(void)
+{
+    run("make \"r item 2 (item 6 :dagg.fwdcre)"); // SGINT2's second run
+    TEST_ASSERT_EQUAL_FLOAT(16, num("count item 1 :r"));
+    TEST_ASSERT_EQUAL_FLOAT(110, num("item 4 (item 1 :r)"));
+    TEST_ASSERT_EQUAL_FLOAT(114, num("item 4 (item 2 :r)"));
+    TEST_ASSERT_EQUAL_FLOAT(102, num("item 5 (item 1 :r)"));
+    TEST_ASSERT_EQUAL_FLOAT(132, num("item 5 (item 2 :r)"));
+
+    run("make \"r item 2 (item 3 :dagg.fwdcre)"); // SGINT1's second run
+    TEST_ASSERT_EQUAL_FLOAT(12, num("count item 1 :r"));
+    TEST_ASSERT_EQUAL_FLOAT(102, num("item 1 (item 1 :r)"));
+}
+
+//==========================================================================
+// Combat -- section 10.3, and the milestone's gate
+//==========================================================================
+
+// SCAL16, PATTK.ASM: a RADIX-7 multiply, so 128 is 1.0.
+void test_scal16_is_a_radix_seven_multiply(void)
+{
+    TEST_ASSERT_EQUAL_FLOAT(100, num("dagg.scal16 100 128"));
+    TEST_ASSERT_EQUAL_FLOAT(50, num("dagg.scal16 100 64"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num("dagg.scal16 1000 0"));
+    // 1000 * 255 / 128 = 1992.19, floored
+    TEST_ASSERT_EQUAL_FLOAT(1992, num("dagg.scal16 1000 255"));
+    // The largest this game can ask for still fits sixteen bits, which is
+    // why the ROM's truncation to D never bites.
+    TEST_ASSERT_TRUE(num("dagg.scal16 32767 255") < 65536);
+}
+
+// DAMAGE: power through the attacker's offense and then through the
+// defender's filter, twice, accumulated.  A wooden sword (0 / 16) swung
+// at 160 power against a spider (magic defense 255, physical 255):
+// magic 0, physical floor(160*16/128) = 20 then floor(20*255/128) = 39.
+void test_damage_is_two_channels_through_two_filters(void)
+{
+    TEST_ASSERT_EQUAL_FLOAT(39, num("dagg.damage 160 0 16 255 255 0"));
+    // and it accumulates onto what the defender already had
+    TEST_ASSERT_EQUAL_FLOAT(139, num("dagg.damage 160 0 16 255 255 100"));
+    // A knight II filters physical damage at 8/128, so the same swing
+    // barely marks it -- floor(20 * 8 / 128) = 1.
+    TEST_ASSERT_EQUAL_FLOAT(1, num("dagg.damage 160 0 16 64 8 0"));
+    // A balrog's magic offense is 255 and a wraith's magic defense 16:
+    // floor(1000*255/128) = 1992, floor(1992*16/128) = 249, plus the same
+    // again on the physical channel through a defense of 8: 124.
+    TEST_ASSERT_EQUAL_FLOAT(249 + 124, num("dagg.damage 1000 255 255 16 8 0"));
+}
+
+// ATTACK, both ends of the index range -- the gate's first half.  The
+// index is 15 - (how many times the attacker's power goes into four times
+// what the defender has left, capped at fifteen).
+//
+// At the top: a defender with no life left gives an index of 15, a bonus
+// of 10*(15-3) = +120, and a hit needs random + 120 >= 127, which is 249
+// of the 256 draws -- 97 %.
+//
+// At the bottom: a defender fifteen times the attacker's size gives an
+// index of 0, a bonus of -25*3 = -75, and a hit needs a draw of 202 or
+// more, which is 54 of 256 -- 21 %.  Both are design section 10.3's own
+// numbers.
+//
+// `rerandom` makes the draw reproducible, so the counts below are a fixed
+// property of this build rather than a coin toss; the band is four
+// standard errors wide so that a change of RNG cannot make it flap.
+static float hit_rate(const char *attacker, const char *dpow, const char *ddam)
+{
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd),
+             "(rerandom 17)  make \"h 0"
+             "  repeat 2000 [if dagg.attack %s %s %s [make \"h :h + 1]]",
+             attacker, dpow, ddam);
+    run(cmd);
+    return num(":h") / 2000.0f;
+}
+
+void test_the_hit_chance_runs_from_ninety_seven_percent_to_twenty_one(void)
+{
+    // index 15: the defender has nothing left
+    TEST_ASSERT_FLOAT_WITHIN(0.04f, 249.0f / 256.0f, hit_rate("160", "160", "160"));
+    // index 0: 4 * 160 needs sixteen subtractions of 40 to go negative,
+    // so fifteen of them succeed and the index bottoms out.
+    TEST_ASSERT_FLOAT_WITHIN(0.04f, 54.0f / 256.0f, hit_rate("40", "160", "0"));
+}
+
+// And the step between them is the ROM's own 25 % of the index: at index
+// 3 the bonus is zero and a hit is exactly half the draws.
+void test_the_bonus_is_zero_at_index_three(void)
+{
+    // index 3 means twelve successful subtractions: 4 * 120 / 40 = 12.
+    TEST_ASSERT_FLOAT_WITHIN(0.04f, 0.5f, hit_rate("40", "120", "0"));
+}
+
+// SHIELD, CRETUR.ASM: the pair wins or loses together, and the better
+// hand takes both filters.  Bronze is 96/128, leather 108/128, and 96 is
+// the lower high byte, so bronze wins outright.
+void test_the_shield_pair_wins_or_loses_together(void)
+{
+    start_game();
+    run("make \"dagg.ocbptr 0");
+    run("make \"i dagg.obirth 11 0  make \"dagg.plhand :i"); // BRONZE
+    run("dagg.ocbfil :dagg.plhand 11");
+    run("make \"i dagg.obirth 16 0  make \"dagg.prhand :i"); // LEATHER
+    run("make \"f dagg.shield :dagg.plhand 32896");
+    run("make \"f dagg.shield :dagg.prhand :f");
+    TEST_ASSERT_EQUAL_FLOAT(96, num("int (:f / 256)"));
+    TEST_ASSERT_EQUAL_FLOAT(128, num("modulo :f 256"));
+    // An empty pair of hands stays at the unshielded 128/128 ($8080).
+    run("make \"f dagg.shield 0 32896");
+    TEST_ASSERT_EQUAL_FLOAT(32896, num(":f"));
+}
+
+// PATT10: "swinging the Elvish sword costs eight times what the wooden
+// one does", which is design section 10.3's whole economy in one line.
+// The cost is charged whether or not there is anything here to hit.
+void test_the_elvish_sword_costs_eight_times_the_wooden_one(void)
+{
+    start_game();
+    put_in_left_hand(17); // WOODEN, 0 / 16
+    run("make \"dagg.pdam 0  make \"dagg.ppow 1600");
+    type_line("ATTACK LEFT");
+    const float wooden = num(":dagg.pdam");
+
+    start_game();
+    put_in_left_hand(2); // ELVISH, 64 / 64 -- once it is revealed
+    // OBIRTH dresses every new sword in the WOODEN one's numbers
+    // (GENVAL), so the Elvish sword only costs what it costs after REVEAL
+    // has given it its own back -- which is design section 10.2's
+    // information economy charging you for the better weapon twice.
+    run("dagg.ocbfil :dagg.plhand 2");
+    run("make \"dagg.pdam 0  make \"dagg.ppow 1600");
+    type_line("ATTACK LEFT");
+    TEST_ASSERT_EQUAL_FLOAT(25, wooden);            // 1600 * 2 / 128
+    TEST_ASSERT_EQUAL_FLOAT(200, num(":dagg.pdam")); // 1600 * 16 / 128
+}
+
+// An empty hand is EMPHND (COMDAT.ASM): no magic offense and five
+// physical, which costs nothing at all at this power and still swings.
+void test_an_empty_hand_swings_as_emphnd(void)
+{
+    start_game();
+    run("make \"dagg.pdam 0  make \"dagg.ppow 1600");
+    type_line("ATTACK LEFT");
+    TEST_ASSERT_EQUAL_FLOAT(0, num(":dagg.pdam")); // (0 + 5) / 8 = 0
+    TEST_ASSERT_EQUAL_FLOAT(num(":dagg.s.obj") + 4, num(":dagg.sndn"));
+}
+
+//==========================================================================
+// The world -- CBIRTH, NEWLVX and NLVL40
+//==========================================================================
+
+// NLVL30, NEWLVL.ASM: the level's population comes straight out of the
+// matrix, most ferocious type first.  Level 1 (internal 0) is nine
+// spiders, nine vipers, four club giants and two blobs.
+void test_a_level_is_populated_from_the_matrix(void)
+{
+    run("dagg.cmx.reset");
+    run("make \"dagg.level 0  dagg.newlvl 0");
+    TEST_ASSERT_EQUAL_INT(24, live_creatures());
+
+    static const int WANT[12] = {9, 9, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0};
+    int seen[12] = {0};
+    for (int slot = 1; slot <= 32; slot++)
+    {
+        char expr[96];
+        snprintf(expr, sizeof(expr), "item %d :dagg.ccuse", slot);
+        if (num(expr) == 0)
+            continue;
+        snprintf(expr, sizeof(expr), "item %d :dagg.cctyp", slot);
+        seen[(int)num(expr)]++;
+    }
+    for (int typ = 0; typ < 12; typ++)
+        TEST_ASSERT_EQUAL_INT(WANT[typ], seen[typ]);
+}
+
+// CBIR20: an occupiable cell nobody is standing on.  Both halves matter --
+// a creature inside rock would be unreachable, and two in one cell would
+// make CFIND's one answer a lie.
+void test_creatures_are_born_on_carved_cells_and_never_share_one(void)
+{
+    run("dagg.cmx.reset");
+    run("make \"dagg.level 0  dagg.newlvl 0");
+    for (int a = 1; a <= 32; a++)
+    {
+        char expr[128];
+        snprintf(expr, sizeof(expr), "item %d :dagg.ccuse", a);
+        if (num(expr) == 0)
+            continue;
+        snprintf(expr, sizeof(expr),
+                 "dagg.cell 0 (item %d :dagg.ccrow) (item %d :dagg.cccol)", a, a);
+        TEST_ASSERT_TRUE_MESSAGE(num(expr) != 255, "a creature was born inside rock");
+        // and the grid answers with this creature and no other
+        snprintf(expr, sizeof(expr),
+                 "dagg.cfind (item %d :dagg.ccrow) (item %d :dagg.cccol)", a, a);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(a, num(expr),
+                                        "two creatures share a cell, or the grid lost one");
+    }
+}
+
+// NLVL40: every object born on this level and still creature-owned is on
+// exactly one creature, round-robin from the first live CCB.  This is the
+// whole of design section 7.3 -- you get gear by killing things.
+void test_nlvl40_hands_every_object_on_the_level_to_a_creature(void)
+{
+    run("dagg.makeobjects");
+    run("dagg.cmx.reset");
+    run("make \"dagg.level 0  dagg.newlvl 0");
+
+    run("make \"n 0  repeat :dagg.ccbmax "
+        "[make \"n :n + count (item repcount :dagg.ccobj)]");
+    const int carried = (int)num(":n");
+
+    run("make \"n 0  repeat :dagg.ocbmax [if (and (0 = item repcount :dagg.oclvl) "
+        "((item repcount :dagg.ocown) < 0)) [make \"n :n + 1]]");
+    TEST_ASSERT_EQUAL_INT((int)num(":n"), carried);
+    TEST_ASSERT_TRUE_MESSAGE(carried > 0, "nothing was distributed");
+    // and nothing is lying on the floor at the start of a game
+    TEST_ASSERT_EQUAL_FLOAT(0, num("count :dagg.floor"));
+}
+
+//==========================================================================
+// CMOVE -- CRETUR.ASM, and the order of it is the game's difficulty
+//==========================================================================
+
+// A world with one creature in it, in a maze that is all corridor, so
+// that what a creature does next is a property of CMOVE and not of the
+// walls around it.
+static void one_creature(int type, int row, int col)
+{
+    start_game();
+    run("dagg.ccb.clear");
+    put_creature(1, type, row, col);
+    // A creature's timer is QUESCN's countdown in tenths, not a deadline
+    // (B91), so the fixtures park it out of reach and the tests that care
+    // drive `dagg.tenth` rather than the wall clock.
+    set_mock_ticks(100000);
+    run("make \"dagg.now 100000  make \"dagg.tenth.due 100000");
+}
+
+// CMOV10: the highest-priority action is picking things up -- one object,
+// and then the turn is over.  "The human can delay creature attacks by
+// dropping objects", says the top of CRETUR.ASM, and this is that.
+void test_a_creature_picks_up_one_object_and_spends_its_turn_on_it(void)
+{
+    one_creature(0, 5, 6); // a spider, one cell east of the player
+    run("make \"i 1  .setitem 1 :dagg.ocown 0  .setitem 1 :dagg.ocrow 5"
+        "  .setitem 1 :dagg.occol 6  .setitem 1 :dagg.oclvl 0"
+        "  dagg.floor.add 1");
+    run("dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT(1, num("count (item 1 :dagg.ccobj)"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num("count :dagg.floor"));
+    TEST_ASSERT_EQUAL_FLOAT(-1, num("item 1 :dagg.ocown"));
+    // it did not also move: the pickup is the whole turn
+    TEST_ASSERT_EQUAL_FLOAT(5, num("item 1 :dagg.ccrow"));
+    TEST_ASSERT_EQUAL_FLOAT(6, num("item 1 :dagg.cccol"));
+    // and it is re-queued on the spider's own movement delay -- 23 tenths,
+    // doubled by the default pace of 2
+    TEST_ASSERT_EQUAL_FLOAT(46, num("item 1 :dagg.cctim"));
+}
+
+// CMOV10's two exceptions: a scorpion (type 6) and both wizards (10, 11)
+// walk straight past treasure.
+void test_a_scorpion_and_both_wizards_walk_past_treasure(void)
+{
+    static const int NOT_INTERESTED[3] = {6, 10, 11};
+    for (int i = 0; i < 3; i++)
+    {
+        one_creature(NOT_INTERESTED[i], 5, 6);
+        run("make \"i 1  .setitem 1 :dagg.ocown 0  .setitem 1 :dagg.ocrow 5"
+            "  .setitem 1 :dagg.occol 6  .setitem 1 :dagg.oclvl 0"
+            "  dagg.floor.add 1");
+        run("dagg.cmove 1");
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("count (item 1 :dagg.ccobj)"),
+                                        "it stopped for the loot");
+        TEST_ASSERT_EQUAL_FLOAT(1, num("count :dagg.floor"));
+    }
+}
+
+// CMOV50-CMOV62: in line with the player, with nothing built across the
+// corridor, so it faces him and closes by one cell.  DIR 3 is west, which
+// is the way a creature east of the player has to walk.
+void test_a_creature_that_can_see_the_player_closes_on_him(void)
+{
+    one_creature(0, 5, 8); // same row, three cells east
+    run("dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT(3, num("item 1 :dagg.ccdir"));
+    TEST_ASSERT_EQUAL_FLOAT(5, num("item 1 :dagg.ccrow"));
+    TEST_ASSERT_EQUAL_FLOAT(7, num("item 1 :dagg.cccol"));
+
+    // and from the north it comes south, which is DIR 2
+    one_creature(0, 2, 5);
+    set_cell(3, 5, 0); // take the fixture's corridor wall back out
+    set_cell(2, 5, 0);
+    run("dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT(2, num("item 1 :dagg.ccdir"));
+    TEST_ASSERT_EQUAL_FLOAT(3, num("item 1 :dagg.ccrow"));
+}
+
+// STEPOK stops the line of sight at rock, and CMOV70's preference walk
+// takes over -- which moves the creature SOMEWHERE, but not through the
+// wall.  (5,5) is the player; the creature is at (2,5) with (3,5)'s north
+// side walled and (2,5) itself outside the maze in build_synthetic_corridor,
+// so this is the fixture's own wall doing the work.
+void test_a_creature_that_cannot_see_the_player_wanders(void)
+{
+    one_creature(0, 2, 5);
+    set_cell(2, 5, 0);   // the creature's own cell, carved
+    set_cell(3, 5, 255); // and rock between it and the player
+    run("dagg.cmove 1");
+    TEST_ASSERT_TRUE_MESSAGE(num("item 1 :dagg.ccrow") != 3,
+                             "it walked into rock");
+    // it went somewhere, though: CMOV70 tries three directions and then
+    // backs out, and every one of those is legal here.
+    TEST_ASSERT_TRUE_MESSAGE(num("item 1 :dagg.ccrow") != 2
+                                 || num("item 1 :dagg.cccol") != 5,
+                             "it did not move at all");
+}
+
+// CMOV20: standing on the player is an attack, and CMOV92 reschedules at
+// the ATTACK delay -- 1.1 s for a spider against its 2.3 s of movement.
+void test_a_creature_on_the_player_attacks_at_attack_speed(void)
+{
+    one_creature(0, 5, 5);
+    run("make \"dagg.pdam 0  make \"dagg.ppow 160");
+    run("make \"dagg.sndn -1  dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT(22, num("item 1 :dagg.cctim")); // 11 tenths x 2
+    // The spider's own sound is played whether or not the blow lands, and
+    // CLANK (19) on top of it when it does.
+    const float snd = num(":dagg.sndn");
+    TEST_ASSERT_TRUE_MESSAGE(snd == 0 || snd == 19, "no attack sound");
+    TEST_ASSERT_EQUAL_FLOAT(5, num("item 1 :dagg.ccrow"));
+}
+
+// CMOV90 falling into CMOV92: a creature that WALKS onto the player is
+// rescheduled at attack speed before it has hit you once, and it forces
+// the redraw rather than waiting for LUKNEW to notice.
+void test_walking_onto_the_player_speeds_a_creature_up(void)
+{
+    one_creature(0, 5, 6);
+    run("make \"dagg.newluk \"true");
+    run("dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT(5, num("item 1 :dagg.ccrow"));
+    TEST_ASSERT_EQUAL_FLOAT(5, num("item 1 :dagg.cccol"));
+    TEST_ASSERT_EQUAL_FLOAT(22, num("item 1 :dagg.cctim")); // the attack delay
+    TEST_ASSERT_EQUAL_STRING("false", text(":dagg.newluk"));
+}
+
+// CWALK: the grid follows the creature.  If it did not, CFIND would go on
+// answering for a cell the creature has left and the peek-a-boo would
+// draw a mark at an empty corridor mouth.
+void test_the_occupancy_grid_follows_a_creature_that_moves(void)
+{
+    one_creature(0, 5, 8);
+    run("dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT(0, num("dagg.cfind 5 8"));
+    TEST_ASSERT_EQUAL_FLOAT(1, num("dagg.cfind 5 7"));
+}
+
+// CWLK99: a cell somebody is already standing in is not occupiable, so a
+// creature blocked by another one does not walk through it.
+void test_a_creature_will_not_step_onto_another_creature(void)
+{
+    one_creature(0, 5, 8);
+    put_creature(2, 0, 5, 7); // in the way, between it and the player
+    run("dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT(8, num("item 1 :dagg.cccol"));
+}
+
+// CWLK20, design section 9.3 -- the game's sonar.  A creature is heard
+// when it moves within eight cells the long way and two the short way, at
+// a volume of 255 - 31 * the long distance, and the same gate controls
+// whether the screen is redrawn at all.
+void test_the_approach_sound_is_the_roms_range_gate_and_volume(void)
+{
+    // The player is at (5,5).  A creature put down at (5,9) facing west
+    // walks to (5,8), three cells away: heard at 255 - 93 = 162.  It is
+    // played half the time, so the walk is repeated until it is.
+    one_creature(0, 5, 9);
+    run("make \"dagg.sndn -1  make \"dagg.newluk \"false");
+    run("repeat 40 [if (:dagg.sndn = -1) "
+        "[.setitem 1 :dagg.ccrow 5  .setitem 1 :dagg.cccol 9"
+        "  .setitem 1 :dagg.ccdir 3  ignore dagg.cwalk 1 0]]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":dagg.sndn"),
+                                    "the spider was never heard at three cells");
+    TEST_ASSERT_EQUAL_FLOAT(255 - (31 * 3), num(":dagg.sndvol"));
+    TEST_ASSERT_EQUAL_STRING("true", text(":dagg.newluk"));
+
+    // Nine cells away is past the eight-cell gate: silence, and no redraw
+    // asked for either.
+    one_creature(0, 5, 15);
+    run("make \"dagg.sndn -1  make \"dagg.newluk \"false");
+    run("repeat 40 [.setitem 1 :dagg.ccrow 5  .setitem 1 :dagg.cccol 15"
+        "  .setitem 1 :dagg.ccdir 3  ignore dagg.cwalk 1 0]");
+    TEST_ASSERT_EQUAL_FLOAT(-1, num(":dagg.sndn"));
+    TEST_ASSERT_EQUAL_STRING("false", text(":dagg.newluk"));
+
+    // And three cells off the OTHER axis is past the two-cell gate, even
+    // though the long distance is well inside eight.
+    one_creature(0, 8, 9);
+    run("make \"dagg.sndn -1  make \"dagg.newluk \"false");
+    run("repeat 40 [.setitem 1 :dagg.ccrow 8  .setitem 1 :dagg.cccol 9"
+        "  .setitem 1 :dagg.ccdir 3  ignore dagg.cwalk 1 0]");
+    TEST_ASSERT_EQUAL_FLOAT(-1, num(":dagg.sndn"));
+}
+
+//==========================================================================
+// Killing things -- PATT30-PATT42
+//==========================================================================
+
+// Everything it was carrying lands where it stood, the level's own count
+// of that type goes down, and you take an eighth of its power.
+void test_killing_a_creature_drops_its_loot_and_pays_you(void)
+{
+    one_creature(3, 5, 5); // a blob, 304 power, on the player's own cell
+    run("dagg.cmx.reset");
+    run(".setitem 1 :dagg.ccobj [3 4]");
+    run(".setitem 3 :dagg.ocown (0 - 1)  .setitem 4 :dagg.ocown (0 - 1)");
+    run("make \"dagg.ppow 800  make \"dagg.pdam 0");
+    const float before = num("item 4 (item 1 :dagg.cmx)"); // blobs on level 1
+
+    run("dagg.cdeath 1");
+    TEST_ASSERT_EQUAL_FLOAT(0, num("item 1 :dagg.ccuse"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num("dagg.cfind 5 5"));
+    TEST_ASSERT_EQUAL_FLOAT(before - 1, num("item 4 (item 1 :dagg.cmx)"));
+    TEST_ASSERT_EQUAL_FLOAT(800 + 38, num(":dagg.ppow")); // 304 / 8
+    TEST_ASSERT_EQUAL_FLOAT(2, num("count :dagg.floor"));
+    TEST_ASSERT_EQUAL_FLOAT(0, num("item 3 :dagg.ocown"));
+    TEST_ASSERT_EQUAL_FLOAT(5, num("item 3 :dagg.ocrow"));
+    TEST_ASSERT_EQUAL_FLOAT(5, num("item 3 :dagg.occol"));
+}
+
+// The whole swing, through the typed line: a wooden sword against a
+// spider, in the light, until it dies.  A spider is 32 power and filters
+// nothing (255/255), so 160 power through 16 physical offense takes 39 a
+// hit and the thing lasts one.
+void test_a_swing_that_lands_kills_a_spider(void)
+{
+    one_creature(0, 5, 5);
+    // A torch that is not dead, so PATT22's darkness rule does not apply.
+    run("make \"dagg.ocbptr 40  make \"i dagg.obirth 15 0"
+        "  make \"dagg.ptorch :i");
+    run("make \"dagg.ppow 160  make \"dagg.pdam 0");
+    run("repeat 20 [if not (0 = item 1 :dagg.ccuse) [dagg.pattk.swing 4 0 16]]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("item 1 :dagg.ccuse"),
+                                    "twenty swings and the spider lived");
+    // A wooden sword takes 39 off a spider through its own 255/255 filters
+    // and a spider has 32 to give, so the first blow that lands kills it.
+    TEST_ASSERT_EQUAL_FLOAT(160 + 4, num(":dagg.ppow")); // 32 / 8
+    TEST_ASSERT_EQUAL_FLOAT(0, num("dagg.cfind 5 5"));
+}
+
+// PATT22: with no torch, or a DEAD one, three swings in four are thrown
+// away -- and a torch is called dead five minutes before it stops giving
+// light, so you fight blind while the corridor is still lit.
+static float landed_rate(void)
+{
+    run("(rerandom 3)  make \"h 0  repeat 400 [.setitem 1 :dagg.ccdam 0"
+        "  make \"dagg.sndn -1  dagg.pattk.swing 4 0 16"
+        "  if not (:dagg.sndn = -1) [make \"h :h + 1]]");
+    return num(":h") / 400.0f;
+}
+
+void test_the_dark_throws_away_three_swings_in_four(void)
+{
+    // A balrog: 1000 power against your 160, so the roll is the hard end
+    // of the index range -- and its physical filter is 3/128, so a wooden
+    // sword does it no damage at all and it survives four hundred swings.
+    one_creature(9, 5, 5);
+    run("make \"dagg.ppow 160  make \"dagg.pdam 0");
+    run("make \"dagg.ocbptr 40  make \"i dagg.obirth 15 0"
+        "  make \"dagg.ptorch :i");
+    const float lit = landed_rate();
+
+    run("make \"dagg.ptorch 0");
+    const float dark = landed_rate();
+    TEST_ASSERT_TRUE_MESSAGE(lit > 0.1f, "nothing landed even in the light");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.05f, lit / 4.0f, dark,
+                                     "the dark is not three swings in four");
+
+    // A DEAD torch is the same as no torch, which is why BURNER's naming
+    // and its light do not line up: you fight blind for the five minutes
+    // it goes on lighting the corridor.
+    run("make \"dagg.ptorch :i  .setitem :i :dagg.octyp :dagg.t.dead");
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, lit / 4.0f, landed_rate());
+}
+
+// PATT20: "rings are guaranteed to hit" -- and the dark does not touch
+// them either, because PATT24 is reached before PATT22 is.
+void test_a_ring_always_hits_even_in_the_dark(void)
+{
+    one_creature(9, 5, 5); // a balrog: 1000 power, and it filters hard
+    run("make \"dagg.ppow 160  make \"dagg.pdam 0  make \"dagg.ptorch 0");
+    run("make \"h 0  repeat 50 [.setitem 1 :dagg.ccdam 0"
+        "  make \"dagg.sndn -1  dagg.pattk.swing 1 255 255"
+        "  if not (:dagg.sndn = -1) [make \"h :h + 1]]");
+    TEST_ASSERT_EQUAL_FLOAT(50, num(":h"));
+}
+
+// PATT10's counter: ENERGY, ICE and FIRE spend a charge a swing and are
+// GOLD when the third goes.  FINAL -- the Ring of Ohm -- is below the
+// range and is never counted down.
+// A ring reaches the range by being INCANTed into it: OBIRTH gives FIRE
+// no XXXTAB row of its own, and the three charges it spends are the ones
+// the Vulcan ring was born with (design section 10.2).
+void test_an_attack_ring_spends_three_charges_and_turns_to_gold(void)
+{
+    start_game();
+    put_in_left_hand(12); // VULCAN
+    run("make \"dagg.ppow 30000  make \"dagg.pdam 0");
+    type_line("INCANT FIRE");
+    TEST_ASSERT_EQUAL_FLOAT(21, num("item :dagg.plhand :dagg.octyp"));
+    TEST_ASSERT_EQUAL_FLOAT(3, num("item :dagg.plhand :dagg.ocx0"));
+    type_line("ATTACK LEFT");
+    TEST_ASSERT_EQUAL_FLOAT(2, num("item :dagg.plhand :dagg.ocx0"));
+    // A ring is 255 / 255, and `ADDA PMGO / RORA / LSRA / LSRA` keeps the
+    // ninth bit of the sum, so the index is 63 and not 31: a ring swing
+    // costs 63/128ths of your own power.  Three in a row faint you before
+    // the third lands, which is the ROM's price for a weapon that cannot
+    // miss -- so the damage is put back here to watch the counter reach
+    // the end of its three charges.
+    TEST_ASSERT_EQUAL_FLOAT((30000 * 63) / 128, num(":dagg.pdam"));
+    run("make \"dagg.pdam 0");
+    type_line("ATTACK LEFT");
+    run("make \"dagg.pdam 0");
+    type_line("ATTACK LEFT");
+    TEST_ASSERT_EQUAL_FLOAT(22, num("item :dagg.plhand :dagg.octyp"));
+    TEST_ASSERT_EQUAL_STRING("GOLD RING", text("dagg.objnam :dagg.plhand"));
+
+    start_game();
+    put_in_left_hand(18); // FINAL
+    run("make \"was item :dagg.plhand :dagg.ocx0");
+    type_line("ATTACK LEFT");
+    TEST_ASSERT_EQUAL_FLOAT(num(":was"), num("item :dagg.plhand :dagg.ocx0"));
+    TEST_ASSERT_EQUAL_FLOAT(18, num("item :dagg.plhand :dagg.octyp"));
+}
+
+// PATT24 is a sound and an OUTSTI, and M4 shipped only the sound: a board
+// could land blows and see nothing at all happen, because until M6 a hit
+// and a miss are equally silent and a creature you have not killed looks
+// the same either way.  B88.  The string is `!!!` -- read out of PATTK.ASM
+// by scripts/gen_daggorath.py's own decoder, not transcribed.
+void test_a_landed_blow_says_so(void)
+{
+    one_creature(0, 5, 5);
+    run("make \"dagg.ocbptr 40  make \"i dagg.obirth 15 0"
+        "  make \"dagg.ptorch :i");
+    run("make \"dagg.ppow 160  make \"dagg.pdam 0");
+
+    mock_device_clear_output();
+    run("repeat 20 [if not (0 = item 1 :dagg.ccuse) [dagg.pattk.swing 4 0 16]]");
+    TEST_ASSERT_EQUAL_FLOAT(0, num("item 1 :dagg.ccuse"));
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mock_device_get_output(), "!!!"),
+                                 "a landed blow printed nothing");
+
+    // ...and swinging at empty air says nothing, which is what makes the
+    // three marks worth printing.
+    run("dagg.ccb.clear");
+    mock_device_clear_output();
+    run("repeat 20 [dagg.pattk.swing 4 0 16]");
+    TEST_ASSERT_NULL_MESSAGE(strstr(mock_device_get_output(), "!"),
+                             "swinging at nothing said something");
+}
+
+// The end-to-end path a board walks and every fixture above skips: the
+// REAL dungeon, the real scheduler, and the command line.  A creature
+// beside you closes on you, and the typed ATTACK lands on it.  M4's own
+// tests all built a synthetic corridor, which is why none of them noticed
+// that a hit was invisible.
+void test_a_creature_closes_on_you_and_the_typed_attack_lands(void)
+{
+    run("dagg.makeobjects  dagg.cmx.reset");
+    run("make \"dagg.level 0  dagg.newlvl 0  dagg.givebag");
+    // ONCE.ASM:GAME10's own start, in the real level 1 -- a north-south
+    // corridor, so (17,11) is carved and a creature there is beside you.
+    run("make \"dagg.row 16  make \"dagg.col 11  make \"dagg.dir 0");
+    run("make \"dagg.light 8  make \"dagg.mlight 8");
+    run("dagg.ccb.clear");
+    put_creature(1, 0, 17, 11); // a spider, one cell south
+    set_mock_ticks(100000);
+    run("make \"dagg.now 100000  .setitem 1 :dagg.cctim 1");
+
+    run("dagg.tenth");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(16, num("item 1 :dagg.ccrow"),
+                                    "the spider did not close on the player");
+    TEST_ASSERT_EQUAL_FLOAT(1, num("dagg.cfind 16 11"));
+    // CMOV90 fell into CMOV92: it is on you, so it is on attack time now
+    TEST_ASSERT_EQUAL_FLOAT(22, num("item 1 :dagg.cctim"));
+
+    // A sword in a hand and a torch alight, then the command line.
+    run("make \"dagg.ppow 160  make \"dagg.pdam 0");
+    type_line("PULL RIGHT TORCH");
+    type_line("USE RIGHT");
+    type_line("PULL LEFT SWORD");
+    TEST_ASSERT_EQUAL_STRING("WOODEN SWORD", text("dagg.objnam :dagg.plhand"));
+
+    mock_device_clear_output();
+    for (int i = 0; i < 20 && num("item 1 :dagg.ccuse") != 0; i++)
+        type_line("ATTACK LEFT");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num("item 1 :dagg.ccuse"),
+                                    "twenty typed attacks and the spider lived");
+    // ...with HMAN30's space between the line you typed and the marks:
+    // `.ATTACK LEFT !!!`, which is `I.SP` and not a backspace.
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mock_device_get_output(), " !!!"),
+                                 "the typed attack never said it landed");
+    TEST_ASSERT_EQUAL_FLOAT(160 + 4, num(":dagg.ppow")); // an eighth of 32
+}
+
+//==========================================================================
+// What a creature looks like -- VIEW30, PDRAW, EXAM10, MAPP42
+//==========================================================================
+
+static int strokes_for_a_redraw(void)
+{
+    mock_device_clear_graphics();
+    run("dagg.redraw :dagg.norscl");
+    return mock_device_line_count();
+}
+
+// VIEW30: the creature standing in the cell you are looking at is drawn.
+// A balrog is four runs of 21, 9, 11 and 27 points -- 64 strokes -- and
+// unlike VIEW52's objects it is drawn ONCE, not once a channel.
+void test_a_creature_in_the_view_is_drawn(void)
+{
+    build_synthetic_corridor();
+    run("dagg.ccb.clear");
+    const int empty = strokes_for_a_redraw();
+
+    put_creature(1, 9, 4, 5); // a balrog, one cell up the corridor
+    TEST_ASSERT_EQUAL_INT_MESSAGE(empty + 64, strokes_for_a_redraw(),
+                                  "the creature drew the wrong number of strokes");
+}
+
+// CMRDRW: a creature with any magic offense at all is drawn under the
+// MAGIC light -- scorpions, wraiths, balrogs and both wizards -- so it is
+// invisible unless your torch is magical too.  A spider has none, and is
+// the control.
+void test_a_magical_creature_needs_a_magical_torch(void)
+{
+    build_synthetic_corridor();
+    run("dagg.ccb.clear");
+    run("make \"dagg.light 8  make \"dagg.mlight 0");
+    const int empty = strokes_for_a_redraw();
+
+    put_creature(1, 9, 4, 5); // balrog: magic offense 255
+    TEST_ASSERT_EQUAL_INT_MESSAGE(empty, strokes_for_a_redraw(),
+                                  "a balrog was drawn with no magic light");
+    run("make \"dagg.mlight 8");
+    TEST_ASSERT_EQUAL_INT(empty + 64, strokes_for_a_redraw());
+
+    // A spider is eighteen points in two runs -- sixteen strokes -- and it
+    // is there with the magic light off.
+    run("dagg.ccb.clear  make \"dagg.mlight 0");
+    put_creature(1, 0, 4, 5);
+    TEST_ASSERT_EQUAL_INT(empty + 16, strokes_for_a_redraw());
+}
+
+// PDRAW: the peek-a-boo, and the only thing in this game that tells you
+// about a cell you are not looking into.  A creature through an open side
+// passage puts the MARK up -- LPEEK, one run of four points -- so you
+// learn that something is there and not what it is.  A wall on that side
+// hides it, because PDRAW tests for a passage and nothing else.
+void test_the_peek_marks_a_creature_through_an_open_side_passage(void)
+{
+    build_synthetic_corridor();
+    run("dagg.ccb.clear");
+    const int empty = strokes_for_a_redraw();
+
+    // The player is at (5,5) facing north, so its left is west: (5,4).
+    // LPEEK is `SVORG 100,28` and four SVECTs -- five points, so four
+    // strokes.
+    put_creature(1, 0, 5, 4);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(empty + 4, strokes_for_a_redraw(),
+                                  "the peek did not draw LPEEK's four strokes");
+
+    // Wall the west side of (5,5) -- bits 6 and 7 of the cell -- and the
+    // mark goes, though the creature has not moved.  The architecture
+    // changes with it, so this is measured against the same wall with the
+    // creature taken away rather than against the open corridor.
+    set_cell(5, 5, 3 << 6);
+    const int walled = strokes_for_a_redraw();
+    run("dagg.ccb.clear");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(walled, strokes_for_a_redraw(),
+                                  "the peek drew through a wall");
+}
+
+// EXAM10: the inventory screen says !CREATURE! and nothing else.  The ROM
+// prints no name, which is why the creature tables carry no words at all
+// -- there is no ADJTAB for a monster to disagree with.
+void test_examine_says_creature_when_one_is_here(void)
+{
+    start_game();
+    run("dagg.ccb.clear");
+    const MockDeviceState *state = mock_device_get_state();
+
+    int before = state->label.count;
+    run("dagg.examin");
+    const int without = state->label.count - before;
+
+    put_creature(1, 0, 5, 5);
+    before = state->label.count;
+    run("dagg.examin");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(without + 1, state->label.count - before,
+                                  "EXAMINE said nothing about the creature");
+
+    // `LEAX 11,X` centres ten characters on 32 columns; on 40 that is 15.
+    run("dagg.write.at 1 15 [!CREATURE!]");
+    TEST_ASSERT_EQUAL_STRING("!CREATURE!", state->label.last_text);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, -160.0f + 8 * 15, state->label.last_x);
+}
+
+// MAPP42: a Seer scroll marks creatures and a Vision scroll does not --
+// MAPFLG gates both passes, and design section 13's "walls only" is what
+// the cheaper scroll buys you.  The mark is MARK4's own $10/$54 pattern:
+// a stroke down the middle and two beside it.
+void test_the_map_marks_creatures_only_for_a_seer_scroll(void)
+{
+    build_synthetic_corridor();
+    run("dagg.ccb.clear");
+    run("make \"dagg.mapflg \"false");
+    mock_device_clear_graphics();
+    run("dagg.mapper");
+    const int walls = mock_device_line_count();
+
+    put_creature(1, 0, 20, 20);
+    mock_device_clear_graphics();
+    run("dagg.mapper");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(walls, mock_device_line_count(),
+                                  "a Vision scroll showed a creature");
+
+    run("make \"dagg.mapflg \"true");
+    mock_device_clear_graphics();
+    run("dagg.mapper");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(walls + 3, mock_device_line_count(),
+                                  "a Seer scroll did not mark the creature");
+    // and MARK4's own $10/$54: a stroke down the middle and two beside it
+
+}
+
+//==========================================================================
+// The scheduler -- design section 5's other half, and the milestone's gate
+//==========================================================================
+
+// The gate's second half, to the limit a host can reach: thirty-two
+// creatures all take their turn off one pass of the tick.  The TIMING is
+// a board's -- `ticks` is milliseconds and the host is far faster than
+// the target, the same caveat tests/logo/p17m0 records at M0.
+void test_thirty_two_creatures_all_take_their_turn(void)
+{
+    start_game();
+    run("dagg.ccb.clear");
+    for (int slot = 1; slot <= 32; slot++)
+        put_creature(slot, slot % 12, 10 + (slot / 8), 10 + (slot % 8));
+    TEST_ASSERT_EQUAL_INT(32, live_creatures());
+
+    set_mock_ticks(500000);
+    run("make \"dagg.now 500000  make \"dagg.tenth.due 500000"
+        "  repeat :dagg.ccbmax [.setitem repcount :dagg.cctim 1]");
+    run("dagg.tenth");
+    for (int slot = 1; slot <= 32; slot++)
+    {
+        char expr[96], msg[64];
+        snprintf(expr, sizeof(expr), "item %d :dagg.cctim", slot);
+        snprintf(msg, sizeof(msg), "creature %d did not take its turn", slot);
+        TEST_ASSERT_TRUE_MESSAGE(num(expr) > 1, msg);
+    }
+    // and the queue's own clock advanced by exactly one tenth
+    TEST_ASSERT_EQUAL_FLOAT(500100, num(":dagg.tenth.due"));
+}
+
+// A creature is not moved before it is due, and Q.TEN is tenths of a
+// second: a spider's 23 is 2.3 s.
+void test_a_creature_moves_only_when_it_is_due(void)
+{
+    one_creature(0, 5, 8);
+    run(".setitem 1 :dagg.cctim 2");
+    run("dagg.tenth");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(8, num("item 1 :dagg.cccol"),
+                                    "it moved with a tenth still to go");
+    TEST_ASSERT_EQUAL_FLOAT(1, num("item 1 :dagg.cctim"));
+    run("dagg.tenth");
+    TEST_ASSERT_EQUAL_FLOAT(7, num("item 1 :dagg.cccol"));
+    TEST_ASSERT_EQUAL_FLOAT(46, num("item 1 :dagg.cctim"));
+}
+
+// The queue keeps counting while the game is busy: `dagg.tenth` advances
+// its own due time by 100 from ITSELF, so a tenth missed during a long
+// redraw is made up on the ticks after it rather than lost.  That is what
+// the CoCo's IRQ did for free.
+void test_a_missed_tenth_is_made_up_and_not_lost(void)
+{
+    one_creature(0, 5, 8);
+    run(".setitem 1 :dagg.cctim 3");
+    // half a second of nothing, as a faint or a slow redraw would be
+    set_mock_ticks(100500);
+    run("make \"dagg.now 100500");
+    run("repeat 3 [dagg.tick]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(100300, num(":dagg.tenth.due"),
+                                    "the queue skipped the tenths it missed");
+    TEST_ASSERT_EQUAL_FLOAT(7, num("item 1 :dagg.cccol"));
+}
+
+// :dagg.pace, this port's own knob (design section 19).  1 is the ROM's own
+// arithmetic and the default, and the reason the knob exists is that the
+// ROM's delays are faithful while the machine under them is not: a CoCo
+// could not keep up with its own scheduler and this board can.
+//
+// It scales creature turns and NOTHING else -- not the heart, not the
+// torch, not CREGEN, not your own commands -- because those are the
+// player's clock and they are already right.
+void test_the_pace_knob_scales_creatures_and_only_creatures(void)
+{
+    one_creature(0, 5, 8);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":dagg.pace"),
+                                    "the default pace moved without a board saying so");
+    run("make \"dagg.pace 1  dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT(23, num("item 1 :dagg.cctim")); // the raw table
+
+    // `daggorath` deliberately does NOT reset the knob -- it is set before
+    // the game starts -- so the test puts it back by hand.
+    one_creature(0, 5, 8);
+    run("make \"dagg.pace 2  dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT(46, num("item 1 :dagg.cctim")); // the default 2
+
+    // ...the attack delay with it (CMOV92 goes through the same reader)
+    one_creature(0, 5, 5);
+    run("make \"dagg.pdam 0  make \"dagg.ppow 160  dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT(22, num("item 1 :dagg.cctim"));
+
+    // ...and birth, so a level built at a slow pace stays slow
+    run("make \"dagg.pace 3  dagg.ccb.clear  dagg.cbirth 0");
+    run("make \"n 0  repeat :dagg.ccbmax [if not (0 = item repcount :dagg.ccuse) "
+        "[make \"n item repcount :dagg.cctim]]");
+    TEST_ASSERT_EQUAL_FLOAT(3 * 23, num(":n"));
+
+    // The player's own clock is untouched: BURNER is still a minute,
+    // LUKNEW still twice a second, CREGEN still five, and the heart still
+    // HUPDAT's own jiffies.
+    run("make \"dagg.pace 4  make \"dagg.now 100000");
+    run("dagg.burner");
+    TEST_ASSERT_EQUAL_FLOAT(100000 + 60000, num(":dagg.burner.due"));
+    run("dagg.luknew");
+    TEST_ASSERT_EQUAL_FLOAT(100000 + 500, num(":dagg.luknew.due"));
+    run("make \"dagg.level 0  dagg.cmx.reset  dagg.cregen");
+    TEST_ASSERT_EQUAL_FLOAT(100000 + 300000, num(":dagg.cregen.due"));
+    run("make \"dagg.ppow 160  make \"dagg.pdam 0  dagg.hupdat");
+    TEST_ASSERT_EQUAL_FLOAT(46, num(":dagg.heartr"));
+}
+
+// CREGEN, COMCRE.ASM: every five minutes, one more of a random type in
+// 2..9, and only while the level holds fewer than 32.  It increments the
+// MATRIX and not the dungeon -- the creature appears the next time you
+// walk in, which is exactly why coming back up is a bad idea.
+void test_cregen_restocks_the_matrix_and_stops_at_thirty_two(void)
+{
+    run("dagg.cmx.reset");
+    run("make \"dagg.level 0  make \"dagg.now 900000");
+    run("make \"was se (item 1 :dagg.cmx) []");
+    run("dagg.cregen");
+    TEST_ASSERT_EQUAL_FLOAT(900000 + 300000, num(":dagg.cregen.due"));
+
+    run("make \"n 0  repeat 12 [if not ((item repcount :was) = "
+        "(item repcount (item 1 :dagg.cmx))) [make \"n repcount]]");
+    const int changed = (int)num(":n");
+    TEST_ASSERT_TRUE_MESSAGE(changed >= 3 && changed <= 10,
+                             "CREGEN added a type outside 2..9");
+    char expr[96];
+    snprintf(expr, sizeof(expr), "item %d (item 1 :dagg.cmx)", changed);
+    TEST_ASSERT_EQUAL_FLOAT(field("was", changed) + 1, num(expr));
+
+    // Fill the level and it does nothing at all.
+    run("make \"row item 1 :dagg.cmx  repeat 12 [.setitem repcount :row 0]");
+    run(".setitem 1 :row 32");
+    run("make \"was se :row []  dagg.cregen");
+    for (int i = 1; i <= 12; i++)
+        TEST_ASSERT_EQUAL_FLOAT(field("was", i), field("row", i));
+}
+
+static float tenths_cost(int count, const char *what)
+{
+    char cmd[192];
+    snprintf(cmd, sizeof(cmd),
+             "make \"m0 %s  repeat %d [dagg.tenth]  make \"m1 %s",
+             what, count, what);
+    run(cmd);
+    run(cmd); // the first run of a given string mints its own words
+    return num(":m0") - num(":m1");
+}
+
+// B91, and the test M4 did not have.  `.setitem` INTERNS every new number
+// it is given -- measured at 12 atoms and 3 nodes apiece -- and the atom
+// table is 32 KB that nothing frees, so a list field holding a value that
+// is different every time is a leak with a fuse on it.  `dagg.cctim` was
+// a `ticks`-based deadline and burned the whole table in under two
+// minutes of play; as QUESCN's countdown it is a small integer the mazes
+// have already interned and costs nothing at all.
+//
+// M4's own budget tests all measured a REDRAW.  Nothing measured the
+// scheduler, which is the part that runs thirty times a second for ever.
+void test_a_long_run_of_creature_turns_spends_nothing(void)
+{
+    start_game();
+    run("dagg.ccb.clear");
+    for (int slot = 1; slot <= 8; slot++)
+        put_creature(slot, slot % 12, 10 + slot, 20);
+    run("make \"dagg.now 100000  make \"dagg.tenth.due 0");
+    // Warm first: the very first turns intern each countdown value once
+    // (1 to 62) and each direction, and those are one-off costs.
+    run("repeat 4000 [dagg.tenth]");
+
+    char msg[160];
+    const float nodes_spent = tenths_cost(2000, "nodes");
+    const float atoms_spent = tenths_cost(2000, "atoms");
+    snprintf(msg, sizeof(msg),
+             "2000 warm tenths of eight creatures cost %d nodes and %d atoms",
+             (int)nodes_spent, (int)atoms_spent);
+    // Not "small": zero, give or take the instruction list's own cell.
+    // The shipped code cost 12 atoms and 3 nodes a creature turn.
+    TEST_ASSERT_TRUE_MESSAGE(nodes_spent <= 2, msg);
+    TEST_ASSERT_TRUE_MESSAGE(atoms_spent <= 2, msg);
+}
+
+// And the invariant that keeps it gone, which is the gate that would have
+// caught B91 in the first place.  A host test cannot reproduce the leak
+// itself -- the mock clock is frozen, so even a deadline is the same
+// number every turn and interns once -- but it can insist on the property
+// that made the leak impossible: **a creature's timer is a small integer,
+// never a reading of a clock.**  Anything derived from `ticks` fails this
+// on the first call.
+void test_a_creature_timer_is_a_small_integer_not_a_clock_reading(void)
+{
+    for (int pace = 1; pace <= 4; pace++)
+    {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "make \"dagg.pace %d", pace);
+        run(cmd);
+        for (int typ = 0; typ < 12; typ++)
+        {
+            for (int field = 6; field <= 7; field++) // movement, attack
+            {
+                char expr[128], msg[128];
+                snprintf(expr, sizeof(expr),
+                         "dagg.creature.delay (item %d (item %d :dagg.cdb))",
+                         field, typ + 1);
+                const float d = num(expr);
+                snprintf(msg, sizeof(msg),
+                         "creature %d field %d at pace %d is %g -- a clock reading, not a countdown",
+                         typ, field, pace, d);
+                TEST_ASSERT_TRUE_MESSAGE(d >= 1 && d <= 255, msg);
+            }
+        }
+    }
+    run("make \"dagg.pace 2");
+
+    // ...and it stays one across a long run of real turns
+    start_game();
+    run("dagg.ccb.clear");
+    for (int slot = 1; slot <= 8; slot++)
+        put_creature(slot, slot % 12, 10 + slot, 20);
+    run("make \"dagg.now 100000  make \"dagg.tenth.due 0  repeat 2000 [dagg.tenth]");
+    for (int slot = 1; slot <= 8; slot++)
+    {
+        char expr[64], msg[96];
+        snprintf(expr, sizeof(expr), "item %d :dagg.cctim", slot);
+        snprintf(msg, sizeof(msg), "creature %d's timer left the countdown range", slot);
+        const float d = num(expr);
+        TEST_ASSERT_TRUE_MESSAGE(d >= 0 && d <= 255, msg);
+    }
+}
+
+// The residual, named rather than assumed: creature damage IS a per-CCB
+// field holding a value that differs every hit, so it interns.  It is
+// bounded by how often you land a blow rather than by the clock, which is
+// why it is a footnote and the timer was a crash.
+void test_creature_damage_is_the_one_field_that_still_interns(void)
+{
+    // The worst case the game can actually reach, so the figure is a
+    // ceiling and not a happy accident: a crescent wizard has 8,000 power
+    // and survives, a ring always hits and takes 149 off it a swing, so
+    // every one of a hundred blows stores a cumulative total nothing has
+    // interned before.  (A balrog and a wooden sword would read as 8
+    // atoms, because a balrog's 3/128 filter makes every hit do ZERO and
+    // the stored value never changes.)
+    one_creature(11, 5, 5);
+    run("make \"dagg.ppow 1600  make \"dagg.pdam 0");
+    run("repeat 20 [dagg.pattk.swing 1 255 255]");
+    TEST_ASSERT_TRUE_MESSAGE(num("item 1 :dagg.ccdam") > 1000,
+                             "the fixture is not accumulating damage");
+
+    run("make \"a0 atoms  repeat 100 [dagg.pattk.swing 1 255 255]  make \"a1 atoms");
+    const float per_hundred = num(":a0") - num(":a1");
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "a hundred swings intern %d atoms of a 32 KB table",
+             (int)per_hundred);
+    // Measured at 1,232 -- about twelve bytes a blow, the same price
+    // `.setitem` charges for any number it has not seen.  That is ~2,600
+    // landed blows before a 32 KB table is gone, in the worst case the
+    // game has, against the timer's 32 KB in ninety SECONDS.  Three orders
+    // of magnitude is the difference between a footnote and a crash; the
+    // bound is here to say if it ever stops being one.
+    TEST_ASSERT_TRUE_MESSAGE(per_hundred < 1500, msg);
+}
+
+// A warm redraw with a creature standing in the view still spends
+// nothing: VIEW30 and PDRAW are two `item`s into the occupancy grid and
+// then a walk over a vector list that is already built.  This is the
+// reason CFIND is a grid at all (design section 12's 100 ms).
+void test_a_warm_redraw_with_a_creature_in_view_spends_nothing(void)
+{
+    build_synthetic_corridor();
+    run("dagg.ccb.clear");
+    put_creature(1, 9, 4, 5); // in the view
+    put_creature(2, 0, 5, 4); // and one behind the left-hand peek
+    run("dagg.setup.heart");
+    run("make \"n0 0  make \"n1 0  make \"a0 0  make \"a1 0");
+    run("repeat 5 [dagg.redraw :dagg.norscl]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(nodes_for_redraws(100), nodes_for_redraws(1000),
+                                    "the creature pass conses");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(atoms_for_redraws(100), atoms_for_redraws(1000),
+                                    "the creature pass interns a word every redraw");
+}
+
+// Nodes and atoms grow toward each other inside one 128 KB block
+// (core/memory.h), so `nodes` is the headroom the game has left for
+// everything it will ever cons AND for every word it will ever intern.
+// This game spends most of it at LOAD, on the generated tables and on the
+// procedure bodies themselves, and the trend is the reason this gate
+// exists rather than the absolute figure:
+//
+//     M3   14,277 free at load
+//     M4    7,698 -- 1,685 of that the twelve creature outlines, ~1,056
+//                    the occupancy grid, and most of the rest the bodies
+//                    of thirty new procedures
+//
+// M5 and M6 are still to come and each of the last two milestones cost
+// about six thousand.  Running out on a board is an out-of-memory panic
+// (see core/limits.h's SRAM note); a failing test here is the warning.
+void test_the_game_leaves_room_to_play_in(void)
+{
+    run("dagg.makeobjects  dagg.cmx.reset");
+    run("make \"dagg.level 0  dagg.newlvl 0  dagg.givebag");
+    const int free_nodes = (int)num("nodes");
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "daggorath leaves %d free nodes with level 1 built and populated",
+             free_nodes);
+    TEST_ASSERT_TRUE_MESSAGE(free_nodes > 4096, msg);
+}
+
+//==========================================================================
 // The global table -- section 14's second budget. It is 254 slots and the
 // design does not expect it to bind (this game has no frame to buy, so
 // nothing is in the flat namespace to make it faster), but M3 put twelve
@@ -2428,6 +3632,51 @@ int main(void)
     RUN_TEST(test_the_game_starts_and_stops);
     RUN_TEST(test_a_warm_redraw_spends_no_nodes_and_no_atoms);
     RUN_TEST(test_a_warm_redraw_over_an_object_spends_nothing_either);
+    RUN_TEST(test_the_creature_table_is_section_10_1);
+    RUN_TEST(test_the_creature_matrix_is_cmttab);
+    RUN_TEST(test_every_creature_has_the_vector_list_its_shape_needs);
+    RUN_TEST(test_the_two_giants_the_two_knights_and_the_wizard_share_a_body);
+    RUN_TEST(test_the_axe_blade_is_closed_by_the_fall_through);
+    RUN_TEST(test_scal16_is_a_radix_seven_multiply);
+    RUN_TEST(test_damage_is_two_channels_through_two_filters);
+    RUN_TEST(test_the_hit_chance_runs_from_ninety_seven_percent_to_twenty_one);
+    RUN_TEST(test_the_bonus_is_zero_at_index_three);
+    RUN_TEST(test_the_shield_pair_wins_or_loses_together);
+    RUN_TEST(test_the_elvish_sword_costs_eight_times_the_wooden_one);
+    RUN_TEST(test_an_empty_hand_swings_as_emphnd);
+    RUN_TEST(test_a_level_is_populated_from_the_matrix);
+    RUN_TEST(test_creatures_are_born_on_carved_cells_and_never_share_one);
+    RUN_TEST(test_nlvl40_hands_every_object_on_the_level_to_a_creature);
+    RUN_TEST(test_a_creature_picks_up_one_object_and_spends_its_turn_on_it);
+    RUN_TEST(test_a_scorpion_and_both_wizards_walk_past_treasure);
+    RUN_TEST(test_a_creature_that_can_see_the_player_closes_on_him);
+    RUN_TEST(test_a_creature_that_cannot_see_the_player_wanders);
+    RUN_TEST(test_a_creature_on_the_player_attacks_at_attack_speed);
+    RUN_TEST(test_walking_onto_the_player_speeds_a_creature_up);
+    RUN_TEST(test_the_occupancy_grid_follows_a_creature_that_moves);
+    RUN_TEST(test_a_creature_will_not_step_onto_another_creature);
+    RUN_TEST(test_the_approach_sound_is_the_roms_range_gate_and_volume);
+    RUN_TEST(test_killing_a_creature_drops_its_loot_and_pays_you);
+    RUN_TEST(test_a_swing_that_lands_kills_a_spider);
+    RUN_TEST(test_the_dark_throws_away_three_swings_in_four);
+    RUN_TEST(test_a_ring_always_hits_even_in_the_dark);
+    RUN_TEST(test_an_attack_ring_spends_three_charges_and_turns_to_gold);
+    RUN_TEST(test_a_landed_blow_says_so);
+    RUN_TEST(test_a_creature_closes_on_you_and_the_typed_attack_lands);
+    RUN_TEST(test_a_creature_in_the_view_is_drawn);
+    RUN_TEST(test_a_magical_creature_needs_a_magical_torch);
+    RUN_TEST(test_the_peek_marks_a_creature_through_an_open_side_passage);
+    RUN_TEST(test_examine_says_creature_when_one_is_here);
+    RUN_TEST(test_the_map_marks_creatures_only_for_a_seer_scroll);
+    RUN_TEST(test_thirty_two_creatures_all_take_their_turn);
+    RUN_TEST(test_a_creature_moves_only_when_it_is_due);
+    RUN_TEST(test_the_pace_knob_scales_creatures_and_only_creatures);
+    RUN_TEST(test_cregen_restocks_the_matrix_and_stops_at_thirty_two);
+    RUN_TEST(test_a_long_run_of_creature_turns_spends_nothing);
+    RUN_TEST(test_a_creature_timer_is_a_small_integer_not_a_clock_reading);
+    RUN_TEST(test_creature_damage_is_the_one_field_that_still_interns);
+    RUN_TEST(test_a_warm_redraw_with_a_creature_in_view_spends_nothing);
+    RUN_TEST(test_the_game_leaves_room_to_play_in);
     RUN_TEST(test_the_game_fits_the_global_table);
     RUN_TEST(test_the_game_fits_the_procedure_table);
     return UNITY_END();
