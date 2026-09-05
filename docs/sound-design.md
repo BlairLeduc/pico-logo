@@ -367,6 +367,18 @@ All rendering happens on core 0 inside the DMA IRQ (decision 2).
   duplicate-store. Integer math throughout; per-voice envelopes advance
   in linear segments once per block (3.5 ms granularity — inaudible for
   ms-scale ADSR stages).
+  > The granularity is inaudible for the *stages*; it is not inaudible
+  > for the *note*. A gate shorter than one block gets exactly one block
+  > in which to sound, and that block both steps the envelope and retires
+  > the note — so the attack has to land before the release takes over,
+  > or a percussive note (`setenv v [0 0 15 107]`, a 1 ms gate — the
+  > shape every impact in a 6809 sound table has) releases from an
+  > envelope still at zero and is silent. [B99](bugs.md#fixed), found by
+  > ear on a board and reproduced by `test_sound_engine`, which compiles
+  > this file on the host and reads the ring the DMA would play. That
+  > test is the only thing in the tree that hears the engine rather than
+  > the ops: the mock records what a program *asked* for, and B99's ask
+  > was correct in every particular.
 - **Sequencer**: runs at block boundaries in the same IRQ. Per-voice
   event queues of `{freq_hz u16, dur_ms u16, vol u8, flags u8}` (6 B) —
   tempo, octave, length, and dots are resolved by the parser at `play`

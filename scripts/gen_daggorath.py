@@ -608,6 +608,13 @@ def check_message_strings():
     winner = read_messages("PINCAN.ASM", "WINNER")
     assert winner == ['\nBEHOLD! DESTINY AWAITS THE HAND',
                       '        OF A NEW WIZARD...'], winner
+    # ONCE.ASM:DEMO10's two welcome messages, which M6's attract mode
+    # prints over the crescent wizard, and HUPDAT.ASM:DEATH's one.
+    assert read_messages("ONCE.ASM", "DEMO10") == [
+        '\nI DARE YE ENTER...\n',
+        '...THE DUNGEONS OF DAGGORATH!!!'], read_messages("ONCE.ASM", "DEMO10")
+    assert read_messages("HUPDAT.ASM", "DEATH") == [
+        '\n YET ANOTHER DOES NOT RETURN...'], read_messages("HUPDAT.ASM", "DEATH")
 
 
 def check_command_tables():
@@ -629,6 +636,148 @@ def check_command_tables():
     assert directions == [
         "LEFT", "RIGHT", "BACK", "AROUND", "UP", "DOWN",
     ], directions
+
+
+# ===========================================================================
+# SOUNDS.ASM -- the numbers M6 counted the 6809 for.
+#
+# The sound generator holds no frequencies, only delay counts, so
+# logo/games/daggorath's tables are cycle counts and cannot be generated
+# from anything here.  What CAN be checked is every byte those counts were
+# taken from, which is what this does: SNDTAB's order, the four SNSQK1
+# starting values and their repeat counts, BEOOP's rising ramp, the three
+# rattle counts, CSETUP's four de-tuned pairs, the envelope increments and
+# SWCHAR.ASM's two BOOMER tables.  A wrong byte here is a wrong sound
+# there, and neither the ear nor a host test would name the byte.
+#
+# The rattle counts are the reason this exists.  The ROM's own comment
+# beside PSSST and PSSHT reads "rattle count + 1" and the code is a
+# `DEC`/`BNE` do-while, so the count is the loaded value exactly -- 10, 2
+# and 1, where design section 9.2 read the comment and wrote 3 and 2.
+# That is M2's CMDTAB and M3's HOTH/RIME one level down: the comment is
+# not the code.
+# ===========================================================================
+
+
+def _sounds_source():
+    return (REPO_ROOT / "docs" / "DungeonsOfDaggorath" / "SOUNDS.ASM").read_text()
+
+
+def read_sndtab():
+    """SNDTAB, as the list of generator names it dispatches to."""
+    text = _sounds_source()
+    body = text[text.index("SNDTAB  EQU"):text.index("SNBAS1")]
+    return [m.group(1) for m in re.finditer(r"^\s+SND\s+\w+,(\w+)", body, re.M)]
+
+
+def _operand(label, mnemonic):
+    """The operand of the first `mnemonic` at or after `label`."""
+    text = _sounds_source()
+    body = text[text.index("\n%s" % label):]
+    m = re.search(r"^\w*\s+%s\s+(\S+)" % mnemonic, body, re.M)
+    assert m, (label, mnemonic)
+    return m.group(1)
+
+
+def _byte(v):
+    return int(v.lstrip("#$"), 16) if "$" in v else int(v.lstrip("#"))
+
+
+def check_sound_tables():
+    """Every ROM byte behind design section 9.2, read rather than trusted."""
+    # SNDTAB: twelve creature sounds, six object sounds from SNDOBJ, then
+    # KLINK, CLANK, THUD and the two explosions.  The INDEX is what every
+    # call site in the game passes, so its order is the interface.
+    assert read_sndtab() == [
+        "SQUEAK", "RATTLE", "GROWL", "BEOOP", "KLANK", "GRAWL",
+        "PSSST", "KKLANK", "PSSHT", "SNARL", "BDLBDL", "BDLBDL",
+        "GLUGLG", "PHASER", "WHOOP", "CLANG", "WHOOSH", "CHUCK",
+        "KLINK", "CLANK", "THUD", "BANG", "KABOOM",
+    ], read_sndtab()
+
+    # The four SNSQK1 sweeps and the two that repeat.
+    assert _byte(_operand("SQUEAK", "LDX")) == 0x0020
+    assert _byte(_operand("MSQUEK", "LDX")) == 0x0040
+    assert _byte(_operand("MSQUEQ", "LDX")) == 0x0080
+    assert _byte(_operand("WHOOP", "LDX")) == 0x0100
+    assert _byte(_operand("PHASER", "LDA")) == 10   # MSQUEK, ten times
+    assert _byte(_operand("GLUGLG", "LDA")) == 4    # MSQUEQ, four
+
+    # BEOOP is the one whose X rises, so its pitch falls.
+    assert _byte(_operand("BEOOP", "LDX")) == 0x0500
+    assert _operand("BEOOP1", "LEAX") == "48,X"
+    assert _byte(_operand("BEOOP1", "CMPX")) == 0x0800
+
+    # The rattle counts: the code, not the comment beside it.
+    assert _byte(_operand("RATTLE", "LDA")) == 10
+    assert _byte(_operand("PSSST", "LDA")) == 2
+    assert _byte(_operand("PSSHT", "LDA")) == 1
+    assert _byte(_operand("SNRAT2", "LDY")) == 0x00C0   # 192 noise samples
+    assert _byte(_operand("SNWT1K", "LDX")) == 0x1000   # the silence between
+
+    # CSETUP's four pairs -- `BSR CSETUP` and then two inline FCBs, which
+    # CSETUP reads off the stacked PC.
+    text = _sounds_source()
+    for name, want in [("CLANG", (0x64, 0x24)), ("KKLANK", (0x32, 0x12)),
+                       ("KLANK", (0xAF, 0x36)), ("CLANK", (0x19, 0x09))]:
+        body = text[text.index("\n%s" % name):]
+        got = tuple(int(m.group(1), 16)
+                    for m in list(re.finditer(r"^\s+FCB\s+\$([0-9A-F]{2})", body, re.M))[:2])
+        assert got == want, (name, got)
+
+    # The envelope increments, which are the attack and decay TIMES once a
+    # step count is multiplied by a sample period.
+    assert _byte(_operand("GROWL", "LDX")) == 0x0300
+    assert _byte(_operand("GRAWL", "LDX")) == 0x0200
+    assert _byte(_operand("SNARL", "LDX")) == 0x0100
+    for label, want in [("WHOOSH", 0x80), ("CHUCK", 0xA0), ("KLINK", 0x60),
+                        ("SNCLK5", 0x60), ("SNGRL2", 0x40)]:
+        body = text[text.index("\n%s" % label):]
+        m = re.search(r"^\s+FCB\s+\$([0-9A-F]{2})", body, re.M)
+        assert m and int(m.group(1), 16) == want, (label, m and m.group(1))
+
+    # And BOOMER's data, which is not in SOUNDS.ASM at all.  THUDD is two
+    # words, the pair KABOOM reaches with `LEAU 4,U` is the two after it,
+    # and BANGD is the two after that -- so the three sets are adjacent and
+    # the middle one has no label of its own.
+    sw = (REPO_ROOT / "docs" / "DungeonsOfDaggorath" / "SWCHAR.ASM").read_text()
+    body = sw[sw.index("\nTHUDD"):]
+    words = [int(m.group(1), 16)
+             for m in list(re.finditer(r"^\w*\s+FDB\s+\$([0-9A-F]{4})", body, re.M))[:6]]
+    assert words == [0x0080, 0x0001, 0x0050, 0x0004, 0x0050, 0x0005], words
+    assert "\nBANGD" in sw and sw.index("\nBANGD") > sw.index("\nTHUDD")
+
+
+def check_autoplay_table():
+    """TOKEN.ASM:AUTTAB against the seventeen commands the game types.
+
+    The ATM macro's arguments are the same packed strings CMDTAB, DIRTAB
+    and GENTAB hold, so what is checked is that every word in the game's
+    own copy is one of those -- and that the sequence is the ROM's.
+    """
+    text = (REPO_ROOT / "docs" / "DungeonsOfDaggorath" / "TOKEN.ASM").read_text()
+    start = text.index("AUTTAB  EQU")
+    body = text[start:text.index("AUTEND", start)]
+    rows = [m.group(1).split(",")
+            for m in re.finditer(r"^\s+ATM\d\s+(\S+)", body, re.M)]
+    symbols = {"M$EXAM": "EXAMINE", "M$PULL": "PULL", "M$RT": "RIGHT",
+               "M$LT": "LEFT", "M$TOR0": "TORCH", "M$SHI0": "SHIELD",
+               "M$SWO0": "SWORD", "M$USE": "USE", "M$LOOK": "LOOK",
+               "M$MOVE": "MOVE", "M$ATTK": "ATTACK", "M$TURN": "TURN"}
+    got = [[symbols[t] for t in row] for row in rows]
+    assert got == [
+        ["EXAMINE"], ["PULL", "RIGHT", "TORCH"], ["USE", "RIGHT"], ["LOOK"],
+        ["MOVE"], ["PULL", "LEFT", "SHIELD"], ["PULL", "RIGHT", "SWORD"],
+        ["MOVE"], ["MOVE"], ["ATTACK", "RIGHT"], ["TURN", "RIGHT"],
+        ["MOVE"], ["MOVE"], ["MOVE"], ["TURN", "RIGHT"], ["MOVE"], ["MOVE"],
+    ], got
+    # And every word in it is one the parser already knows.
+    known = set(w for _, w, _ in read_token_table("CMDTAB"))
+    known |= set(w for _, w, _ in read_token_table("DIRTAB"))
+    known |= set(w for _, w, _ in read_token_table("GENTAB"))
+    for row in got:
+        for w in row:
+            assert w in known, w
 
 
 # OBIRTH.ASM:GENVAL, by class: -1 leaves the object as it was born, anything
@@ -1420,6 +1569,8 @@ def main():
                                      read_creature_matrix())
     check_command_tables()
     check_message_strings()
+    check_sound_tables()
+    check_autoplay_table()
 
     longest = write_game_data(mazes, decoded, tables, GAME_PATH)
     REFERENCE_PATH.parent.mkdir(parents=True, exist_ok=True)

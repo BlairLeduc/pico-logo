@@ -2515,7 +2515,10 @@ a run that found two more M1 bugs in the turn animation ([B84](bugs.md),
 over four board runs, 103 tests — the first milestone here to come up right on
 a board the first time, and the only defect those runs found was M2's missing
 command-line cursor ([B87](bugs.md)); M4 written 2026-09-03, 141 tests, host
-only — no board has seen a creature yet.** "No board needed for a Logo-only milestone" is what
+only — no board has seen a creature yet; M5 and M6 written and **M6
+confirmed on a Pico Plus 2 W 2026-09-05, which leaves the game complete**
+at 174 tests, 184 procedures of 192 and 7,423 free cells — that run found
+the mixer bug that had silenced every percussive note ([B99](bugs.md)).** "No board needed for a Logo-only milestone" is what
 this entry used to say, and it was wrong three times over — see M1 below.
 Pico 2 and Pico 2 W still to run M0, though nothing in the result is expected
 to be board-specific. `tests/logo/p17m0` timed all three of section 6.3's list
@@ -3070,6 +3073,105 @@ full **faulted instead of reporting**, for every `to ... end` block in it. B94's
 board came within **320 word-table bytes** of that and was saved only by
 running the cells out first, which reports cleanly.
 
+**M6 — sound, the wizard's voice and the attract mode. Written and
+confirmed on a Pico Plus 2 W 2026-09-05, 174 tests — the gate is an ear
+and the board has now met it.**
+SOUNDS.ASM's twenty-three effects behind `SNDTAB`'s index, `say` on the
+wizard's four speeches, and `daggorath.demo` — ONCE.ASM's `DEMO10` and
+HUMAN.ASM's `PLAY20` driving TOKEN.ASM's own seventeen-command autoplay
+table. Design §16 names the attract mode as the first thing this game
+would give up if it ran out of room and it did not have to: the whole
+milestone cost 1,033 cells of 8,456, three procedures of the eleven left,
+and it ends at **184 procedures of 192, 170 globals of 254 and 7,423 free
+cells** — 3,327 on a Pico 2 W against a 2,048 floor.
+
+**The design's own derivation was wrong, and doing the count a second time
+is what found it.** §9.2 gives the squeak family's period as 113 + 16X.
+It is **135 + 16X**: `SNSQK2`'s second half is `CLRA / BRA SNSUB2` and
+`SNSUB2` opens with its own `BSR SNOUT`, seven cycles the 51 does not
+carry; and `SNSQK1`'s loop — `BSR SNSQK2 / LEAX / BNE` — is fifteen more
+that run **between the DAC going low and its going high again**, so they
+are inside the period rather than around it. Every sweep's top moves from
+6.9 kHz to 5.93. The recount is in `tests/test_daggorath.c` as C, the same
+oracle shape as M2's `HUPD20` and M3's `BURNER`, because a table
+transcribed twice agrees with itself and arithmetic does not.
+
+**And the fifth "the comment is not the code".** `PSSST` and `PSSHT` are
+**2 and 1** noise bursts, not the 3 and 2 §9.2 tabulates: that section read
+the ROM's own comment, "rattle count + 1", above a `STA SNDLAY` and a
+`DEC`/`BNE` do-while that runs the loaded value exactly — and read the same
+way `RATTLE`'s 10 would have been eleven. After `LVLTAB`, `CMDTAB`,
+`HOTH`/`RIME` and `CREXXX` the repair is the same one M3 made:
+`scripts/gen_daggorath.py:check_sound_tables()` now reads **every byte
+behind §9.2** out of `SOUNDS.ASM` and `SWCHAR.ASM` — `SNDTAB`'s order, the
+four sweep origins and their repeat counts, `BEOOP`'s rising ramp, the
+three rattle counts, `CSETUP`'s four de-tuned pairs, five envelope
+increments and both `BOOMER` tables — and `check_autoplay_table()` does the
+same for `AUTTAB`.
+
+**Nothing blocks, and that is the whole shape of it.** §9.4 had asked every
+long effect to call `tick` between its steps, the way the CoCo's IRQ kept
+the heart going while `SOUNDS` held the 6809. There are no steps: twelve of
+the twenty-three entries are one `sound` shaped by `setenv` and eleven are a
+`play` queue, and **both return at once**, so a 1.27-second growl costs the
+scheduler nothing. **That is M6's answer to
+[P18](#p18--interpreter-work-for-dungeons-of-daggorath) M4, and the answer
+is no**: the sweeps did not come out awkward, so the frequency glide is not
+asked for. What removed the interleaving is the queue, and a glide would
+not have removed anything.
+
+**Two things `play` cannot spell, both named where they happen.** Its
+lowest note is c1 (32.7 Hz), so `BEOOP`'s bottom five steps clamp there —
+the blob falls 43.4 → 27.9 Hz and we follow it to 32.7. Its shortest note
+is 25 ms, so `SQUEAK` at 14.3 ms is **one note** and the sweep in it is
+gone; what is left is its time-median, 1864 Hz. Everything else has room:
+`PHASER` 19 notes, `WHOOP` 25, `GLUGLG` 27.
+
+**B91's lesson, applied where B91 was found.** `SNOUT` multiplies every
+sample by `SNVOL` and a queued effect takes its volume from a `v` control
+word at the head of its note list — so the obvious spelling is `fput`, and
+that is **one cell a sound** in the scheduler, which is exactly the shape
+that ran a board out in ninety seconds at M4. It is written in place
+instead: every queued list ships with a `v15` placeholder that `.setitem`
+overwrites, and the sixteen words it is overwritten with are interned once
+at load. 336 sounds cost zero cells and zero word-table bytes. The one
+residual is named rather than assumed, the way M4 named `dagg.ccdam`:
+`BDLBDL` is eight *random* squeaks and has to build a list, ~120 cells a
+call, and a game hears it once per wizard.
+
+**And it found a defect M4 could not have found** ([B98](bugs.md)): the
+game was **silent walking into a wall** and silent on a successful
+`INCANT`. M4's entry says every sound site goes through one `dagg.sound`
+and two of the ten did not — `PTURN.ASM:PSTEP`'s `A$THUD` and
+`PINCAN.ASM`'s `A$RING`. Both are `SWI / FCB ISOUND` runs with **no
+commented-out `SOUND$ A$XXXX` line above them**, which is the form the
+other eight carry and the form an eye scans for; so the port matched on the
+comment and read past the code. It was invisible before M6 by construction,
+because with nothing behind the index a missing site and a present one both
+produced silence — which is why M4's board runs, which found
+[B88](bugs.md) and [B89](bugs.md) *by ear*, could not have caught it.
+`test_every_sound_site_in_the_rom_is_a_sound_here` walks the whole list out
+of the ROM rather than counting them by eye again.
+
+**What only a board could say** was the gate itself: a spider, a knight, a
+wraith, a sword swing, a torch, an explosion and the heartbeat, identified
+by ear against a recording of the original, without labels. The host can
+only make silence impossible to ship by accident — a frequency outside
+`sound`'s 20 Hz–10 kHz window is a **rest**, so a slipped decimal would
+pass a listening test by sounding like nothing at all, and every gated and
+queued note is range-checked for that reason. **It said it, and it said
+one more thing first** ([B99](bugs.md)): *"I do get miss sounds, just not
+hit sounds."* Every note shorter than one mixer block — which is every
+percussive effect the ROM has, six of the twenty-three — released from an
+envelope still at zero and was silent, with the ops, the queue and the
+gate log all correct. That is a defect in the **engine**, not the port,
+and no mock could have seen it: the mock records what a program asked for
+and the ask was right. `tests/test_sound_engine.c` is the answer —
+`devices/picocalc/sound.c` compiled on the host against the SDK stubs,
+reading the ring the DMA would play, the pattern `test_screen_refresh`
+already uses. With it fixed the run passes: knight, wraith and spider
+told apart by ear, and the heartbeat under it.
+
 A faithful port of the 1982 DynaMicro game from **its own 6809 source**, 9,866
 lines of it, kept under `docs/DungeonsOfDaggorath/` with the grant of licence
 beside it. Every rule in the design cites the file and routine it came from,
@@ -3180,8 +3282,9 @@ rule — down a hole or a ladder, up a ladder only — gives 1↔2 and 2↔3 by 
 and 4 → 5 by holes that cannot be climbed back up. None of it is a special case
 in the ROM, and none of it will be here.
 
-M0 through M4 done, M4 on the host only; M1a (the grey ramp, optional and
-decided by a pair of eyes) and M5–M6 still ahead, gates in the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) went
+M0 through M6 done — the design's §15 is complete. M1a (the grey ramp,
+optional and decided by a pair of eyes) is the only thing left in it, and
+M6's gate, a listening test, is the only gate a board still owes. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) went
 first** (decided 2026-09-02): its M0–M2 are the procedure table, the opaque
 `write` and the dashed pen, and P17 M1 wanted all three — a status line it can
 invert, a file it can grow into, and a fade it can draw the way the ROM draws
@@ -3194,8 +3297,10 @@ filesystem at M5, so it writes to `/sd` until that is fixed.
 
 ### P18 — interpreter work for Dungeons of Daggorath
 
-Status: **M0, M1 and M2 done 2026-09-02** (opened the same day); M3 and M4
-still gated on P17's own milestones and not started. Five items, all of them
+Status: **M0, M1 and M2 done 2026-09-02** (opened the same day); **M3 and M4
+are both closed as not needed** — P17 M0 measured the list walk and did not
+ask for arrays (2026-09-02), and P17 M6 built the sound the hard way and did
+not ask for a glide (2026-09-05). Five items, all of them
 asked for by P17 and none of them P17-shaped: every one is a general capability
 that happens to have found its first customer. No design document — these are
 primitives and a constant, not a subsystem.
@@ -3251,7 +3356,8 @@ a Pico Plus 2 W 2026-09-02: `foreach` walked a 184-point worst-case scene in
 lever that would have asked for arrays, and it did not ask.
 
     P18 M0, M1, M2  →  P17 M0  →  P18 M3 not needed  →  P17 M1 …
-       (done)            (done, foreach)   [P18 M4 if P17 M6 asks]
+       (done)            (done, foreach)   P18 M4 not needed either
+                                           (P17 M6, `play` is a queue)
 
 ---
 
@@ -3525,6 +3631,20 @@ chain is actually awkward.
 
 *Gate: P17 M6 asking for it, with the `tick`-interleaved version built and
 found wanting.*
+
+**P17 M6 answered it on 2026-09-05 and the answer is no.** The
+`tick`-interleaved version was never built, because there is nothing to
+interleave: `play` appends a note sequence to a voice's queue and returns
+at once, so a sweep is one statement already — `(play [1 5] :list)` — and a
+1.27-second growl costs the scheduler nothing. What §9.4 was worried about
+was a chain of `sound` calls with `wait` between them, which is what a
+sweep would have to be **without** a queue; the queue is what removes the
+interleaving and a glide would not have removed anything more. **What a
+glide would buy is the two things `play` cannot spell**, and both are
+small: its lowest note is c1 (32.7 Hz) so `BEOOP`'s bottom five steps
+clamp, and its shortest is 25 ms so `SQUEAK` (14.3 ms) collapses to one
+note. Neither is worth a new `SoundEvent` kind. **This milestone is closed
+as not needed**, the same as M3.
 
 
 ---

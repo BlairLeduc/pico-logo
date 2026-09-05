@@ -222,6 +222,20 @@ static void __not_in_flash_func(voice_advance_block)(Voice *v)
     v->hold_us_left -= (int32_t)g_block_us;
     if (v->hold_us_left <= 0 && v->stage != ENV_RELEASE)
     {
+        // A note can be shorter than one block (~3.5 ms), and a percussive
+        // one usually is: `setenv v [0 0 15 107]` then a 1 ms gate is the
+        // shape every effect in Daggorath's sound table has. The block that
+        // retires such a note is also its only attack block, so let the
+        // attack land before the release takes over -- otherwise the note
+        // releases from an envelope still at zero and is never heard (B99).
+        if (v->stage == ENV_ATTACK)
+        {
+            v->env += v->attack_step;
+            if (v->env > ENV_ONE)
+            {
+                v->env = ENV_ONE;
+            }
+        }
         v->stage = ENV_RELEASE;
     }
 

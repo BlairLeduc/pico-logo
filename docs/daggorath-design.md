@@ -903,41 +903,76 @@ entitled to know.
 ### 9.2 Deriving the frequencies
 
 The ROM has no frequencies in it — it has delay counts. `SNSQK2` toggles the
-DAC between full and zero either side of `SNWAIT X`, and counting the 6809's
-cycles gives a half period of ≈ 62 + 8X and ≈ 51 + 8X, so at the CoCo's
-0.895 MHz E clock:
+DAC between full and zero either side of `SNWAIT X`, so at the CoCo's
+0.895 MHz E clock every sweep in the file is a frequency range and a duration.
+
+**M6 counted those cycles again and this section had the period wrong.** It
+said ≈ 62 + 8X and ≈ 51 + 8X, so `f ≈ 895000/(113 + 16X)`. Two things were
+missed. The second half of `SNSQK2` is `CLRA / BRA SNSUB2` and `SNSUB2` opens
+with its own `BSR SNOUT`, which the 51 does not carry — the half is 58 + 8X.
+And `SNSQK1`'s loop, `BSR SNSQK2 / LEAX -1,X / BNE`, is fifteen cycles that run
+**between the DAC going low and its going high again**, so they are inside the
+period and not around it. The period is
 
 ```
-f  ≈  895000 / (113 + 16 X)          duration of a sweep from Xa to Xb
-                                     ≈ Σ (113 + 16 X) / 895000
+f  =  895000 / (135 + 16 X)          a squeak-family period
+      895000 / (106 + 8 X)           a BOOMER noise sample
 ```
 
-which turns every sweep in the file into a frequency range and a duration:
+which moves the top of every sweep from 6.9 kHz to 5.9 and the bottom of
+`SQUEAK` from 1.4 kHz to 1.38. §1's rule decides it — where the design and the
+ROM disagree the ROM is right — and the table below is the corrected one.
 
 | effect | used by | ROM | derived | duration |
 |---|---|---|---|---|
-| `SQUEAK` | spider | X 32 → 1 | 1.4 → 6.9 kHz rising | 13 ms |
-| `MSQUEK` ×10 (`PHASER`) | ring attack | X 64 → 1 | 0.79 → 6.9 kHz ×10 | 450 ms |
-| `MSQUEQ` ×4 (`GLUGLG`) | flask | X 128 → 1 | 0.41 → 6.9 kHz ×4 | 655 ms |
-| `WHOOP` | scroll | X 256 → 1 | 0.21 → 6.9 kHz | 620 ms |
-| `BEOOP` | blob | X 1280 → 2048 step 48 | 43 → 27 Hz falling | — |
-| `RATTLE` | viper | 10 noise bursts, silence between | white noise | — |
-| `PSSST` / `PSSHT` | scorpion / wraith | 3 and 2 bursts | white noise | — |
-| `GROWL`/`GRAWL`/`SNARL` | giant 1 / giant 2 / balrog | noise, ramped attack then decay, 3 rates | noise + ADSR | — |
-| `CLANG`/`KLANK`/`KKLANK`/`CLANK` | shield / knight 1 / knight 2 / **being hit** | two detuned tones, decay | two tone voices | — |
-| `KLINK` | **hitting a creature** | high tone + noise, instant attack, short decay | tone + noise | — |
-| `WHOOSH` | sword | noise, fast attack, slow decay | noise + ADSR | — |
-| `CHUCK` | torch lit | noise, decay only | noise + ADSR | — |
-| `BDLBDL` | wizard | 8 random squeaks, then `KABOOM` | — | — |
-| `THUD` / `BANG` / `KABOOM` | wall / creature death / — | descending noise "boomer" | noise sweep | — |
+| `SQUEAK` | spider | X 32 → 1 | 1.38 → 5.93 kHz rising | 14.3 ms |
+| `MSQUEK` ×10 (`PHASER`) | ring attack | X 64 → 1 | 0.77 → 5.93 kHz ×10 | 468 ms |
+| `MSQUEQ` ×4 (`GLUGLG`) | flask | X 128 → 1 | 0.41 → 5.93 kHz ×4 | 668 ms |
+| `WHOOP` | scroll | X 256 → 1 | 0.21 → 5.93 kHz | 627 ms |
+| `BEOOP` | blob | X 1280 → 2048 step 48 | 43.4 → 27.9 Hz falling | 472 ms |
+| `RATTLE` | viper | **10** noise bursts, silence between | 17.2 ms on, 36.6 off | 538 ms |
+| `PSSST` / `PSSHT` | scorpion / wraith | **2 and 1** bursts | the same burst | 108 / 54 ms |
+| `GROWL`/`GRAWL`/`SNARL` | giant 1 / giant 2 / balrog | noise, ramped attack then decay, 3 rates | 201/299/598 ms attack, 1070 ms decay | 1.27 / 1.37 / 1.67 s |
+| `CLANG`/`KLANK`/`KKLANK`/`CLANK` | shield / knight 1 / knight 2 / **being hit** | two detuned tones, decay | 215+598 / 134+434 / 350+971 / 509+1413 Hz | 420 / 600 / 258 / 177 ms |
+| `KLINK` | **hitting a creature** | high tone + noise, instant attack, short decay | 3174 Hz tone + 6.3 kHz noise | 107 ms |
+| `WHOOSH` | sword | noise, fast attack, slow decay | 82 ms attack, 65 ms decay | 147 ms |
+| `CHUCK` | torch lit | noise, decay only | the same decay, no attack | 65 ms |
+| `BDLBDL` | wizard | 8 random squeaks, then `KABOOM` | X random 1–127 each | ~1.6 s |
+| `THUD` / `BANG` / `KABOOM` | wall / creature death / — | descending noise "boomer" | 792→322, 1200→322 Hz | 229 ms / 1.26 s / 1.28 s |
+
+**`PSSST` and `PSSHT` were 3 and 2 here and they are 2 and 1.** This section
+read the ROM's own comment — "rattle count + 1" — and the code below it is
+`STA SNDLAY` and a `DEC`/`BNE` do-while, which runs the loaded value exactly.
+Read the same way `RATTLE`'s 10 would be eleven. That is M2's `CMDTAB` and M3's
+`HOTH`/`RIME` one level down: **the comment is not the code**, and
+`scripts/gen_daggorath.py:check_sound_tables()` now reads every one of these
+bytes out of `SOUNDS.ASM` rather than trusting a transcription of it.
 
 **These are derived, not measured, and M6's gate is a listening test** against
 a recording of the original. The derivation is here so that when a number is
-wrong there is something to correct rather than something to guess again.
+wrong there is something to correct rather than something to guess again — and
+`tests/test_daggorath.c` does the count a second time in C, the same oracle
+shape as `HUPD20` and `BURNER`, so a wrong table is a failing test.
 
 The detuned pairs are the ROM's own bytes — `CLANG` $64/$24, `KKLANK` $32/$12,
-`KLANK` $AF/$36, `CLANK` $19/$09, through the same `f = 895000/(113+16X)` — and
-they are why a knight and a shield sound related but not the same.
+`KLANK` $AF/$36, `CLANK` $19/$09 — and they are why a knight and a shield sound
+related but not the same. They are **loop counts, not delays**: a pass of
+`SNCLK2` is 16 cycles and `SNCLK3` costs 110 more charged to whichever counter
+ran out, so `f = 895000/(2 F T)` with `T = 16 + 124/F1 + 128/F2`. Three of the
+four pairs are the same 25/9 ratio; `KLANK` is the odd one at 175/54.
+
+**Every impact here is a 1 ms gate, and that is the ROM's shape, not a
+rounding.** `SOUNDS.ASM` has no attack: `SETNVD` loads the envelope at full
+amplitude and the sound *is* the fall, so `KLINK`, `CLANK`, `CHUCK` and all
+four detuned pairs are written as an instant attack, a one-millisecond gate
+and a release of the ROM's own length. **Six of the twenty-three came out
+silent on a board** — [B99](bugs.md#fixed): the mixer advances envelopes once
+per 3.5 ms refill block, so a note that short gets one block, and that block
+retired the note before it stepped the envelope. Nothing in the port was
+wrong and no test could see it, because the mock records the *ask*. It is
+worth naming here because the gate below is a listening test and this is
+precisely the class of thing it exists to catch: the sound the tables say is
+there, and the ear says is not.
 
 ### 9.3 Volume is already in the ROM
 
@@ -948,15 +983,24 @@ it on the PSG's 0–15 scale. **This is the game's sonar** — it is how you kno
 something is coming down the corridor before you can see it — and it is worth
 getting exactly right.
 
-**M4 built the gate and the volume; M6 builds the noise.** The range test,
+**M4 built the gate and the volume; M6 built the noise.** The range test,
 the coin toss and `255 − 31 × d` are `CWALK`'s and belong with the movement
 they gate, so they landed with the creatures, and the same gate decides
 whether the screen is redrawn at all — something you cannot hear does not
 move the picture. Every sound *site* in the game calls one `dagg.sound` with
 `SNDTAB`'s own index (0–11 a creature, 12 + class an object, 18 KLINK, 19
 CLANK, 20 THUD, 21/22 the explosions) and the ROM's own volume; at M4 it
-records them and a host test reads them back. What M6 adds is §9.2's
-generator behind the index.
+records them and a host test reads them back. What M6 added is §9.2's
+generator behind the index, and nothing else moved.
+
+**The volume is written in place rather than consed**, which is [B91](bugs.md)'s
+lesson applied where B91 was found. `SNOUT` multiplies every sample by `SNVOL`,
+and the queued effects take their volume from a `v` control word at the head of
+the note list — so the obvious spelling is `fput` and that is **one cell a
+sound** in the part of the game that runs for ever. Every queued list therefore
+ships with a `v15` placeholder that `.setitem` overwrites, and the sixteen words
+it is overwritten with are interned once at load. 336 sounds cost zero cells and
+zero word-table bytes, and there is a test that says so.
 
 ### 9.4 The heartbeat
 
@@ -985,9 +1029,23 @@ and 161 damage, so **fainting is the last eight points before dying**.
 
 Ours is a short low thump on voices 0/4 with a percussive envelope, and the
 same tick redraws the heart at its other size. **The beat is the game's clock
-and the player's health bar at once**, and every long sound effect in §9.2
-calls `tick` between its steps so the beat keeps time through it — which is
-what the CoCo's IRQ did for free while the sound routine blocked the game.
+and the player's health bar at once.**
+
+**The CoCo's beat is one edge**, which is why the thump's three numbers are
+this port's own and are the only numbers in §9 that are: `CLK30` does
+`LDB P.PIIOB,X / EORB #BIT1 / STB P.PIIOB,X` and moves on, so two beats make
+one square-wave cycle at under a hertz and what a player hears is the speaker's
+step response. It has no frequency, no duration and no volume to copy.
+
+**And the `tick` interleaving this paragraph used to ask for is not needed.**
+It assumed every long effect would be a chain of `sound` calls with `wait`
+between them, blocking the interpreter the way `SOUNDS` blocks the 6809. It is
+not: `sound` gates one note shaped by the voice's ADSR and `play` appends a
+sequence to a voice's queue, and **both return at once**, so a 1.27-second
+growl costs the scheduler nothing. That is also M6's answer to
+[P18 M4](roadmap.md#p18--interpreter-work-for-dungeons-of-daggorath): the
+frequency glide is not asked for, because what removes the interleaving is the
+queue and a glide would not have removed anything.
 
 Fainting is a set piece worth keeping (`HUPDAT.ASM:HUPD30`): the light is
 walked down one step at a time with a full redraw at each, until the screen is
@@ -1963,21 +2021,52 @@ playthrough reaches level 5 and wins.* **Note B65** — writes past 256 bytes on
 the internal filesystem fail on a board — so `ZSAVE` writes to `/sd` until that
 is fixed, and says so if there is no card.
 
-**M6 — sound.**
-Every effect in §9.2, the wizard's voice, the attract mode
-(`HUMAN.ASM:PLAY20`, the ROM's own autoplay tables, on level 3 with an iron
-sword, pine torch and leather shield). *Gate: a listening test against a
-recording of the original — a spider, a knight, a wraith, a sword swing, a
-torch, an explosion and the heartbeat, identified by ear without labels.*
+**M6 — sound. Written and confirmed on a Pico Plus 2 W 2026-09-05, 174
+tests — 170 here and four in `test_sound_engine`, which the board run is
+the reason for ([B99](bugs.md#fixed)). The gate is an ear and it is met:
+knight, wraith and spider told apart by ear, and the heartbeat under
+them.** Every effect in §9.2, the wizard's voice, and
+the attract mode (`HUMAN.ASM:PLAY20`, the ROM's own autoplay table, on level 3
+with an iron sword, pine torch and leather shield). *Gate: a listening test
+against a recording of the original — a spider, a knight, a wraith, a sword
+swing, a torch, an explosion and the heartbeat, identified by ear without
+labels.*
+
+**The design's own derivation was wrong and the count is the reason it is
+known.** §9.2 carries the correction: the squeak period is 135 + 16X, not
+113 + 16X, and `PSSST`/`PSSHT` are 2 and 1 bursts, not 3 and 2. The first is
+two missed instructions, the second is the ROM's comment read instead of its
+code. Both were found by doing the arithmetic a second time in C rather than
+by transcribing the table twice.
+
+**Nothing blocks, and that is the whole shape of the milestone.** §9.4 had
+asked every long effect to call `tick` between its steps; there are no steps.
+Twelve of the twenty-three entries are one `sound` shaped by `setenv`, eleven
+are a `play` queue, and both return at once. So P18 M4's glide is not asked
+for.
+
+**Two things `play` cannot spell, and both are named where they happen.** Its
+lowest note is c1 (32.7 Hz), so `BEOOP`'s bottom five steps clamp there; its
+shortest note is 25 ms (l32 at t300), so `SQUEAK` — 14.3 ms — is one note and
+the sweep in it is gone. Everything else has room.
+
+**And the attract mode did not have to be spent.** §16 names it as the first
+thing this game would give up if it ran out of room. The sound tables cost 405
+cells net of a `recycle` at load, the demo cost three procedures, and the game
+leaves 8,051 free at load against M5's 8,456 — 3,955 on a Pico 2 W against a
+2,048 floor.
 
 ---
 
 ## 16. Reduced-resource choices
 
-Kept in reserve, in the order they would be spent:
+Kept in reserve, in the order they would be spent. **Nothing on this list was
+spent** — M6 shipped with the attract mode in it, and the game leaves 3,955
+free cells on the board with the smallest arena that loads it.
 
 - **The attract mode** (M6) is the first thing to go: it is the ROM's autoplay
-  table and a demo dungeon and it buys the player nothing.
+  table and a demo dungeon and it buys the player nothing. It cost three
+  procedures and about 200 cells in the end, which is why it stayed.
 - **`ZSAVE`/`ZLOAD`** are cassette routines (`COMMON.ASM:SAVE`/`LOAD`) with no
   gameplay behind them.
 - **The wizard fade-in/out** (`MISC.ASM:WIZIX`/`WIZOX`) is a set piece, not a
@@ -2014,7 +2103,29 @@ Host tests, mock device, mirroring `tests/test_berzerk.c`:
 - **the budgets** — the procedure table (§14) and a warm redraw that spends
   zero nodes and zero atoms;
 - **the text** — every status and message line's rendered width ≤ 40, measured
-  by `type` against the mock with the output cleared.
+  by `type` against the mock with the output cleared;
+- **the sound** — §9.2's cycle counts done a second time in C and compared
+  against the shipped note lists and `SNDTAB` rows, every entry gating or
+  queuing something inside `sound`'s 20 Hz–10 kHz window, nothing reaching the
+  heartbeat's two voices, and 336 sounds costing zero cells.
+
+The one thing a host test cannot do is **hear** it, and M6's gate is an ear.
+What the tests can do is make silence impossible to ship by accident: a
+frequency outside 20 Hz–10 kHz is a rest rather than a wrong note, so a
+slipped decimal would pass a listening test by sounding like nothing at all,
+and that is the failure the range check exists for.
+
+**That claim was too strong, and a board found the gap.** These tests check
+what the game *asks* the engine for, because the mock is a recorder — so six
+effects that asked correctly and came out silent ([B99](bugs.md#fixed)) went
+past all of them. Two things closed it: `tests/test_sound_engine.c`, which
+compiles `devices/picocalc/sound.c` on the host and reads the ring the DMA
+would play, so somebody is finally listening to the engine and not to the
+ops; and `test_a_swing_that_lands_sounds_different_from_one_that_misses`,
+which reaches `KLINK` by **typing `ATTACK`** rather than by calling
+`dagg.sound`. Every other miscellaneous effect is still reached the short
+way, and that is the shape of the remaining hole: a sound site can be right
+and unreachable, and only the command that leads to it can tell.
 
 ---
 
@@ -2026,7 +2137,7 @@ Host tests, mock device, mirroring `tests/test_berzerk.c`:
 | **The procedure table** | 128 slots against a ~105 sketch, and overflow points at the wrong line (§14). Mitigated by the three rules, guarded from M1 |
 | **The generator's nybble decoding** | a wrong sign bit gives a creature that looks *almost* right. Mitigated by §11.2's reference render, checked in |
 | **B65** | blocks `ZSAVE` to the internal filesystem (M5) |
-| **The sound derivation** | §9.2 is cycle counting, not measurement, and M6's gate is the ear |
+| **The sound derivation** | §9.2 is cycle counting, not measurement, and M6's gate is the ear. **The count was wrong and the recount found it** — 135 + 16X, not 113 — so what is left is the risk that the corrected count is wrong too, and only a recording answers that |
 | **A board that refuses 300 MHz** | the clock is a precondition (§12.1) and the game refuses rather than halving. No board in this tree has refused; the exposure is a chip, not a design |
 | **P18 slipping** | P17 M1 wants three of its five items (§1). None is large, and §8.2 records what the fade costs without M2 if it comes to that |
 
@@ -2077,7 +2188,9 @@ day (2026-09-02); a fifth was opened by a board at M4 and settled the same way.
    has failed, so the ROM charges you `weight/8 + 3` for a step you did not
    take, and plays `A$THUD` while it does. It reads like a bug at first sight
    and it is not one: **it hurts to walk into a wall**, and the cost is the
-   game saying so. Kept, with the thud.
+   game saying so. Kept, with the thud — though the thud itself only arrived
+   at M6 ([B98](bugs.md)): M4 wired eight of the ten sound sites and this was
+   one of the two it read past.
 4a. **`write` gains optional `fg` and `bg` colours, and it goes first.** Opened
    as [P18](roadmap.md#p18--interpreter-work-for-dungeons-of-daggorath) (2026-09-02). It
    is the only way to draw the ROM's inverse status bar (§4.1b(i)), and M1

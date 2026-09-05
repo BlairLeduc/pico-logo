@@ -720,6 +720,7 @@ extern "C"
     void mock_sound_set_status(int voice, bool sounding, int free_slots);
     int mock_sound_gate_count(void);
     void mock_sound_clear_gates(void);
+    void mock_sound_clear_queued(void);
 
     //
     // Speech (P16) mock operations (for use by test_scaffold in mock_hardware_ops)

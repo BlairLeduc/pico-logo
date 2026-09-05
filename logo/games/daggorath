@@ -1,54 +1,44 @@
-; Dungeons of Daggorath -- P17 M1: the dungeon and the view, M2: the
-; command line and the clock, M3: objects, and M4: creatures.
+; Dungeons of Daggorath -- P17, complete: M1 the dungeon and the view, M2
+; the command line and the clock, M3 objects, M4 creatures, M5 the levels
+; and the endgame, M6 sound.
 ;
 ;   load "daggorath
-;   daggorath
+;   daggorath        ; a game
+;   daggorath.demo   ; the attract mode -- any key ends it
 ;
-; docs/daggorath-design.md is the design; this file is M1 to M4's
-; slice of it -- section 15: M1 is "the cell walk, the architectural lists,
-; MOVE and TURN with both animations, the grey ramp, the inverted levels
-; including the status bar, and hw.setcpu "fast with restore.clock behind
-; it"; M2 is "the scheduler of section 5, the parser (PARSER.ASM/
-; TOKEN.ASM), the text furniture of sections 4.1b-4.1c, the heart drawn and
-; beating, fainting, damage recovery, death"; M3 is "OCBs, the bag, two
-; hands, GET PULL STOW DROP EXAMINE USE REVEAL INCANT, the status line,
-; weight, torches and both light channels, the map and both scrolls"; M4
-; is "the CCB table, CMOVE and its preference walk, the peek-a-boo, combat
-; both ways, creature loot, death, and the approach sounds of section 9.3."
+; docs/daggorath-design.md is the design and section 15 is the milestone
+; list. Everything in it is here: the forward-view cell walk (VIEWER.ASM),
+; MOVE and TURN with both animations, the dot fade, inverted levels and
+; the `write`-based status bar; the parser (PARSER.ASM/TOKEN.ASM), the
+; scheduler, the heart drawn and beating, fainting and death; the OCBs,
+; the bag, both hands and all fifteen commands; the CCB table, CMOVE and
+; its preference walk, the peek-a-boo, combat both ways and CREGEN; the
+; level graph, both wizards, the ring riddle and ZSAVE/ZLOAD; and
+; SOUNDS.ASM's twenty-three effects with the wizard's voice and the
+; attract mode.
 ;
-; YOU START IN THE DARK, and that is M3's doing rather than a fault: the
-; player's own light is zero (COMDAT.ASM never sets PRLITE), so until you
-; PULL the pine torch out of the bag and USE it, RLIGHT is 0 and
-; VCTLST.ASM:SETFAX draws nothing at any range. The ROM's own attract mode
-; opens EXAMINE / PULL RIGHT TORCH / USE RIGHT / LOOK (TOKEN.ASM:AUTTAB)
-; for exactly this reason.
-;
-; M4 is what makes the dungeon worth walking into: NEWLVL.ASM:NLVL40 now
-; runs, so the loot every object was born holding (ONCE.ASM:CINI40 marks
-; all sixty-three creature-owned) is on the monsters, and killing one is
-; the only way to get any of it.
-;
-; This file does NOT include (each is a later milestone by design section
-; 15):
-;   - ladders/holes/VFTTAB (M5) -- the forward view always draws the plain
-;     ceiling line (VERT.ASM:CELINE), and the map marks no vertical
-;     features. INCANT transforms the Ring of Ohm but does not end the
-;     game: PINCAN.ASM:WINNER is M5's, with the wizards.
-;   - sound (M6) -- every SITE is here and goes through `dagg.sound`,
-;     which records SOUNDS.ASM's own SNDTAB index and volume; what is
-;     missing is the generator behind the index (design section 9.2) and
-;     the heartbeat thump on voices 0 and 4 (section 9.4).
-;   - three of the fifteen commands (CLIMB, ZLOAD, ZSAVE), all M5.
+; YOU START IN THE DARK, and that is not a fault: the player's own light
+; is zero (COMDAT.ASM never sets PRLITE), so until you PULL the pine torch
+; out of the bag and USE it, RLIGHT is 0 and VCTLST.ASM:SETFAX draws
+; nothing at any range. The ROM's own attract mode opens EXAMINE / PULL
+; RIGHT TORCH / USE RIGHT / LOOK (TOKEN.ASM:AUTTAB) for exactly that
+; reason, and `daggorath.demo` will show you.
 ;
 ; `make "dagg.pace 1` before `daggorath` runs the creatures at the ROM's
 ; raw table; 2 is the default and is what a board settled on beside the
 ; memory of the original -- see dagg.creature.delay. It touches creature
 ; turns only, never the heart, the torch or your own commands.
 ;
-; The maze, the object and creature tables and every vector list are
-; generated into this file
-; by scripts/gen_daggorath.py -- see the marked block below. There is no
-; second file to ship and nothing to open at run time.
+; `make "dagg.voice "false` stops the wizard speaking his speeches aloud
+; (design section 9.5). The words are printed either way; the CoCo only
+; printed them, and the voice is this port's one deliberate addition.
+;
+; The object and creature tables and every vector list are generated into
+; this file by scripts/gen_daggorath.py -- see the marked block below. The
+; MAZES are not: the game carves them the way DGNGEN.ASM does, because
+; shipping five of them cost a quarter of the cell pool and a Pico 2 W
+; could not load the file (B94). There is no second file to ship and
+; nothing to open at run time.
 
 ;==========================================================================
 ; The scale tables -- design section 6.1, verbatim (also tests/logo/p17m0,
@@ -1538,6 +1528,15 @@ end
 ; not in dagg.newlvl because RESTORE re-enters a level too, and a save
 ; that regenerates its maze from the level number does not have to carry
 ; one.  2.64 s at worst, behind the "PREPARE!" PCLI20 prints first.
+; The polarity globals exist before there is a level to set them, because
+; ONCE.ASM:DEMO10 draws the crescent wizard and the welcome messages
+; BEFORE GAME20 calls NEWLVL. These are level one's -- the CoCo's own
+; un-inverted screen, which is what the demo fades in on.
+make "dagg.ink 254
+make "dagg.bg 0
+make "dagg.status.fg 0
+make "dagg.status.bg 254
+
 to dagg.enter.level :level
   make "dagg.level :level
   dagg.gen :level
@@ -1938,17 +1937,23 @@ end
 ; intermediate frame before the step, then the step and the real frame."
 ;
 ; A blocked step (into a wall or off the maze) still redraws from the
-; unchanged position -- PSTEP always calls PUPSUB -- but does not yet
-; charge the weight/8+3 energy cost or play A$THUD: PDAM/HUPDAT is M2/M3's
-; job (the heart, damage and recovery are explicitly M2's line item, design
-; section 15), and inventing a placeholder damage system here would be
-; scope this milestone does not own.
+; unchanged position -- PSTEP always calls PUPSUB -- and it costs you both
+; ways: PMOV90's weight/8+3 is charged whether the step happened or not
+; (dagg.move.cost), and PSTEP plays A$THUD as it puts you back. It hurts to
+; walk into a wall, and the thud is the game saying so.
+;
+; THAT THUD WAS MISSING UNTIL M6 (B98). M4's roadmap entry says every sound
+; site in the game goes through one `dagg.sound`, and two of the ten did
+; not -- this one and PINCAN's ring -- because both are `SWI / FCB ISOUND`
+; runs with no `SOUND$` macro line above them to read past. M6 walks all
+; ten out of the ROM in a test rather than counting them by eye again.
 
 to dagg.move.forward
   local "nrow local "ncol local "ok
   make "nrow dagg.step.row :dagg.row :dagg.dir
   make "ncol dagg.step.col :dagg.col :dagg.dir
   make "ok dagg.stepok :nrow :ncol
+  if not :ok [dagg.sound :dagg.s.thud 255]
   dagg.pupdat :dagg.hlfscl
   if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
   dagg.show
@@ -1960,6 +1965,7 @@ to dagg.move.backward
   make "nrow dagg.step.row :dagg.row :dir
   make "ncol dagg.step.col :dagg.col :dir
   make "ok dagg.stepok :nrow :ncol
+  if not :ok [dagg.sound :dagg.s.thud 255]
   dagg.pupdat :dagg.bakscl
   if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
   dagg.show
@@ -1974,6 +1980,7 @@ to dagg.move.side :reldir
   make "nrow dagg.step.row :dagg.row :dir
   make "ncol dagg.step.col :dagg.col :dir
   make "ok dagg.stepok :nrow :ncol
+  if not :ok [dagg.sound :dagg.s.thud 255]
   if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
   if :ok [
     ifelse :reldir = 1 [dagg.turnsweep "rl] [dagg.turnsweep "lr]
@@ -2314,6 +2321,7 @@ to dagg.incant.hand :i
   .setitem :i :dagg.octyp :a
   dagg.ocbfil :i :a
   .setitem :i :dagg.ocx1 0
+  dagg.sound (:dagg.s.obj + :dagg.k.ring) 255
   dagg.comupd
   ; PINCAN's last test: the OMEGA ring (T.RN15, FINAL) ends the game.
   ; dagg.comupd runs first, because PINCAN shows the new ring (STATUS)
@@ -2340,32 +2348,340 @@ to dagg.look
 end
 
 ;==========================================================================
-; Sound -- the SITES, not the sounds. SOUNDS.ASM's SNDTAB is 23 entries:
-; 0-11 one a creature type, SNDOBJ (12) plus the object class for the six
-; things you can swing, then KLINK (18, you hit something), CLANK (19,
-; something hit you), THUD (20, you walked into a wall) and the two
-; explosions (21, 22). Every call below passes the ROM's own index and the
-; ROM's own volume; what is missing is the generator behind the index,
-; which is design section 9.2 and M6's whole milestone.
+; Sound -- SOUNDS.ASM, and this is M6. SNDTAB is 23 entries: 0-11 one a
+; creature type, SNDOBJ (12) plus the object class for the six things you
+; can swing, then KLINK (18, you hit something), CLANK (19, something hit
+; you), THUD (20, you walked into a wall) and the two explosions (21, 22).
+; Every call site passes the ROM's own index and the ROM's own volume --
+; design section 9.3's attenuation, which is the game's sonar and is how
+; you know something is coming down the corridor before you can see it --
+; and what M6 adds is the generator behind the index.
 ;
-; It records rather than plays because the arithmetic ABOVE it is M4's:
-; design section 9.3's attenuation is the game's sonar -- it is how you
-; know something is coming down the corridor before you can see it -- and
-; the range gate and the volume are computed where CWLK20 computes them.
-; M6 replaces this body with the PSG and nothing else here moves.
+; THE ROM HAS NO FREQUENCIES IN IT, only delay counts, so every number
+; below is counted out of the 6809 at the CoCo's own 0.895 MHz E clock.
+; Design section 9.2 gave the squeak period as 113 + 16X and IT IS
+; 135 + 16X: SNSQK2's second half is `CLRA / BRA SNSUB2` and the design
+; dropped SNSUB2's own `BSR SNOUT` (7 cycles), and the 15 cycles of
+; SNSQK1's loop -- BSR SNSQK2, LEAX, BNE -- are inside the period too,
+; because they run between the DAC going low and its going high again.
+; So a squeak is 1383 -> 5927 Hz, not the 1.4 -> 6.9 kHz that section
+; tabulates, and design section 9.2 is corrected with the code.
+;
+;   f  =  895000 / (135 + 16 X)          a squeak-family period
+;   f  =  895000 / (106 + 8 X)           a BOOMER noise sample
+;
+; AND NOTHING BLOCKS. The ROM's SOUNDS is synchronous -- it holds the 6809
+; until the effect is over and the IRQ keeps the heart beating underneath
+; it -- but a growl is 1.27 s and a viper's rattle fires whenever one
+; moves within sonar range, so blocking here would stop the scheduler for
+; a second at a time. Both of this interpreter's ways of making a noise
+; return at once: `sound` gates one note shaped by the voice's ADSR, and
+; `play` appends a note sequence to a voice's queue. So every effect is
+; one or the other, and design section 9.4's "call the scheduler between
+; the steps of a long effect" is not needed -- there are no steps to be
+; between. THAT IS ALSO M6'S ANSWER TO P18 M4: the sweeps did not come out
+; awkward, so the frequency glide is not asked for. What removes the
+; interleaving is the queue, and a glide would not have removed anything.
+;
+; VOICES, design section 9.1: 0 and 4 are the heartbeat and nothing else
+; ever touches them (a `sound` on a busy voice FLUSHES it, and the beat
+; must not be cuttable); 1 and 5 are tone A, 2 and 6 tone B, 3 and 7
+; noise. Both ears always get the same thing -- there is no panning, and
+; that is settled rather than deferred: a creature that announced which
+; side it was on would tell you something the CoCo did not.
 
 make "dagg.s.obj 12
 make "dagg.s.klk2 18
 make "dagg.s.klk3 19
+make "dagg.s.thud 20
 make "dagg.s.exp0 21
 make "dagg.s.exp1 22
 
 make "dagg.sndn -1
 make "dagg.sndvol 0
 
+; Design section 9.5, and it is flagged as an addition because it is one:
+; the CoCo PRINTED the wizard's speeches and the death message, and we
+; print them AND speak them. `make "dagg.voice "false` before `daggorath`
+; turns the speaking off; the text is the same either way.
+make "dagg.voice "true
+
+; `play` spells a frequency as a note, so a sweep is rounded to semitones
+; -- worth at most 3 % of a hertz, inaudible in a squeak, and it is
+; logo/games/berzerk's own method. The RANGE is what costs something:
+; `play` reaches c1 (32.7 Hz) to b8 (7902) where `sound` reaches 20 to
+; 10000, and two effects are outside it -- BEOOP's bottom five steps at
+; 27.9 Hz and the rattle's 11.2 kHz noise clock. Both clamp, and both are
+; named where they happen.
+make "dagg.pcs [c cs d ds e f fs g gs a as b]
+
+to dagg.note :f
+  local "m local "o
+  make "m ln (:f / 440)
+  make "m round (69 + ((12 * :m) / 0.6931472))
+  if :m < 24 [make "m 24]
+  if :m > 119 [make "m 119]
+  make "o (int (:m / 12)) - 1
+  output word (item (1 + modulo :m 12) :dagg.pcs) :o
+end
+
+; SNSQK1, the squeak family: X counts DOWN from its start to 1 and each
+; step is one full square period of 135 + 16X cycles, so the pitch RISES
+; and the sweep spends most of its time at the bottom. SQUEAK starts X at
+; $20, MSQUEK at $40, MSQUEQ at $80 and WHOOP at $100; PHASER calls
+; MSQUEK ten times over and GLUGLG calls MSQUEQ four.
+;
+; The shortest note `play` will hold is 25 ms (l32 at t300, its fastest),
+; so a sweep becomes round(duration / 25 ms) notes and each one is the
+; frequency at the MIDDLE of the time it covers. SQUEAK is 14.3 ms and
+; comes out as ONE note -- it is shorter than a note, so the sweep in it
+; is lost and what is left is its time-median, 1864 Hz. The others have
+; room: PHASER 19 notes, GLUGLG 27, WHOOP 25.
+to dagg.sweep :x0 :reps
+  local "t local "n local "c local "i
+  local "x local "d local "f local "out
+  make "t (135 * :x0) + (8 * :x0 * (:x0 + 1))
+  make "t :reps * :t
+  make "n round (:t / 22375)
+  if :n < 1 [make "n 1]
+  make "out []  make "c 0  make "i 0
+  repeat :reps [
+    make "x :x0
+    until [:x < 1] [
+      make "c :c + 135 + (16 * :x)
+      make "d ((:i + 0.5) * :t) / :n
+      if and (:i < :n) (:c > :d) [
+        make "f 895000 / (135 + (16 * :x))
+        make "out fput (dagg.note :f) :out
+        make "i :i + 1
+      ]
+      make "x :x - 1
+    ]
+  ]
+  output reverse :out
+end
+
+; The eleven queued sequences, in the order :dagg.sndtab indexes them:
+; the four SNSQK1 sweeps, BEOOP, the three rattles and the three booms.
+; Each starts with a `v15` that dagg.sound overwrites in place.
+make "dagg.snds []
+make "dagg.snds lput (se [v15 t300 l32] dagg.sweep 32 1) :dagg.snds
+make "dagg.snds lput (se [v15 t300 l32] dagg.sweep 64 10) :dagg.snds
+make "dagg.snds lput (se [v15 t300 l32] dagg.sweep 128 4) :dagg.snds
+make "dagg.snds lput (se [v15 t300 l32] dagg.sweep 256 1) :dagg.snds
+
+; BEOOP is the one member of the family whose X RISES -- $500 to $800 in
+; steps of 48, so the pitch FALLS, 43.4 Hz to 27.9 over 16 periods and
+; 471 ms. At those frequencies a square wave is not a tone but sixteen
+; clicks slowing down, which is the "beoop". Its bottom five steps are
+; below c1 and clamp there: `play` has no note for 27.9 Hz, and no
+; speaker this machine owns would separate them if it had.
+make "q [v15 t300 l32 f1 e1 e1 ds1 d1]
+make "q se :q [d1 cs1 cs1 c1 c1 c1 c1]
+make "q se :q [c1 c1 c1 c1]
+make "dagg.snds lput :q :dagg.snds
+
+; RATTLE/PSSST/PSSHT: 192 noise samples of 80 cycles (17.2 ms) and then
+; SNWT1K's 36.6 ms of silence, N times over. THE ROM'S COMMENT SAYS
+; "rattle count + 1" AND THE CODE DOES NOT: `STA SNDLAY` and then a
+; `DEC`/`BNE` do-while runs the loaded value exactly, so RATTLE is 10
+; bursts, PSSST 2 and PSSHT 1 -- not the 3 and 2 design section 9.2 read
+; off that comment, which read the same way would have made RATTLE
+; eleven. The nearest `play` can spell is 25 ms on and 25 off: 20 pulses
+; a second against the ROM's 18.6. The noise clock is 11.2 kHz, and b8
+; (7902) is the highest note there is.
+make "q [v15 t300 l32 b8 r b8 r b8 r]
+make "q se :q [b8 r b8 r b8 r b8 r b8 r]
+make "q se :q [b8 r b8 r]
+make "dagg.snds lput :q :dagg.snds
+
+make "dagg.snds lput [v15 t300 l32 b8 r b8 r] :dagg.snds
+make "dagg.snds lput [v15 t300 l32 b8 r] :dagg.snds
+
+; BOOMER, and the data is SWCHAR.ASM's: THUDD is $0080/$0001 and BANGD
+; $0050/$0005, with a third pair at THUDD+4 ($0050/$0004) that only
+; KABOOM reaches (`LEAU 4,U` after the first boom). X is the wait between
+; noise samples and it rises by 2 until it hits $0150, so the noise clock
+; FALLS -- 792 Hz to 322 for a THUD, 1200 to 322 for the other two -- and
+; Y is how many samples are taken at each X, which is what makes a BANG
+; five times longer than a THUD. 229 ms, 1263 ms, and KABOOM is a THUD,
+; then SNWT1K's pause, then the third pair: 1276 ms in all.
+make "dagg.snds lput [v15 t300 l16 e5 b4 gs4 fs4 e4] :dagg.snds
+
+make "q [v15 t300 l16 cs6 as5 g5 fs5 e5]
+make "q se :q [ds5 d5 cs5 c5 b4 as4 as4]
+make "q se :q [a4 gs4 gs4 g4 g4 fs4 fs4]
+make "q se :q [f4 f4 f4 e4 e4 e4]
+make "dagg.snds lput :q :dagg.snds
+
+make "q [v15 t300 l16 e5 b4 gs4 fs4 e4 r]
+make "q se :q [c6 a5 fs5 e5 ds5 cs5 c5]
+make "q se :q [b4 as4 a4 a4 gs4 g4 g4]
+make "q se :q [fs4 fs4 f4 f4 e4 e4]
+make "dagg.snds lput :q :dagg.snds
+
+; SNDTAB itself, one row an entry, and the row says which of four shapes
+; the effect is and what its numbers are:
+;
+;   [1 k p]            queue :dagg.snds's kth list on pair p (1 = the
+;                      tone voices 1 and 5, 3 = the noise voices)
+;   [3 nf env dur tf]  noise at nf through env, and a tone at tf beside
+;                      it when tf is not zero -- KLINK's "high pitched
+;                      tone mixed with white noise"
+;   [4 f1 f2 env]      two de-tuned tones through a decay. CSETUP's own
+;                      pair of bytes are loop counts, and a pass of
+;                      SNCLK2 is 16 cycles plus SNCLK3's 110 charged to
+;                      whichever counter ran out, so f = 895000/(2 F T)
+;   [7]                BDLBDL, the one effect built per call
+;
+; The envelopes are the ROM's envelope generator read as ADSR. SNENVS
+; walks from 0 up by SNENVD (attack) or from $FFFF down by it (decay),
+; one step a sample, so a step count times a sample period IS an attack
+; or a release in milliseconds:
+;
+;   GROWL/GRAWL/SNARL  SNENVD $300/$200/$100 -> 86/128/256 attack steps
+;                      of 2.34 ms = 201/299/598 ms, then a common $40
+;                      decay of 1023 steps of 1.05 ms = 1070 ms. The
+;                      noise clock is 428 Hz through the attack (SNWAIT
+;                      $F0) and 956 through the decay ($60); one voice
+;                      has one clock, and the decay is six sevenths of
+;                      the sound, so it is the decay's.
+;   WHOOSH             $80 attack, 512 steps of 0.161 ms = 82 ms, falling
+;                      through into CHUCK's $A0 decay, 409 steps = 65 ms
+;   CHUCK              that decay entered on its own -- a torch lights
+;                      with no attack at all
+;   KLINK              $60 decay, 682 steps of 0.157 ms = 107 ms, with a
+;                      tone at half the sample rate: 3174 Hz
+;   CLANG/KKLANK/      $60 decay again, but the step rate is set by the
+;   KLANK/CLANK        two frequencies, so the SAME envelope runs 420,
+;                      258, 600 and 177 ms
+make "q [[1 1 1] [1 6 3] [3 956 [201 0 15 1070] 202 0]]
+make "q se :q [[1 5 1] [4 134 434 [0 0 15 600]]]
+make "q se :q [[3 956 [299 0 15 1070] 300 0]]
+make "q se :q [[1 7 3] [4 350 971 [0 0 15 258]]]
+make "q se :q [[1 8 3]]
+make "q se :q [[3 956 [598 0 15 1070] 599 0]]
+make "q se :q [[7] [7] [1 3 1] [1 2 1] [1 4 1]]
+make "q se :q [[4 215 598 [0 0 15 420]]]
+make "q se :q [[3 6215 [82 0 15 65] 83 0]]
+make "q se :q [[3 6348 [0 0 15 65] 1 0]]
+make "q se :q [[3 6348 [0 0 15 107] 1 3174]]
+make "q se :q [[4 509 1413 [0 0 15 177]]]
+make "q se :q [[1 9 3] [1 10 3] [1 11 3]]
+make "dagg.sndtab :q
+make "q []
+
+; The sixteen `v` words, interned once at load so that setting a volume
+; never allocates. See dagg.sound.
+make "dagg.vols [v0 v1 v2 v3 v4 v5 v6 v7]
+make "dagg.vols se :dagg.vols [v8 v9 v10 v11]
+make "dagg.vols se :dagg.vols [v12 v13 v14 v15]
+
+; Building the tables above spends a few hundred cells on the copies `se`
+; and `lput` make, and the pool has no automatic collection -- so the one
+; sweep in the file that is not dagg.enter's is here, where the cost was
+; incurred and where nothing is playing yet.
+recycle
+
+; SOUNDX: square waves, because a DAC toggled between two values is one;
+; white noise, because SNOISE is a 16-bit LCG read as a sample; and no
+; envelope at all on the queued effects, because SNVOL is a constant
+; through any one sound and there is nothing between on and off.
+;
+; The heartbeat is the one thing in this file with no ROM number behind
+; it, and it cannot have one: COMMON.ASM:CLK30 does `LDB P.PIIOB,X /
+; EORB #BIT1 / STB P.PIIOB,X`, flipping a SINGLE BIT once a beat, so the
+; CoCo's heartbeat has no frequency, no duration and no volume -- it is
+; one edge, and the thump is the speaker's own answer to it. Ours has to
+; choose all three (design section 9.4 asks for "a short low thump with a
+; percussive envelope"), and these are the three.
+to dagg.setup.sound
+  setwave [0 4 1 5 2 6] "square
+  setwave [3 7] "white
+  setenv [0 4] [0 25 0 60]
+  setenv [1 5 2 6 3 7] [0 0 15 0]
+  ; PATTK/PINCAN's wizard, design section 9.5: pitched low.
+  setvoice [30 120 190 100]
+end
+
+; SOUNDX, whose dispatch is `JSR [A,X]` on SNDTAB. `SNOUT` multiplies
+; every sample by SNVOL, so the volume scales the whole effect: 0-255
+; there is 0-15 here, and a `v` control word in front of a queued list
+; does to it what SNVOL does to a bit-banged one.
+;
+; THAT `v` WORD IS WRITTEN IN PLACE and never consed, which is B91's
+; lesson applied where B91 was found. A creature's approach sound carries
+; the ROM's `255 - 31 * range`, so the volume is different nearly every
+; time, and `fput`ting it onto the list is one cell A SOUND in the part
+; of the game that runs for ever. So every queued list starts life with a
+; `v15` placeholder that `.setitem` overwrites, and the sixteen words it
+; is overwritten with were interned at load by :dagg.vols.
+;
+; A NEW SOUND ALWAYS WINS, which the ROM never had to decide -- SOUNDS
+; blocks, so nothing can arrive while something is playing. The three
+; rests are what a flush is here: `sound` on a voice discards whatever it
+; had queued. Voices 0 and 4 are not among them.
 to dagg.sound :n :vol
+  local "r local "g local "v local "l
   make "dagg.sndn :n
   make "dagg.sndvol :vol
+  make "v int (:vol / 17)
+  (sound [1 5] 0 1 0)
+  (sound [2 6] 0 1 0)
+  (sound [3 7] 0 1 0)
+  make "r item (:n + 1) :dagg.sndtab
+  make "g item 1 :r
+  if :g = 1 [
+    make "l item (item 2 :r) :dagg.snds
+    .setitem 1 :l (item (:v + 1) :dagg.vols)
+    setenv [1 5 3 7] [0 0 15 0]
+    ifelse (item 3 :r) = 1 [(play [1 5] :l)] [(play [3 7] :l)]
+    stop
+  ]
+  if :g = 3 [
+    setenv [3 7] (item 3 :r)
+    (sound [3 7] (item 2 :r) (item 4 :r) :v)
+    if (item 5 :r) > 0 [
+      setenv [1 5] (item 3 :r)
+      (sound [1 5] (item 5 :r) (item 4 :r) :v)
+    ]
+    stop
+  ]
+  if :g = 4 [
+    setenv [1 5] (item 4 :r)
+    setenv [2 6] (item 4 :r)
+    (sound [1 5] (item 2 :r) 1 :v)
+    (sound [2 6] (item 3 :r) 1 :v)
+    stop
+  ]
+  dagg.bdlbdl (item (:v + 1) :dagg.vols)
+end
+
+; BDLBDL: eight squeaks whose starting X is SNOISE's own random byte
+; shifted right and forced non-zero, so 1 to 127 -- and then it FALLS
+; INTO KABOOM. It is the only effect here that is built rather than
+; looked up, because the eight are different every time; it spends a
+; couple of hundred cells a call and a game hears it once per wizard.
+;
+; The squeaks and the explosion are on different voices where the ROM had
+; them one after the other on the same DAC, so the explosion is queued
+; behind as many 25 ms rests as the squeaks took notes.
+to dagg.bdlbdl :v
+  local "l local "r
+  make "l []
+  repeat 8 [make "l se :l dagg.sweep (1 + random 127) 1]
+  ; `fput`, not `lput`: the rests are all the same rest, so order does
+  ; not matter, and appending forty of them one at a time copies the
+  ; whole list forty times -- which is M3's own finding about the OCB
+  ; lists, and it ran a test out of space before this line was changed.
+  make "r []
+  repeat count :l [make "r fput "r :r]
+  make "r se [t300 l32] :r
+  setenv [1 5 3 7] [0 0 15 0]
+  (play [1 5] se (se :v [t300 l32]) :l)
+  make "l item 11 :dagg.snds
+  .setitem 1 :l :v
+  (play [3 7] se :r :l)
 end
 
 ;==========================================================================
@@ -2524,10 +2840,17 @@ end
 ; His two speeches, factored out so a host test can read them: dagg.look
 ; at the end of dagg.endgam clears the text window (INIVUX's own CLRPRI),
 ; so by the time the procedure returns there is nothing to assert on.
+; Spoken as well as printed at M6 -- design section 9.5. `say` reads the
+; same list `pr` does, so the speech cannot drift from the caption; `.`
+; and `!` are pauses to it and the rest of the punctuation it ignores.
 to dagg.endgam.speeches
+  local "a local "b
+  make "a [ENOUGH! I TIRE OF THIS PLAY...]
+  make "b [PREPARE TO MEET THY DOOM!!!]
   pr []
-  pr [ENOUGH! I TIRE OF THIS PLAY...]
-  pr [PREPARE TO MEET THY DOOM!!!]
+  pr :a
+  pr :b
+  if :dagg.voice [say :a  say :b]
 end
 
 ; Everything the strip takes: every OCB that is neither in a hand nor
@@ -2592,9 +2915,13 @@ end
 ; Factored out beside dagg.endgam.speeches, for the same reason: the
 ; words outlive the procedure that prints them nowhere else.
 to dagg.winner.speeches
+  local "a local "b
+  make "a [BEHOLD! DESTINY AWAITS THE HAND]
+  make "b [OF A NEW WIZARD...]
   pr []
-  pr [BEHOLD! DESTINY AWAITS THE HAND]
-  pr [OF A NEW WIZARD...]
+  pr :a
+  pr :b
+  if :dagg.voice [say :a  say :b]
 end
 
 ; PATT10's ring counter: ENERGY, ICE and FIRE spend a charge a swing and
@@ -2995,11 +3322,15 @@ end
 ; period is two beats. HEARTF is cleared while a scroll puts the map up
 ; (PUSE.ASM:USC210) -- the beat carries on, the picture of it stops.
 ;
-; The thump itself is M6 (design section 9.4): voices 0 and 4 are reserved
-; for it so nothing can flush it.
+; THE BEAT ITSELF IS ONE EDGE -- see dagg.setup.sound. It sounds whether
+; or not the glyph is drawn, because HEARTF stops the PICTURE of the beat
+; and not the beat, and it is on voices 0 and 4, which nothing else in
+; this file ever touches: `sound` on a busy voice flushes it, and the
+; beat must not be cuttable (design section 9.1).
 to dagg.beat
   make "dagg.heart.due :dagg.now + (:dagg.heartr * 16.667)
   make "dagg.hearts not :dagg.hearts
+  (sound [0 4] 55 30 10)
   if :dagg.heartf [
     ifelse :dagg.hearts [ask 1 [setsh 2]] [ask 1 [setsh 1]]
     refresh
@@ -3068,12 +3399,15 @@ end
 ; creature data, so what M2 owns is the bar going, the message arriving,
 ; and the loop ending.
 to dagg.death
+  local "a
+  make "a [YET ANOTHER DOES NOT RETURN...]
   make "dagg.over "true
   make "dagg.heartf "false
   ask 1 [ht]
   pr []
   type char 32
-  pr [YET ANOTHER DOES NOT RETURN...]
+  pr :a
+  if :dagg.voice [say :a]
 end
 
 ;==========================================================================
@@ -3740,14 +4074,97 @@ to dagg.dispatch
 end
 
 ;==========================================================================
+; The attract mode -- ONCE.ASM:DEMO10 and HUMAN.ASM:PLAY20, design
+; section 15's M6. Design section 16 names it as the FIRST thing this
+; game would give up if it ran out of room, and it did not have to.
+;
+; The demo is a real game with the keyboard replaced: PLAYER's very first
+; test is `TST AUTFLG`, and when it is set the task feeds HUMAN out of
+; AUTTAB instead of out of KBDGET. Everything below that -- the parser,
+; the scheduler, the creatures, the heart -- runs exactly as it does for
+; a player, which is why this costs two procedures and not a mode.
+
+make "dagg.autflg "false
+make "dagg.autptr 1
+make "dagg.autwrd 0
+make "dagg.aut.due 0
+
+; TOKEN.ASM:AUTTAB, seventeen commands. The ATM macro's arguments are the
+; same packed strings CMDTAB, DIRTAB and GENTAB hold, so every word here
+; is one the parser already knows and the generator already checks.
+make "q [[EXAMINE] [PULL RIGHT TORCH] [USE RIGHT]]
+make "q se :q [[LOOK] [MOVE] [PULL LEFT SHIELD]]
+make "q se :q [[PULL RIGHT SWORD] [MOVE] [MOVE]]
+make "q se :q [[ATTACK RIGHT] [TURN RIGHT] [MOVE]]
+make "q se :q [[MOVE] [MOVE] [TURN RIGHT] [MOVE] [MOVE]]
+make "dagg.auttab :q
+make "q []
+
+; DEMO10: the crescent wizard (`LDX #WIZ1`) fades in over the two welcome
+; messages -- decoded out of ONCE.ASM's own bytes rather than transcribed
+; -- and then the game drops into level three at COMDAT.ASM's own (12,22)
+; with DEMDAT's kit: an iron sword, a pine torch and a leather shield.
+; That position is the one M1 found `GAME10` overwriting for a real game
+; (B83), and it is a carved cell of level three even though it is not one
+; of level one.
+;
+; WIZIN0/WIZOUT is dagg.show.wizard, reduced the way M5 reduced it, and
+; the two WAITs after the message are MISC.ASM's own 81 jiffies each.
+to dagg.demo
+  make "dagg.row 12  make "dagg.col 22
+  make "dagg.level 2
+  make "dagg.gamdat [13 15 16]
+  make "dagg.autptr 1
+  make "dagg.autwrd 0
+  make "dagg.aut.due :dagg.now + 1350
+  dagg.show.wizard item 12 :dagg.fwdcre
+  pr []
+  pr [I DARE YE ENTER...]
+  pr [...THE DUNGEONS OF DAGGORATH!!!]
+  wait 2700
+end
+
+; PLAY20/PLAY30/PLAY40/PLAY50: one token at a time, a WAIT before each,
+; a space after each and a carriage return after the last -- so the demo
+; types at 81 jiffies a word, which is the pace of the original and not a
+; choice. When AUTTAB runs out the ROM waits twice more and jumps back to
+; DEMO; ours stops, because a Logo game has to let go (the same reason
+; dagg.key owns ESC).
+to dagg.autplay
+  local "cmd local "w
+  if :dagg.now < :dagg.aut.due [stop]
+  make "dagg.aut.due :dagg.now + 1350
+  make "cmd item :dagg.autptr :dagg.auttab
+  make "dagg.autwrd :dagg.autwrd + 1
+  if :dagg.autwrd > count :cmd [
+    dagg.human "cr
+    make "dagg.autwrd 0
+    make "dagg.autptr :dagg.autptr + 1
+    if :dagg.autptr > count :dagg.auttab [make "dagg.over "true]
+    stop
+  ]
+  make "w item :dagg.autwrd :cmd
+  repeat count :w [dagg.human item repcount :w]
+  dagg.human char 32
+end
+
+;==========================================================================
 ; The game loop -- design section 5. Input is polled and never blocked on:
 ; `readchar` would stop the world and `pollkeys` discards the characters,
 ; and this is a typing game.
+;
+; DEMO10 opens by arming the ABORT function, so any key ends the attract
+; mode. A player's keystroke is the one thing it is waiting for.
 
 to dagg.play
   until [:dagg.over] [
     dagg.tick
-    if key? [dagg.human dagg.key rc]
+    ifelse :dagg.autflg [
+      if key? [ignore rc  make "dagg.over "true]
+      dagg.autplay
+    ] [
+      if key? [dagg.human dagg.key rc]
+    ]
   ]
 end
 
@@ -3806,6 +4223,11 @@ to daggorath
   setrefresh "manual
   ignore clock
   make "dagg.now ticks
+  dagg.setup.sound
+  ; GAME20 is reached from GAME10 for a game and from DEMO10 for the
+  ; attract mode, and everything above this line is common to both.
+  make "dagg.level 0
+  if :dagg.autflg [dagg.demo]
   ; CINI40, then GAME20's NEWLVL, then GAME30, and that order is the game:
   ; the whole dungeon's loot exists before the level does, NLVL40 hands it
   ; to the creatures it has just given birth to, and only THEN does the
@@ -3814,8 +4236,17 @@ to daggorath
   ; 35 above is those two (25 + 10), which is COMDAT.ASM's `FDB 30+5`.
   dagg.makeobjects
   dagg.cmx.reset
-  dagg.newlvl 0
+  dagg.newlvl :dagg.level
   dagg.givebag
+  ; GAME40: the attract mode opens on the whole map, SLEEP set so nothing
+  ; moves under it, for two of MISC.ASM's 81-jiffy waits.
+  if :dagg.autflg [
+    make "dagg.mapflg "true
+    make "dagg.dspmod 1
+    dagg.pupdat :dagg.norscl
+    wait 2700
+    make "dagg.dspmod 0
+  ]
   dagg.setup.heart
   dagg.hupdat
   make "dagg.heart.due ticks
@@ -3824,14 +4255,32 @@ to daggorath
   make "dagg.burner.due ticks + 60000
   make "dagg.tenth.due ticks + 100
   make "dagg.cregen.due ticks + 300000
+  ; PLAYER is a task like the other five, so the demo's own timer is
+  ; re-anchored here too -- DEMO10 and GAME40 between them hold the screen
+  ; for five seconds, and the first word should arrive 81 jiffies after
+  ; the view does rather than at once.
+  if :dagg.autflg [make "dagg.aut.due ticks + 1350]
   dagg.pupdat :dagg.norscl
   dagg.prompt
   dagg.play
   daggorath.quit
 end
 
+; GAME20 the other way in: DEMDAT rather than GAMDAT, and `daggorath`
+; itself untouched, which is the point -- ONCE.ASM chooses between the two
+; with a pointer and nothing downstream of GAME20 knows which it got.
+to daggorath.demo
+  local "was
+  make "was :dagg.gamdat
+  make "dagg.autflg "true
+  daggorath
+  make "dagg.autflg "false
+  make "dagg.gamdat :was
+end
+
 to daggorath.quit
   restore.clock
+  stopsound
   ask 1 [ht  setsh 0]
   setrefresh "auto
   setpendash 1

@@ -230,6 +230,21 @@ target_include_directories(test_dirty_tiles PRIVATE
 )
 add_test(NAME test_dirty_tiles COMMAND test_dirty_tiles)
 
+# PSG mixer envelope test -- compiles devices/picocalc/sound.c on the host
+# against the Pico SDK stubs in tests/mocks, and reads the ring the DMA
+# would play. The only test that hears the engine rather than the ops.
+add_executable(test_sound_engine
+    test_sound_engine.c
+    unity.c
+)
+target_include_directories(test_sound_engine PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/devices/picocalc
+)
+add_test(NAME test_sound_engine COMMAND test_sound_engine)
+
 # Screen refresh policy test — compiles devices/picocalc/screen.c on the host
 # against tests/fake_lcd.c, which records what reaches the panel.
 add_executable(test_screen_refresh

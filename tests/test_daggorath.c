@@ -21,6 +21,7 @@
 #include "mock_device.h"
 #include "core/repl.h"
 #include "core/variables.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -3678,7 +3679,15 @@ void test_a_long_run_of_typed_commands_spends_nothing(void)
     run("make \"dagg.level 0  dagg.newlvl 0  dagg.givebag");
     run("make \"dagg.row 5  make \"dagg.col 5  make \"dagg.dir 0");
     run("dagg.enter.level 0");
-    typed_cost(5, "nodes"); // warm: every word a command says, interned once
+    // Warm: every word a command says and every number it mints, interned
+    // once.  This used to be twenty commands and M6 made it two hundred --
+    // not because anything drifted, but because the sound tables put ~80
+    // more words in the atom region, and atoms and cells grow toward each
+    // other, so the interning warm-up now costs a handful of cells further
+    // into the run than it used to.  It is a warm-up and not a leak, and
+    // the assertions below are what says so: after this, two hundred
+    // commands cost exactly nothing, however many times they are run.
+    typed_cost(50, "nodes");
 
     char msg[160];
     const float twenty = typed_cost(5, "nodes");
@@ -3807,6 +3816,689 @@ void test_the_game_fits_the_procedure_table(void)
     }
     fclose(f);
     TEST_ASSERT_TRUE_MESSAGE(count < MAX_PROCEDURES, "daggorath is outgrowing the procedure table");
+}
+
+//==========================================================================
+// M6 -- sound (design section 9).
+//
+// THE ORACLE IS THE 6809, not the table.  SOUNDS.ASM holds no frequencies
+// at all -- it holds delay counts -- so every number in :dagg.snds and
+// :dagg.sndtab is a cycle count, and the only test worth writing is the
+// count done again here.  That is M2's HUPD20 and M3's BURNER a third
+// time: a transcription always agrees with itself, and arithmetic does
+// not.
+//
+// It caught the design the moment it ran.  Section 9.2 gives the squeak
+// family's period as 113 + 16X; the count below says 135 + 16X, because
+// SNSQK2's second half is `CLRA / BRA SNSUB2` and the design dropped
+// SNSUB2's own `BSR SNOUT`, and because SNSQK1's own loop -- BSR, LEAX,
+// BNE -- runs between the DAC going low and its going high again and is
+// therefore inside the period.  1383 -> 5927 Hz, not 1.4 -> 6.9 kHz.
+//==========================================================================
+
+// ONCE.ASM sets the SAM to $2046, and bits R1 R0 are 00, so the E clock
+// is 0.895 MHz (the same number M4 used to cost VECTOR).
+#define COCO_E 895000.0
+
+// `play` spells a frequency as a note, so the oracle has to as well --
+// and it has to clamp where `play` clamps, c1 (32.7 Hz) to b8 (7902).
+static void oracle_note(double f, char *out)
+{
+    static const char *names[12] = {"c", "cs", "d", "ds", "e", "f",
+                                    "fs", "g", "gs", "a", "as", "b"};
+    int m = (int)lround(69.0 + 12.0 * log(f / 440.0) / log(2.0));
+    if (m < 24) m = 24;
+    if (m > 119) m = 119;
+    snprintf(out, 8, "%s%d", names[m % 12], m / 12 - 1);
+}
+
+// SNSQK1: X counts down from x0 to 1 and each step is one full square
+// period of 135 + 16X cycles; PHASER runs MSQUEK ten times and GLUGLG
+// runs MSQUEQ four.  25 ms is the shortest note `play` will hold (l32 at
+// t300), so the sweep becomes round(duration / 25 ms) notes, each the
+// frequency at the middle of the time it covers.
+static int oracle_sweep(int x0, int reps, char out[64][8])
+{
+    const double t = reps * (135.0 * x0 + 8.0 * x0 * (x0 + 1.0));
+    int n = (int)lround(t / 22375.0);
+    if (n < 1) n = 1;
+    TEST_ASSERT_TRUE(n <= 64);
+    double c = 0.0;
+    int i = 0;
+    for (int r = 0; r < reps; r++)
+        for (int x = x0; x >= 1; x--)
+        {
+            c += 135.0 + 16.0 * x;
+            if (i < n && c > (i + 0.5) * t / n)
+                oracle_note(COCO_E / (135.0 + 16.0 * x), out[i++]);
+        }
+    return i;
+}
+
+// The kth list of :dagg.snds, minus the three words -- v15, t300, l32 or
+// l16 -- every one of them opens with.
+static const char *snd_note(int k, int i)
+{
+    char expr[64];
+    snprintf(expr, sizeof(expr), "item %d (item %d :dagg.snds)", i + 4, k);
+    return text(expr);
+}
+
+static int snd_len(int k)
+{
+    char expr[64];
+    snprintf(expr, sizeof(expr), "count (item %d :dagg.snds)", k);
+    return (int)num(expr) - 3;
+}
+
+void test_the_squeak_family_is_the_6809_counted_again(void)
+{
+    // SQUEAK $20, MSQUEK $40 ten times (PHASER), MSQUEQ $80 four times
+    // (GLUGLG), WHOOP $100 -- SOUNDS.ASM's own four LDX values.
+    static const struct { const char *name; int k, x0, reps; } sweeps[] = {
+        {"SQUEAK", 1, 0x20, 1}, {"PHASER", 2, 0x40, 10},
+        {"GLUGLG", 3, 0x80, 4}, {"WHOOP", 4, 0x100, 1},
+    };
+    for (size_t s = 0; s < sizeof(sweeps) / sizeof(sweeps[0]); s++)
+    {
+        char want[64][8];
+        const int n = oracle_sweep(sweeps[s].x0, sweeps[s].reps, want);
+        char msg[160];
+        snprintf(msg, sizeof(msg), "%s is %d notes long and the 6809 counts %d",
+                 sweeps[s].name, snd_len(sweeps[s].k), n);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(n, snd_len(sweeps[s].k), msg);
+        for (int i = 0; i < n; i++)
+        {
+            snprintf(msg, sizeof(msg), "%s note %d", sweeps[s].name, i + 1);
+            TEST_ASSERT_EQUAL_STRING_MESSAGE(want[i], snd_note(sweeps[s].k, i), msg);
+        }
+    }
+    // And SQUEAK is the one that does not fit: 14.3 ms is shorter than a
+    // note, so the sweep in it is gone and what is left is its
+    // time-median.  That is a loss and it is written down as one.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, snd_len(1), "SQUEAK is not one note");
+    TEST_ASSERT_EQUAL_STRING("as6", snd_note(1, 0));
+}
+
+// BEOOP is the only member of the family whose X RISES -- $500 to $800 in
+// steps of 48 -- so its pitch falls, and it falls off the bottom of what
+// `play` can spell.  The clamp is the point of the test: five of the
+// sixteen steps are below c1 and land on it.
+void test_beoop_falls_as_far_as_play_can_spell(void)
+{
+    char want[16][8];
+    for (int i = 0; i < 16; i++)
+        oracle_note(COCO_E / (139.0 + 16.0 * (1280 + 48 * i)), want[i]);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(16, snd_len(5), "BEOOP is not sixteen periods");
+    for (int i = 0; i < 16; i++)
+    {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "BEOOP step %d", i + 1);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(want[i], snd_note(5, i), msg);
+    }
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("f1", snd_note(5, 0), "BEOOP does not start at 43 Hz");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("c1", snd_note(5, 15), "BEOOP does not bottom out at c1");
+}
+
+// THE COMMENT IS NOT THE CODE, which is this port's own recurring
+// finding one level down from "the macro is not the table".  RATTLE,
+// PSSST and PSSHT each `LDA #n / STA SNDLAY` and then run a `DEC`/`BNE`
+// do-while, so the count is n exactly -- 10, 2 and 1.  The ROM's comment
+// beside two of them says "rattle count + 1", which is where design
+// section 9.2's "3 and 2 bursts" came from; read the same way it would
+// make RATTLE eleven, and it is ten.
+void test_the_rattle_counts_are_the_code_and_not_the_comment(void)
+{
+    static const struct { const char *name; int k, bursts; } r[] = {
+        {"RATTLE", 6, 10}, {"PSSST", 7, 2}, {"PSSHT", 8, 1},
+    };
+    for (size_t i = 0; i < sizeof(r) / sizeof(r[0]); i++)
+    {
+        // One burst is a note and a rest.
+        char msg[128];
+        snprintf(msg, sizeof(msg), "%s is %d words of burst and silence, not %d",
+                 r[i].name, snd_len(r[i].k), 2 * r[i].bursts);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(2 * r[i].bursts, snd_len(r[i].k), msg);
+        for (int j = 0; j < r[i].bursts; j++)
+        {
+            TEST_ASSERT_EQUAL_STRING_MESSAGE("b8", snd_note(r[i].k, 2 * j), r[i].name);
+            TEST_ASSERT_EQUAL_STRING_MESSAGE("r", snd_note(r[i].k, 2 * j + 1), r[i].name);
+        }
+    }
+}
+
+// BOOMER, against SWCHAR.ASM's own two words a table: X is the wait
+// between noise samples and rises by 2 to $0150, Y is how many samples
+// are taken at each X.  THUDD is $0080/$0001, the pair KABOOM reaches
+// with `LEAU 4,U` is $0050/$0004, and BANGD is $0050/$0005 -- so all
+// three end at the same 322 Hz and only two of them start together.
+static int oracle_boom(int x0, int y, char out[64][8])
+{
+    double t = 0.0;
+    for (int x = x0; x < 336; x += 2)
+        t += y * (106.0 + 8.0 * x) + 18.0;
+    int n = (int)lround(t / (50.0 * 895.0));
+    if (n < 1) n = 1;
+    TEST_ASSERT_TRUE(n <= 64);
+    double c = 0.0;
+    int i = 0;
+    for (int x = x0; x < 336; x += 2)
+        for (int k = 0; k < y; k++)
+        {
+            c += 106.0 + 8.0 * x + (k == 0 ? 18.0 : 0.0);
+            if (i < n && c > (i + 0.5) * t / n)
+                oracle_note(COCO_E / (106.0 + 8.0 * x), out[i++]);
+        }
+    return i;
+}
+
+void test_the_booms_fall_the_way_swchars_data_falls(void)
+{
+    char thud[64][8], bang[64][8], kab2[64][8];
+    const int nt = oracle_boom(0x80, 1, thud);
+    const int nb = oracle_boom(0x50, 5, bang);
+    const int nk = oracle_boom(0x50, 4, kab2);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(nt, snd_len(9), "THUD is not THUDD's own length");
+    for (int i = 0; i < nt; i++)
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(thud[i], snd_note(9, i), "THUD");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(nb, snd_len(10), "BANG is not BANGD's own length");
+    for (int i = 0; i < nb; i++)
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(bang[i], snd_note(10, i), "BANG");
+
+    // KABOOM is a THUD, then SNWT1K's pause, then the third pair.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(nt + 1 + nk, snd_len(11),
+                                  "KABOOM is not a THUD, a rest and a boom");
+    for (int i = 0; i < nt; i++)
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(thud[i], snd_note(11, i), "KABOOM's ka");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("r", snd_note(11, nt), "KABOOM has no pause in it");
+    for (int i = 0; i < nk; i++)
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(kab2[i], snd_note(11, nt + 1 + i), "KABOOM's boom");
+}
+
+// CSETUP's four pairs of bytes, and the arithmetic that turns a loop
+// count into a pitch.  A pass of SNCLK2 is 16 cycles -- LEAX, BNE, LEAY,
+// BNE -- and SNCLK3 costs 110 more, charged to whichever counter ran out,
+// so the average pass is 16 + 124/F1 + 128/F2 and a counter of F toggles
+// its half of the sample every F passes.  The envelope is a common $60
+// decay of 682 steps, one step per SNCLK3, which is why the SAME decay
+// gives four different lengths.
+void test_the_detuned_pairs_are_csetups_own_bytes(void)
+{
+    static const struct { const char *name; int row, f1, f2; } c[] = {
+        {"KLANK",  5, 0xAF, 0x36},   // knight 1
+        {"KKLANK", 8, 0x32, 0x12},   // knight 2
+        {"CLANG", 16, 0x64, 0x24},   // shield
+        {"CLANK", 20, 0x19, 0x09},   // being hit
+    };
+    for (size_t i = 0; i < sizeof(c) / sizeof(c[0]); i++)
+    {
+        const double pass = 16.0 + 124.0 / c[i].f1 + 128.0 / c[i].f2;
+        const int want1 = (int)lround(COCO_E / (2.0 * c[i].f1 * pass));
+        const int want2 = (int)lround(COCO_E / (2.0 * c[i].f2 * pass));
+        const int want_ms = (int)lround(682.0 / (1.0 / c[i].f1 + 1.0 / c[i].f2)
+                                        * pass / 895.0);
+        char expr[96], msg[160];
+        snprintf(expr, sizeof(expr), "item 1 (item %d :dagg.sndtab)", c[i].row);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(4, (int)num(expr), c[i].name);
+        snprintf(expr, sizeof(expr), "item 2 (item %d :dagg.sndtab)", c[i].row);
+        snprintf(msg, sizeof(msg), "%s's low tone is %d and $%02X counts %d",
+                 c[i].name, (int)num(expr), c[i].f1, want1);
+        TEST_ASSERT_TRUE_MESSAGE(fabs(num(expr) - want1) <= 1.0, msg);
+        snprintf(expr, sizeof(expr), "item 3 (item %d :dagg.sndtab)", c[i].row);
+        snprintf(msg, sizeof(msg), "%s's high tone is %d and $%02X counts %d",
+                 c[i].name, (int)num(expr), c[i].f2, want2);
+        TEST_ASSERT_TRUE_MESSAGE(fabs(num(expr) - want2) <= 1.0, msg);
+        snprintf(expr, sizeof(expr), "item 4 (item 4 (item %d :dagg.sndtab))", c[i].row);
+        snprintf(msg, sizeof(msg), "%s decays in %d ms and $60 takes %d",
+                 c[i].name, (int)num(expr), want_ms);
+        TEST_ASSERT_TRUE_MESSAGE(fabs(num(expr) - want_ms) <= 2.0, msg);
+        // Both tones sound at once, which is what "de-tuned pair" means,
+        // and the ratio is CSETUP's own -- three of the four are 25/9.
+        TEST_ASSERT_TRUE_MESSAGE(want2 > want1, c[i].name);
+    }
+}
+
+//==========================================================================
+// What the twenty-three entries do when they are called.
+//==========================================================================
+
+// Every sound site in the game, as SNDTAB indexes them.
+#define SNDTAB_ENTRIES 23
+
+void test_every_sndtab_entry_makes_an_audible_noise(void)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    for (int n = 0; n < SNDTAB_ENTRIES; n++)
+    {
+        char cmd[64], msg[192];
+        mock_sound_clear_gates();
+        mock_sound_clear_queued();
+        const int qmark = 0;
+        snprintf(cmd, sizeof(cmd), "dagg.sound %d 255", n);
+        run(cmd);
+
+        // The three flushes are six gates, two voices each, and they are
+        // rests: `sound` on a voice is what discards what it had queued.
+        int rests = 0, notes = 0;
+        for (int i = 0; i < st->sound.gate_count; i++)
+        {
+            if (st->sound.gates[i].freq == 0)
+                rests++;
+            else
+                notes++;
+        }
+        snprintf(msg, sizeof(msg), "SNDTAB %d did not flush all three pairs", n);
+        TEST_ASSERT_TRUE_MESSAGE(rests >= 6, msg);
+
+        const int queued = st->sound.queued_count - qmark;
+        snprintf(msg, sizeof(msg), "SNDTAB %d is silent: %d gated notes, %d queued",
+                 n, notes, queued);
+        TEST_ASSERT_TRUE_MESSAGE(notes > 0 || queued > 0, msg);
+
+        // AND EVERY NOTE IS AUDIBLE.  `sound` rests on anything outside
+        // 20 Hz to 10 kHz, so a slipped decimal is a silent effect rather
+        // than a wrong one -- which is the failure that would survive a
+        // listening test by sounding like nothing at all.
+        for (int i = 0; i < st->sound.gate_count; i++)
+        {
+            if (st->sound.gates[i].freq == 0) continue;
+            snprintf(msg, sizeof(msg), "SNDTAB %d gates %u Hz, which is a rest",
+                     n, st->sound.gates[i].freq);
+            TEST_ASSERT_TRUE_MESSAGE(st->sound.gates[i].freq >= 20 &&
+                                     st->sound.gates[i].freq <= 10000, msg);
+        }
+        for (int i = qmark; i < st->sound.queued_count; i++)
+        {
+            if (st->sound.queued[i].freq_hz == 0) continue; // a written rest
+            snprintf(msg, sizeof(msg), "SNDTAB %d queues %u Hz, which is a rest",
+                     n, st->sound.queued[i].freq_hz);
+            TEST_ASSERT_TRUE_MESSAGE(st->sound.queued[i].freq_hz >= 20 &&
+                                     st->sound.queued[i].freq_hz <= 10000, msg);
+        }
+    }
+}
+
+// Design section 9.1's one hard rule.  `sound` on a busy voice FLUSHES
+// it, so if any effect could reach voices 0 or 4 then a creature moving
+// in the dark could cut the heartbeat -- and the heartbeat is the health
+// bar.  Nothing may touch them, including the three flushes.
+void test_no_effect_can_reach_the_heartbeats_voices(void)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    for (int n = 0; n < SNDTAB_ENTRIES; n++)
+    {
+        char cmd[64], msg[128];
+        mock_sound_clear_gates();
+        mock_sound_set_status(0, false, SOUND_QUEUE_LEN);
+        mock_sound_set_status(4, false, SOUND_QUEUE_LEN);
+        snprintf(cmd, sizeof(cmd), "dagg.sound %d 255", n);
+        run(cmd);
+        for (int i = 0; i < st->sound.gate_count; i++)
+        {
+            snprintf(msg, sizeof(msg), "SNDTAB %d gated voice %d",
+                     n, st->sound.gates[i].voice);
+            TEST_ASSERT_TRUE_MESSAGE(st->sound.gates[i].voice != 0 &&
+                                     st->sound.gates[i].voice != 4, msg);
+        }
+        snprintf(msg, sizeof(msg), "SNDTAB %d queued onto the heart's voices", n);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_QUEUE_LEN, st->sound.free_slots[0], msg);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(SOUND_QUEUE_LEN, st->sound.free_slots[4], msg);
+    }
+}
+
+// And the other half of it: the beat is on 0 and 4 and nowhere else.
+// CLK30 flips one bit of the PIA, so the CoCo's beat has no frequency,
+// duration or volume at all -- what is checked here is that there IS one,
+// that it is on the reserved pair, and that HEARTF (which stops the
+// PICTURE of the beat while the map is up) does not stop it.
+void test_the_heart_thumps_on_its_own_two_voices(void)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    run("dagg.enter.level 0  make \"dagg.ppow 160  make \"dagg.pdam 0");
+    run("dagg.setup.heart  dagg.hupdat  make \"dagg.now 0");
+    for (int pass = 0; pass < 2; pass++)
+    {
+        mock_sound_clear_gates();
+        run(pass ? "make \"dagg.heartf \"false" : "make \"dagg.heartf \"true");
+        run("dagg.beat");
+        int thumps = 0;
+        for (int i = 0; i < st->sound.gate_count; i++)
+        {
+            TEST_ASSERT_TRUE_MESSAGE(st->sound.gates[i].voice == 0 ||
+                                     st->sound.gates[i].voice == 4,
+                                     "the beat reached a voice that is not its own");
+            if (st->sound.gates[i].freq > 0) thumps++;
+        }
+        TEST_ASSERT_EQUAL_INT_MESSAGE(2, thumps,
+                                      "the heart did not beat in both ears");
+    }
+    // The envelope is percussive: it decays to nothing and holds nothing.
+    run("dagg.setup.sound");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)num("item 3 env 0"),
+                                  "the heart's thump sustains");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)num("item 1 env 0"),
+                                  "the heart's thump has an attack");
+}
+
+// SNOUT multiplies every sample by SNVOL, so a volume scales the whole
+// effect -- and CWLK20's `255 - 31 * range` is the game's sonar, which is
+// how you hear something coming before you can see it.  0-255 there is
+// 0-15 here, and it has to reach a QUEUED effect as well as a gated one.
+void test_the_volume_is_the_roms_and_scales_the_whole_effect(void)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    static const struct { int vol, want; } v[] = {
+        {255, 15}, {255 - 31 * 1, 13}, {255 - 31 * 4, 7}, {255 - 31 * 8, 0},
+    };
+    for (size_t i = 0; i < sizeof(v) / sizeof(v[0]); i++)
+    {
+        char cmd[64], msg[160];
+        // SNDTAB 0 is the spider, which is queued, and 18 is KLINK,
+        // which is gated -- one of each shape.
+        mock_sound_clear_gates();
+        int qmark = st->sound.queued_count;
+        snprintf(cmd, sizeof(cmd), "dagg.sound 0 %d", v[i].vol);
+        run(cmd);
+        snprintf(msg, sizeof(msg), "a spider at volume %d queued nothing", v[i].vol);
+        TEST_ASSERT_TRUE_MESSAGE(st->sound.queued_count > qmark, msg);
+        for (int k = qmark; k < st->sound.queued_count; k++)
+        {
+            snprintf(msg, sizeof(msg), "a spider at %d queued volume %d, wanted %d",
+                     v[i].vol, st->sound.queued[k].vol, v[i].want);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(v[i].want, st->sound.queued[k].vol, msg);
+        }
+
+        mock_sound_clear_gates();
+        snprintf(cmd, sizeof(cmd), "dagg.sound 18 %d", v[i].vol);
+        run(cmd);
+        for (int k = 0; k < st->sound.gate_count; k++)
+        {
+            if (st->sound.gates[k].freq == 0) continue;
+            snprintf(msg, sizeof(msg), "KLINK at %d gated volume %d, wanted %d",
+                     v[i].vol, st->sound.gates[k].vol, v[i].want);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(v[i].want, st->sound.gates[k].vol, msg);
+        }
+    }
+    // And the recording M4 built is still there and still the ROM's, so
+    // every test M4 wrote against a sound SITE still means what it meant.
+    run("dagg.sound 20 224");
+    TEST_ASSERT_EQUAL_INT(20, (int)num(":dagg.sndn"));
+    TEST_ASSERT_EQUAL_INT(224, (int)num(":dagg.sndvol"));
+}
+
+// B91's lesson, applied to the code B91 would have been written in.  A
+// creature's approach sound carries a different volume nearly every time
+// -- `255 - 31 * range` -- so the obvious way to put it in front of a
+// queued list is `fput`, and that is one cell A SOUND in the part of the
+// game that runs for ever.  It is written in place instead, and this is
+// the gate that says so.
+void test_a_long_run_of_sounds_spends_nothing(void)
+{
+    // Warm: the sixteen volume words and every number the dispatcher
+    // mints, interned once.
+    for (int pass = 0; pass < 2; pass++)
+    {
+        run("make \"m0 nodes  make \"a0 atoms");
+        for (int n = 0; n < SNDTAB_ENTRIES; n++)
+        {
+            // 10 and 11 are BDLBDL, the one effect that is built rather
+            // than looked up -- it is bounded below instead.
+            if (n == 10 || n == 11) continue;
+            char cmd[64];
+            mock_sound_clear_gates();
+            mock_sound_clear_queued();
+            for (int v = 0; v <= 255; v += 17)
+            {
+                snprintf(cmd, sizeof(cmd), "dagg.sound %d %d", n, v);
+                run(cmd);
+            }
+        }
+        if (pass == 0) continue;
+        char msg[160];
+        const float cells = num(":m0") - num("nodes");
+        const float atoms = num(":a0") - num("atoms");
+        snprintf(msg, sizeof(msg),
+                 "336 sounds cost %d cells and %d bytes of word table",
+                 (int)cells, (int)atoms);
+        TEST_ASSERT_TRUE_MESSAGE(cells <= 0.0f, msg);
+        TEST_ASSERT_TRUE_MESSAGE(atoms <= 0.0f, msg);
+    }
+
+    // And the residual, named rather than assumed -- the same treatment
+    // M4 gave `dagg.ccdam`.  BDLBDL is eight random squeaks and a rest
+    // run as long as they are, so it has to build a list; what matters
+    // is that it is BOUNDED and that a game hears it twice.  It ran a
+    // whole pool out when the rests were appended with `lput`.
+    run("recycle  make \"m0 nodes");
+    for (int i = 0; i < 10; i++)
+    {
+        mock_sound_clear_gates();
+        mock_sound_clear_queued();
+        run("dagg.sound 10 255");
+    }
+    run("recycle");
+    char msg[160];
+    const float kept = num(":m0") - num("nodes");
+    snprintf(msg, sizeof(msg), "ten wizards left %d cells behind a sweep", (int)kept);
+    TEST_ASSERT_TRUE_MESSAGE(kept <= 8.0f, msg);
+}
+
+//==========================================================================
+// Design section 9.5 -- the wizard speaks.
+//==========================================================================
+
+void test_the_wizard_speaks_and_can_be_told_not_to(void)
+{
+    const MockDeviceState *st = mock_device_get_state();
+    static const char *what[3] = {"dagg.endgam.speeches", "dagg.winner.speeches",
+                                  "dagg.death"};
+    for (int i = 0; i < 3; i++)
+    {
+        char msg[160];
+        mock_speech_set_status(false, SPEECH_QUEUE_LEN);
+        run("make \"dagg.voice \"true");
+        mock_device_clear_output();
+        int mark = st->speech.queued_count;
+        run(what[i]);
+        const char *spoken = mock_device_get_output();
+        snprintf(msg, sizeof(msg), "%s said nothing out loud", what[i]);
+        TEST_ASSERT_TRUE_MESSAGE(st->speech.queued_count > mark, msg);
+        // The same words, printed, either way -- the speech is an
+        // addition and not a replacement.
+        char printed[512];
+        snprintf(printed, sizeof(printed), "%s", spoken ? spoken : "");
+
+        mock_speech_set_status(false, SPEECH_QUEUE_LEN);
+        run("make \"dagg.voice \"false");
+        mock_device_clear_output();
+        mark = st->speech.queued_count;
+        run(what[i]);
+        snprintf(msg, sizeof(msg), "%s spoke with the voice turned off", what[i]);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(mark, st->speech.queued_count, msg);
+        snprintf(msg, sizeof(msg), "%s printed something different when silent",
+                 what[i]);
+        const char *again = mock_device_get_output();
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(printed, again ? again : "", msg);
+    }
+    run("make \"dagg.voice \"true");
+    // Pitched low, which is the whole of the departure: `setvoice`'s
+    // pitch is in half-Hertz, so 30 is a 60 Hz voice.
+    run("dagg.setup.sound");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(30, st->speech.voice_pitch,
+                                  "the wizard is not pitched low");
+}
+
+// EVERY SOUND SITE IN THE ROM, walked.  M4's entry says every one of them
+// goes through a single `dagg.sound`, and TWO OF THE TEN DID NOT -- B98.
+// Both are `SWI / FCB ISOUND` runs with no `SOUND$` macro line commented
+// out above them, which is what the eye was matching on: `PTURN.ASM:PSTEP`
+// thuds when a step is refused, and `PINCAN.ASM` rings when an
+// incantation lands.  Nothing could see it before M6, because until there
+// was a generator behind the index a missing site and a present one both
+// produced silence.
+//
+// The list is `grep ISOUND docs/DungeonsOfDaggorath/*.ASM` plus
+// `CRETUR.ASM:CWLK20`'s `SOUNDX`, which is the only one that carries a
+// volume of its own.
+void test_every_sound_site_in_the_rom_is_a_sound_here(void)
+{
+    build_synthetic_corridor();
+
+    // PTURN.ASM:PSTEP -- A$THUD, when STEPOK says no.  (3,5) is the one
+    // cell in the fixture with a wall on it, and it is its north side.
+    run("make \"dagg.row 3  make \"dagg.col 5  make \"dagg.dir 0");
+    run("make \"dagg.sndn -1  dagg.move.forward");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(20, (int)num(":dagg.sndn"),
+                                  "walking into a wall is silent");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(255, (int)num(":dagg.sndvol"),
+                                  "SOUNDI is always full volume");
+    // And a step that works does not thud.
+    run("make \"dagg.row 5  make \"dagg.col 5  make \"dagg.dir 0");
+    run("make \"dagg.sndn -1  dagg.move.forward");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1, (int)num(":dagg.sndn"),
+                                  "a step that happened thudded anyway");
+
+    // PINCAN.ASM -- A$RING (SNDOBJ + K.RING), between OCBFIL and STATUS.
+    // The seam a board used to reach a ring: GAMDAT hands you one.
+    run("make \"dagg.plhand 0  make \"dagg.prhand 0  make \"dagg.ptorch 0");
+    run("make \"dagg.bag []  make \"dagg.floor []  make \"dagg.dspmod 0");
+    run("make \"dagg.gamdat [12 15]"); // VULCAN ring, PINE torch
+    run("dagg.makeobjects  dagg.givebag");
+    type_line("PULL LEFT RING");
+    run("make \"dagg.sndn -1");
+    type_line("INCANT FIRE");
+    TEST_ASSERT_EQUAL_STRING("FIRE RING", text("dagg.objnam :dagg.plhand"));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(13, (int)num(":dagg.sndn"),
+                                  "an incantation that landed is silent");
+    run("make \"dagg.gamdat [17 15]");
+
+    // The other eight, each at the site that plays it.  PATT24's KLINK,
+    // CMOV92's CLANK, PATTK's BANG, WIZI20's KABOOM, PATT10's object
+    // sound, and CWLK20's creature sound with its own volume -- all of
+    // them M4's, and all of them still where M4 put them.
+    static const struct { const char *what, *site; int want; } sites[] = {
+        {"dagg.sound :dagg.s.klk2 255", "PATT24, hitting a creature", 18},
+        {"dagg.sound :dagg.s.klk3 255", "CMOV92, being hit", 19},
+        {"dagg.sound :dagg.s.exp0 255", "PATTK, a creature dying", 21},
+        {"dagg.sound :dagg.s.exp1 255", "WIZI20, the wizard", 22},
+        {"dagg.sound (:dagg.s.obj + :dagg.k.torch) 255", "PUSE12, a torch lit", 17},
+    };
+    for (size_t i = 0; i < sizeof(sites) / sizeof(sites[0]); i++)
+    {
+        run("make \"dagg.sndn -1");
+        run(sites[i].what);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(sites[i].want, (int)num(":dagg.sndn"),
+                                      sites[i].site);
+    }
+}
+
+// B99's user-visible half, and the reason the engine bug hid behind a whole
+// milestone of green tests: every effect above is reached by calling
+// `dagg.sound` itself, so nothing here ever checked what the ATTACK command
+// plays. A swing at nothing is PATT10's object sound; a swing that lands is
+// PATT24's KLINK instead -- and a ring is the one weapon PATT20 waves past
+// the dice, so the hit needs no luck to reproduce.
+void test_a_swing_that_lands_sounds_different_from_one_that_misses(void)
+{
+    run("dagg.makeobjects  dagg.cmx.reset");
+    run("make \"dagg.level 0  dagg.newlvl 0");
+    run("make \"dagg.gamdat [12 15]"); // a VULCAN ring and a PINE torch
+    run("dagg.givebag");
+    run("make \"dagg.row 16  make \"dagg.col 11  make \"dagg.dir 0");
+    run("make \"dagg.light 8  make \"dagg.mlight 8");
+    run("make \"dagg.ppow 40  make \"dagg.pdam 0");
+    run("dagg.ccb.clear");
+    type_line("PULL LEFT RING");
+
+    // Nothing in the room: the object's own noise, and nothing after it.
+    run("make \"dagg.sndn -1");
+    type_line("ATTACK LEFT");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(13, (int)num(":dagg.sndn"),
+                                  "a swing at an empty room was silent");
+
+    // A balrog to swing at -- big enough that one ring does not kill it,
+    // so the sound under test is the hit and not PATT30's explosion.
+    put_creature(1, 9, 16, 11);
+    run("make \"dagg.sndn -1");
+    type_line("ATTACK LEFT");
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(0, (int)num("item 1 :dagg.ccuse"),
+                                  "the balrog died; that sound is the explosion, not the hit");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(18, (int)num(":dagg.sndn"),
+                                  "a swing that landed made the same noise as one that missed");
+    run("make \"dagg.gamdat [17 15]");
+}
+
+//==========================================================================
+// Design section 15's third piece of M6 -- the attract mode.
+//==========================================================================
+
+// DEMO10 and COMDAT.ASM's DEMDAT: level three, (12,22), an iron sword, a
+// pine torch and a leather shield -- and GAMDAT put back afterwards, so
+// the seam a board uses to reach a ring survives the demo running.
+void test_the_attract_mode_opens_where_the_demo_opens(void)
+{
+    run("make \"dagg.now 0  make \"dagg.autflg \"true");
+    run("dagg.demo");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(12, (int)num(":dagg.row"), "DEMO's row");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(22, (int)num(":dagg.col"), "DEMO's column");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, (int)num(":dagg.level"), "DEMO is on level three");
+    // ADJTAB rows: IRON 13 (a sword), PINE 15 (a torch), LEATHER 16 (a
+    // shield) -- DEMDAT, where GAMDAT is a WOODEN sword and the same
+    // torch.
+    TEST_ASSERT_EQUAL_INT(3, (int)num("count :dagg.gamdat"));
+    TEST_ASSERT_EQUAL_INT(13, (int)num("item 1 :dagg.gamdat"));
+    TEST_ASSERT_EQUAL_INT(15, (int)num("item 2 :dagg.gamdat"));
+    TEST_ASSERT_EQUAL_INT(16, (int)num("item 3 :dagg.gamdat"));
+    // PLAY30 waits before the first token, not after it.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1350, (int)num(":dagg.aut.due"),
+                                  "the demo types before MISC.ASM's own wait");
+    run("make \"dagg.autflg \"false  make \"dagg.gamdat [17 15]");
+}
+
+// AUTTAB, typed.  This is the whole path -- the autoplay table, HUMAN,
+// the line buffer, the parser and the commands -- and it is the ROM's own
+// opening: EXAMINE, PULL RIGHT TORCH, USE RIGHT, LOOK.  M3 arrived at
+// those four independently as the only way to see anything at all, which
+// is the strongest thing that can be said about them.
+void test_the_attract_mode_types_the_roms_own_opening(void)
+{
+    start_game();
+    run("make \"dagg.linbuf []  make \"dagg.linptr 1");
+    run("make \"dagg.autflg \"true  make \"dagg.autptr 1  make \"dagg.autwrd 0");
+    run("make \"dagg.now 0  make \"dagg.aut.due 0");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(17, (int)num("count :dagg.auttab"),
+                                  "AUTTAB is seventeen commands");
+    TEST_ASSERT_EQUAL_STRING("EXAMINE", text("item 1 (item 1 :dagg.auttab)"));
+    TEST_ASSERT_EQUAL_STRING("PULL", text("item 1 (item 2 :dagg.auttab)"));
+    TEST_ASSERT_EQUAL_STRING("RIGHT", text("item 2 (item 2 :dagg.auttab)"));
+    TEST_ASSERT_EQUAL_STRING("TORCH", text("item 3 (item 2 :dagg.auttab)"));
+
+    // Nothing happens until the wait has passed, which is the pace of the
+    // original and not a choice: MISC.ASM's WAITX is 81 jiffies.
+    run("make \"dagg.aut.due 1000  dagg.autplay");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)num(":dagg.autwrd"),
+                                  "the demo typed before its wait was up");
+
+    // Four commands' worth of words and returns.  Each call is one token
+    // or one carriage return, so the count is words + one per command.
+    run("make \"dagg.aut.due 0");
+    for (int i = 0; i < 40 && (int)num(":dagg.autptr") <= 4; i++)
+        run("make \"dagg.now :dagg.now + 1350  dagg.autplay");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, (int)num(":dagg.autptr"),
+                                  "the demo did not get through its first four commands");
+    // PULL RIGHT TORCH took the torch out of the bag and USE RIGHT lit it
+    // and stowed it again, so the player is no longer in the dark -- which
+    // is the only thing this opening exists to do.
+    TEST_ASSERT_TRUE_MESSAGE(num(":dagg.ptorch") > 0,
+                             "the attract mode never lit its torch");
+    run("dagg.setlight");
+    TEST_ASSERT_TRUE_MESSAGE(num(":dagg.light") > 0,
+                             "the attract mode is still in the dark");
+    run("make \"dagg.autflg \"false");
 }
 
 //==========================================================================
@@ -3966,6 +4658,21 @@ int main(void)
     RUN_TEST(test_creature_damage_is_the_one_field_that_still_interns);
     RUN_TEST(test_a_warm_redraw_with_a_creature_in_view_spends_nothing);
     RUN_TEST(test_a_long_run_of_typed_commands_spends_nothing);
+    RUN_TEST(test_the_squeak_family_is_the_6809_counted_again);
+    RUN_TEST(test_beoop_falls_as_far_as_play_can_spell);
+    RUN_TEST(test_the_rattle_counts_are_the_code_and_not_the_comment);
+    RUN_TEST(test_the_booms_fall_the_way_swchars_data_falls);
+    RUN_TEST(test_the_detuned_pairs_are_csetups_own_bytes);
+    RUN_TEST(test_every_sndtab_entry_makes_an_audible_noise);
+    RUN_TEST(test_no_effect_can_reach_the_heartbeats_voices);
+    RUN_TEST(test_the_heart_thumps_on_its_own_two_voices);
+    RUN_TEST(test_the_volume_is_the_roms_and_scales_the_whole_effect);
+    RUN_TEST(test_a_long_run_of_sounds_spends_nothing);
+    RUN_TEST(test_every_sound_site_in_the_rom_is_a_sound_here);
+    RUN_TEST(test_a_swing_that_lands_sounds_different_from_one_that_misses);
+    RUN_TEST(test_the_wizard_speaks_and_can_be_told_not_to);
+    RUN_TEST(test_the_attract_mode_opens_where_the_demo_opens);
+    RUN_TEST(test_the_attract_mode_types_the_roms_own_opening);
     RUN_TEST(test_the_game_leaves_room_to_play_in);
     RUN_TEST(test_the_game_fits_the_global_table);
     RUN_TEST(test_the_game_fits_the_procedure_table);
