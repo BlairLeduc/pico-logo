@@ -116,6 +116,7 @@ Companion documents (everything in `docs/`):
 | Item | Status | Notes |
 |---|---|---|
 | `MAX_PROCEDURES` 128 → 192 | done | Landed 2026-09-02 as [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M0. `logo/games/battlezone` defines exactly 128 and the ceiling has been hit repeatedly; overflow drops the **last** `to` in the file and points nowhere near the cause. Unlike `MAX_GLOBAL_VARIABLES` there is **no representation ceiling** — procedure indices are `int`, not a `uint8_t` hash slot — so this is a pure budget decision and revisitable. ~80 B a slot (64 of them `params[MAX_PROC_PARAMS]`), so 192 is +5 KB of `.bss`, about +1 SRAM point. The table is also the one name table with **no index**: `find_procedure_index_n` is a linear scan, where `find_global` has been a hash since [P10](#p10--interpreter-throughput) M3 — **and it does not matter, which was confirmed rather than assumed** (see M0). **Measured cost, both directions, all three boards**: exactly 5,120 B of `.bss` each (64 slots x an 80-byte `UserProcedure`), taking RAM from 89.34/86.82/91.73 % to **90.31/87.80/92.71 %** — +0.97 points, against the predicted ~+1. All three link. **`repl_init` reached on a Pico Plus 2 W 2026-09-02**, which is the binding board: at 92.71 % it has the least headroom of the three. `tests/logo/p18` reads the ceiling back on a board the only way a program can, by filling the table until `define` fails |
+| Automatic collection on allocation failure | todo | The interpreter has a collector and never runs it: `mem_gc_sweep` is reached from exactly one place in the tree, `prim_recycle`, so `Out of space` is reported with the arena full of garbage nobody swept. Opened by [B97](bugs.md), where a Pico 2 W died mid-game with `(pr nodes atoms)` at **0 0** and a typed `recycle` handed back 3,000 cells. See [Automatic collection](#automatic-collection-on-allocation-failure) |
 | LittleFS internal filesystem (root `/`) + `/sd` FAT32 mount | done | Landed 2026-06-29 (PR #83), before this roadmap existed; listed for completeness. Design: [`littlefs-filesystem-design.md`](littlefs-filesystem-design.md) |
 | On-chip temperature sensor (`hw.temperature`), `battery` renamed to `hw.battery` | done | Landed 2026-08-20 (user request). The first of a `hw.` family for reading the board itself, so `battery` was renamed with it — a breaking change taken deliberately while the surface is two primitives wide. The part-to-part difference the request flagged is real and the SDK already hides it: the sensor is ADC input 4 on the RP2350A (Pico 2, Pico 2 W) and input 8 on the RP2350B (Pico Plus 2 W), and `ADC_TEMPERATURE_CHANNEL_NUM` is `NUM_ADC_CHANNELS - 1`, which the board header sizes from `PICO_RP2350A` — so **no board conditional appears in this tree**, and the two disassemblies prove it resolved: the AINSEL write is `0x4000` on a `pico2` build and `0x8000` on a `pico+2w` one. The conversion is the datasheet's (§12.4.6) and is the same on both parts. Two things the sensor's own accuracy decided: the read **averages 16 conversions** (~0.24 C per LSB, noisy at that, ~32 us for the burst), and the primitive **rounds to a tenth** — the sensor is uncalibrated and reads the die rather than the room, so six significant digits of ADC noise would be a false precision the manual then has to walk back. A board with no sensor nulls the op and the primitive errors rather than inventing a reading, which is what the host build does. **RAM unchanged to the byte** on all three boards (`pico+2w` 478,532, 91.27 %); the cost is flash. 47 tests in `test_primitives_hardware.c`. **Hardware-accepted 2026-08-21 on both a Pico 2 W and a Pico Plus 2 W** — which is the whole of the gate, since the two boards are the two parts and the channel is the one thing no host test can reach. `tests/logo/hwtemp` stays in the tree as the check: it does not assert that a number came back, because a wrong channel returns a floating GPIO and that reads as a plausible number — it loads the processor for thirty seconds and requires the reading to **rise**, which only a sensor wired to the die does |
 | On-board status LED (`hw.light?`, `hw.setlight`) | done | Landed 2026-08-21 (user request). The second of the `hw.` family, and the same shape of problem as `hw.temperature`: **the pin differs on every board and the SDK already hides it.** On a Pico 2 the LED is `PICO_DEFAULT_LED_PIN` (GPIO 25) and a `gpio_put` reaches it; on a Pico 2 W and a Pico Plus 2 W there is **no such pin at all** — it is `CYW43_WL_GPIO_LED_PIN`, WL_GPIO 0 on the wireless module. That used to be hand-written special-case code; SDK 2.1's `pico_status_led` is the abstraction, so **no board conditional appears in this tree** and the disassemblies prove it resolved: `picocalc_set_status_led` is `movs r3, #25` plus the single-cycle-IO write in a `pico2` build and `bl cyw43_gpio_set` in a `pico2w` one. **The design decision the hardware forced** is that on a W board the LED is on the far side of the cyw43 driver, so lighting it **powers the radio** — the first `hw.setlight` costs the firmware upload, about a second — and there is no alternative, since the LED is physically on that chip. The driver is brought up through the existing `ensure_wifi_initialized` rather than by `status_led_init()`, which would build a *second* `async_context` and init the driver twice; `status_led_init_with_context(cyw43_arch_async_context())` keeps one context, one driver and one flag for both features. `hw.light?` **reads the pin** rather than remembering what was written, so on a W board it is a round trip through the module. A board with no LED nulls the ops and both primitives error rather than answering `false`, which would read as "the LED is off". **SRAM costs 72 bytes on the W boards** — `status_led_owned_context`, the context `pico_status_led` would have built for itself, dead in this build but in the same TU as the path that is used — and 4 bytes on a `pico2`; the rest (~1.2–1.9 KB) is flash. 13 tests in `test_primitives_hardware.c` (60 in the file), 80/80 green. **Hardware-accepted 2026-08-21 on both W boards**, a Pico 2 W and a Pico Plus 2 W, via `tests/logo/hwlight` — all four checks, which is the whole of the cyw43 half of the gate. That gate is two things no host test can reach: a human confirming the light actually *moved* (a driven pin that is not wired looks exactly like a pass from inside Logo), and the **two WiFi orderings** — LED then WiFi, WiFi then LED — which is the double-init this arrangement exists to prevent. **What is still unrun is a `pico2` build**, the GPIO 25 path and the only one that goes through `status_led_init()` rather than the with-context form. It is the trivial half and the disassembly shows it resolving to pin 25, but nothing has yet watched that LED light |
@@ -622,6 +623,70 @@ still there to surprise the next one.
   rather than returning into a body that no longer exists.
 - **Reference:** a `## .reset` section under Workspace Management, cross-linked
   from `erall` and `recycle`, spelling out exactly what survives.
+
+### Automatic collection on allocation failure
+
+**Goal:** an allocation that cannot be served should collect and retry before it
+reports `Out of space`. Today it does not, and the consequence is not academic:
+a board runs out with thousands of cells of garbage in the arena, and the only
+thing that reclaims them is a human typing `recycle`.
+
+**What is actually there.** The collector works and is well tested
+(`tests/test_memory.c`). What is missing is any caller. `mem_gc`/`mem_gc_sweep`
+is invoked from **one** place in the whole tree — `prim_recycle`
+(`core/primitives_workspace.c`) — and `alloc_cell` simply returns 0 on
+exhaustion (`core/memory.c`), which every caller turns into `ERR_OUT_OF_SPACE`.
+`mem_atom` does the same with `NODE_NIL` when the word region is full. So every
+long-running Logo program has to sweep itself: berzerk and battlezone do it on a
+once-a-second beat, `daggorath` does it after each command dispatch
+([B97](bugs.md)), and a program whose author did not know to is a program with
+a fuse on it.
+
+**Why it is not a two-line change, and this is the whole of the item.** *The
+root set is assembled by the caller, not by the collector.* `prim_recycle` names
+all seven root sources by hand — `var_gc_mark_all`, `proc_gc_mark_all`,
+`prop_gc_mark_all`, `frame_gc_mark_all`, `op_stack_gc_mark`,
+`token_source_gc_mark`, `demons_gc_mark_all` — and it can only do that because
+it is a primitive holding an `Evaluator *`. `memory.c` has no such handle, so a
+collection triggered from inside `alloc_cell` cannot find the roots without
+either an upward dependency or a registered mark callback. **The registered
+callback is the right shape**: one `mem_gc_set_root_marker()` installed at
+`repl_init`, so `memory.c` still knows nothing about evaluators.
+
+*And the roots that are not in that list are the dangerous ones.* A primitive
+half way through building a list holds `Node`s (and `Value`s, which contain
+them) in **C locals** that nothing marks. Collect underneath it and those cells
+are swept while still in use. The mechanism for this exists —
+`MemGcRootScope` / `mem_gc_roots_push` / `mem_gc_mark_transient_roots` — but it
+is used at **seven** call sites (`eval.c`, `eval_expr.c` ×2,
+`primitives_list_processing.c` ×3) against **~220 allocation calls across 32
+files**. Every one of those that holds a live `Node` across a subsequent
+allocation has to be rooted first. That audit *is* the work; the trigger itself
+is a few lines.
+
+- **The failure mode is silent corruption, not a crash**, which is why this is
+  a design-first item rather than an afternoon. A missed root frees a cell that
+  is still referenced and the damage surfaces later, somewhere else, as a
+  wrong answer.
+- **So the gate is a stress mode, not a benchmark.** A debug build option that
+  collects on **every** allocation turns a missed root from a rare corruption
+  into a deterministic failure on the first test that walks that path — and the
+  existing suite (87 binaries) becomes the audit. Ship the stress mode *first*
+  and fix what it finds; the on-failure trigger is what lands afterwards.
+- **No heuristic, no nursery, no scheduling.** Collect only when an allocation
+  actually fails, and retry once. A sweep is ~4 ms on a board ([P13](#p13--battlezone-design-first)
+  M3) and exhaustion is rare, so there is nothing to tune and nothing that can
+  surprise a frame loop — a game that never runs out never pays.
+- **`recycle` stays**, and stays useful: it becomes the way to sweep *before* a
+  known-expensive stretch rather than the only way to sweep at all. The
+  hand-placed sweeps in the games stay too — they are cheaper than hitting the
+  wall, and they keep working unchanged.
+- **What this does not fix:** [B94](bugs.md), where a Pico 2 W could not `load`
+  the file at all. There was no garbage to reclaim at that point; that is a
+  program too big for the board, and it stays that.
+- **Reference:** `recycle`'s section gains a sentence saying the interpreter now
+  collects on its own when it has to, and that `recycle` is a hint rather than a
+  requirement.
 
 ### P10 — Interpreter throughput
 
@@ -2940,6 +3005,70 @@ test is the warning. A warm redraw still spends **zero**
 nodes and zero atoms with an object on the floor, which is what `OFIND` being
 a cursor rather than a list buys — and still zero at M4 with a creature in
 the view and another behind the peek, which is what the occupancy grid buys.
+
+**And then a Pico 2 W could not load it at all** ([B94](bugs.md)):
+`Out of space`, and the board answered `(pr nodes atoms)` with **72 and 320**
+— the two allocators meeting in the middle. **The arena is not the same on
+every board**, and the paragraph above says "one 128 KB block" because that is
+what one board of three has: 131,072 bytes on a Pico Plus 2 W, **114,688 on a
+Pico 2 W**, **98,304 on a Pico 2**. Four bytes to a cell, so a Pico 2 W has
+4,096 fewer cells than the host that measures — and M5 left 3,978. **Nothing
+in this tree could see that**, because every test builds at the default
+131,072. That blind spot is the real finding; the game was only its first
+victim.
+
+**The mazes were 7,905 cells — a quarter of the pool — and §7.4's own
+prescribed fix does not work.** That section had said the repair, if RAM ever
+bound, was "to emit each row as a 64-character hex *word* and expand only the
+current level". Measured: two characters a cell is 10,240 characters however
+packed, an atom entry costs **19.8 bytes** of overhead on top of its
+characters, and the best arrangement is ~11,052 against **11,224 free** — it
+fits by 172 bytes and leaves nothing for the word table [B91](bugs.md) already
+spends. One character a cell needs ~138 symbols and **only 58 printable
+characters round-trip through a word literal**. A plan written down is not a
+plan measured.
+
+**So the game carves its own mazes now, which is where the ROM had them.**
+§7.2 had rejected that on speed and was right about the port it measured:
+`RANDOX` shifts a 24-bit register eight times a byte, ~91 Logo statements,
+**1.95 ms a byte** on a Pico 2 W at 300 MHz against a level's 2,235 draws —
+4.4 seconds of RNG alone. **But the register is linear, so eight steps
+collapse**: after a byte `SEED+2` holds the old `SEED+1`, `SEED+1` the old
+`SEED`, and the new low byte is `TA[old SEED+1] xor TB[old SEED+2]` — verified
+against the bit-at-a-time original **over all 65,536 pairs**, then end to end
+on all 5,120 cells. A byte becomes five statements: **150 µs**, and a level is
+**2.64 s** at worst, behind `MISC.ASM`'s own "PREPARE!" which `PCLI20` already
+prints one line earlier. Neither table is a constant anyone had to trust:
+`dagg.rtabs` derives both from `dagg.slow8`, the honest ROM byte, in 512 draws
+and ~0.96 s once per `load`.
+
+**A carve allocates nothing**, which is B91's lesson applied before a board
+found it: one grid, allocated once and carved in place, and the values written
+are 0..255 — interned by the first carve and free for ever after. Getting there
+cost one real bug: `dagg.rndcel` answered with a two-element `list` and
+`MAKDOR` asks ~245 times a level, so a generation leaked **1,010 cells**.
+Result: **8,456 free cells at load** where M5 had 3,978, and the whole
+152-test suite green at a Pico 2 W's own 114,688-byte arena.
+
+**Fidelity is pinned without shipping the data.** `gen_daggorath.py` still
+carves all five mazes and still checks them cell-for-cell against
+`docs/DungeonsOfDaggorath/Levels/`; what it emits now is **fingerprints**, and
+`test_the_carve_reproduces_the_1982_dungeon` holds the board's own carve to
+them. The chain from the published 1982 maps to the board is unbroken with no
+maze data in between. `test_the_game_leaves_room_to_play_in` is **per board**
+now — it derives each board's headroom from its arena instead of measuring one
+and hoping — and **the Pico 2 is named in it as not fitting** rather than
+quietly assumed: it needs ~1,500 cells more, and the vector lists (`make "v`,
+2,461 cells) are where they are. §26's "all three boards" is corrected.
+
+**One interpreter bug fell out of it** ([B95](bugs.md)), and it is
+[B26](bugs.md) one path over — the same defect in the path `load` actually
+uses. `proc_define_from_text` interns the procedure name and hands the pointer
+straight to `primitive_find`, which calls `strlen`; a full atom region interns
+nothing and returns NULL. So a file loaded into a workspace one atom short of
+full **faulted instead of reporting**, for every `to ... end` block in it. B94's
+board came within **320 word-table bytes** of that and was saved only by
+running the cells out first, which reports cleanly.
 
 A faithful port of the 1982 DynaMicro game from **its own 6809 source**, 9,866
 lines of it, kept under `docs/DungeonsOfDaggorath/` with the grant of licence

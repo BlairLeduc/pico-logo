@@ -18,10 +18,12 @@ class, which both of them carry.  That check is what says the ring the
 OBJXXX macro calls HOTH is the ring TOKEN.ASM calls RIME -- see
 read_object_tables().
 
-M1-M3's scope: VERT.ASM's LADDER/HOLEUP/HOLEDN (needs VFTTAB, M5) and
+M1-M4's scope: VERT.ASM's LADDER/HOLEUP/HOLEDN (needs VFTTAB, M5) and
 D3.ASM/D4.ASM (creatures, M4) are not transcribed here.  The vector-list
 decoder below is written to be general over the V$JSR/V$RTS opcodes those
 will need, but nothing in this file's RAW table uses them yet.
+M5 transcribes them (FLUP/FLDN chain LADDER via V$JSR, HOLEDN falls into
+CELINE) and emits FWDVER, VFTTAB and WIZ2.
 
 Every generated maze is gated against docs/DungeonsOfDaggorath/Levels/ --
 the published maps of the real dungeon -- cell for cell and door for door,
@@ -591,6 +593,21 @@ def check_message_strings():
     # feedback a hit has until M6 gives it a sound.
     attack = read_messages("PATTK.ASM", "PATT24")
     assert attack[0] == "!!!", attack[0]
+    # MISC.ASM:PREPAX (the PREPAR vector), the level-change message PCLIMB
+    # prints.
+    assert read_messages("MISC.ASM", "PREPAX") == ["PREPARE!"], \
+        read_messages("MISC.ASM", "PREPAX")
+    # PATTK.ASM:ENDGAM, the plain wizard's two speeches, and
+    # PINCAN.ASM:WINNER, the victory's two.  M5 prints them from these
+    # decoded strings rather than transcribing them by eye.  The leading
+    # newline (^, I.CR) and spaces are the ROM's own 32-column centering;
+    # the game prints a blank line for the newline and keeps the spaces.
+    endgam = read_messages("PATTK.ASM", "ENDGAM")
+    assert endgam == ['\n ENOUGH! I TIRE OF THIS PLAY...',
+                      '   PREPARE TO MEET THY DOOM!!!'], endgam
+    winner = read_messages("PINCAN.ASM", "WINNER")
+    assert winner == ['\nBEHOLD! DESTINY AWAITS THE HAND',
+                      '        OF A NEW WIZARD...'], winner
 
 
 def check_command_tables():
@@ -662,10 +679,10 @@ def decode(name, raw_table, memo=None):
     end (a door superimposed on its wall); V$NEW starts a new run (a pen
     lift); V$REL walks nybble-encoded deltas until a V$ABS terminator.
 
-    V$JSR/V$RTS (VERT.ASM's LADDER, chained from FLUP/FLDN) are not needed
-    by anything in this file's RAW table -- M1 only draws CELINE, the plain
-    ceiling line, not the ladder/hole lists (M5, once VFTTAB exists) -- so
-    they are left unimplemented rather than guessed at.
+    V$JSR splices the subroutine's runs inline and carries on past it --
+    which is what VERT.ASM's FLUP/FLDN do (V$JSR LADDER, then V$JMP to the
+    hole); V$RTS ends the subroutine, so inside a top-level decode it ends
+    the list the way V$END does.
 
     V$FALL is this file's own marker for an assembler fall-through and is
     handled by SPLICING the target's tokens in where it stands, which is
@@ -685,8 +702,6 @@ def decode(name, raw_table, memo=None):
         if t == V_FALL:
             tokens[i:i + 2] = list(raw_table[tokens[i + 1]])
             continue
-        if t == V_END:
-            break
         if t == V_NEW:
             if cur:
                 runs.append(cur)
@@ -698,9 +713,14 @@ def decode(name, raw_table, memo=None):
                 cur = []
             runs.extend(decode(tokens[i + 1], raw_table, memo))
             break
-        elif t == V_JSR or t == V_RTS:
-            raise NotImplementedError(
-                f"{name}: V$JSR/V$RTS not needed by M1's RAW table")
+        elif t == V_JSR:
+            if cur:
+                runs.append(cur)
+                cur = []
+            runs.extend(decode(tokens[i + 1], raw_table, memo))
+            i += 2
+        elif t == V_RTS or t == V_END:
+            break
         elif t == V_REL:
             i += 1
             while tokens[i] != V_ABS:
@@ -790,6 +810,35 @@ RAW = {
 
     # VERT.ASM -- only the plain ceiling line; see the M1 scope note above.
     "CELINE": [28, 47, 28, 210, V_END],
+
+    # VERT.ASM's ladders and holes (M5): FLUP is V$JSR LADDER then V$JMP
+    # HOLEUP, FLDN the same through HOLEDN, and HOLEDN falls through into
+    # CELINE -- the assembler lays them end to end with no control code
+    # between, which is this file's V_FALL.  Transcribed as the absolute
+    # pairs VERT.ASM actually writes (LADDER has no relative runs at all).
+    "LADDER": [24, 116, 128, 116, V_NEW,                     # left side
+               24, 140, 128, 140, V_NEW,                     # right side
+               28, 116, 28, 140, V_NEW,                      # 1st rung
+               40, 116, 40, 140, V_NEW,                      # 2nd rung
+               52, 116, 52, 140, V_NEW,                      # 3rd rung
+               64, 116, 64, 140, V_NEW,                      # 4th rung
+               76, 116, 76, 140, V_NEW,                      # 5th rung
+               88, 116, 88, 140, V_NEW,                      # 6th rung
+               100, 116, 100, 140, V_NEW,                    # 7th rung
+               112, 116, 112, 140, V_NEW,                    # 8th rung
+               123, 116, 123, 140, V_NEW,                    # 9th rung
+               V_RTS],
+    "HOLEUP": [34, 100, 24, 92, 24, 164, 34, 156, 34, 100,   # ceiling hole
+               24, 100, V_NEW,                               # line up, left
+               34, 156, 24, 156, V_NEW,                      # line up, right
+               28, 47, 28, 96, V_NEW,                        # left ceiling line
+               28, 161, 28, 210, V_END],                     # right ceiling line
+    "HOLEDN": [118, 100, 128, 92, 128, 164, 118, 156,        # floor hole
+               118, 100, 128, 100, V_NEW,                    # line down, left
+               118, 156, 128, 156, V_NEW,                    # line down, right
+               V_FALL, "CELINE"],                            # ...into CELINE
+    "FLUP": [V_JSR, "LADDER", V_JMP, "HOLEUP"],
+    "FLDN": [V_JSR, "LADDER", V_JMP, "HOLEDN"],
 
     # VOBJ.ASM -- the six objects seen lying on the floor, indexed by CLASS
     # (VIEWER.ASM:VIEW52 reads FWDOBJ with P.OCCLS, not the type), so there
@@ -952,6 +1001,22 @@ RAW = {
                   (100, 144), (106, 142), (110, 146), (112, 150), (108, 154),
                   (104, 154))                                # crescent on cape
              + [V_JMP, "WIZ0"]),
+
+    # WIZ2, D4.ASM: the star sceptre, worn by no creature -- CREXXX names no
+    # row for it, because the game never prints a creature's name (design
+    # section 10.1).  It is the wizard PINCAN.ASM:WINNER fades in, so M5
+    # needs it even though FWDCRE does not.  Absolute star points, two
+    # SVORG/SVECT stars, then a fall-through into WIZ0 -- the assembler
+    # lays WIZ0's bytes right after, with no control code between.
+    "WIZ2": ([40, 86, 64, 92, 42, 100, 54, 82, 56, 104, 40, 86,
+              V_NEW]                                         # star point
+             + sv((66, 140), (80, 140), (68, 134), (74, 144), (76, 134),
+                  (66, 140))                                 # star on cape
+             + [96, 146, 120, 148, 100, 136, 106, 154, 116, 138, 96, 146,
+                V_NEW]                                       # lower right star
+             + sv((80, 116), (90, 122), (86, 114), (82, 122), (90, 116),
+                  (80, 116))                                 # upper left star
+             + [V_FALL, "WIZ0"]),
 }
 
 # Fixed order: the order the generated block writes them out in, and the
@@ -963,6 +1028,9 @@ VECTOR_LIST_ORDER = [
     "RPASAG", "RDOOR", "RSDOOR", "RWALL",
     "LPEEK", "RPEEK",
     "CELINE",
+    # M5: the ladder/hole lists FWDVER indexes by VF code (VERT.ASM), and
+    # the star wizard WINNER fades in (D4.ASM:WIZ2, in no creature table).
+    "LADDER", "HOLEUP", "HOLEDN", "FLUP", "FLDN", "WIZ2",
     # FWDOBJ's own order, which is GENXXX's, which is the class number.
     "FFLASK", "FRING", "FSCROL", "FSHIEL", "FSWORD", "FTORCH",
     # FWDCRE's own order, which is CREXXX's, which is the creature type.
@@ -976,6 +1044,56 @@ FWDOBJ = ["FFLASK", "FRING", "FSCROL", "FSHIEL", "FSWORD", "FTORCH"]
 # ===========================================================================
 # Output
 # ===========================================================================
+
+def vertical_feature_lines(decoded):
+    """FWDVER, VFTTAB and WIZ2, as Logo statements -- M5, section 7.5.
+
+    FWDVER (VERT.ASM) is indexed by the VF code VFIND returns: 0 hole up,
+    1 ladder up, 2 hole down, 3 ladder down.  FLUP/FLDN are fifteen and
+    eleven runs -- far past LOAD_MAX_LINE as one literal -- so like the
+    creatures they go out one run to a line.
+
+    VFTTAB (COMCRE.ASM) is five down-groups of [kind row col], one per
+    level: kind 0 is a hole, 1 a ladder.  The same physical group is level
+    N's way down and level N+1's way up (NEWLVL.ASM), so a level's UP
+    features are the previous level's group -- empty for level 1, which is
+    the leading -128 in the ROM.  Level 3's group is empty too, and that
+    emptiness IS the level 3 wall: there is no way down except the plain
+    wizard.  Unlike the object and creature tables these numbers have no
+    packed-string partner to cross-check against (nothing prints them), so
+    they are transcribed with the source comment beside each row and a host
+    test asserts section 7.5's level graph out of the game file.
+
+    WIZ2 is the star wizard no creature wears (CREXXX names no row for it).
+    PINCAN.ASM:WINNER fades him in, so he goes out as `dagg.wiz2` beside
+    FWDCRE rather than in it.
+    """
+    lines = []
+    lines.append('make "dagg.fwdver []')
+    for name in ("HOLEUP", "FLUP", "HOLEDN", "FLDN"):
+        lines.append('make "v []')
+        for run in decoded[name]:
+            ys = " ".join(str(y) for y, _ in run)
+            xs = " ".join(str(x) for _, x in run)
+            lines.append('make "v lput [[%s] [%s]] :v' % (ys, xs))
+        lines.append('make "dagg.fwdver lput :v :dagg.fwdver')
+    lines.append('make "v []')
+    # COMCRE.ASM:VFTTAB, one down-group per level (0 = hole, 1 = ladder).
+    lines.append('make "dagg.vfttab ['
+                 '[[1 0 23] [0 15 4] [0 20 17] [1 28 30]] '
+                 '[[1 2 3] [0 3 31] [0 19 20] [0 31 0]] '
+                 '[] '
+                 '[[0 0 31] [0 5 0] [0 22 28] [0 31 16]] '
+                 '[]]')
+    lines.append('make "v []')
+    for run in decoded["WIZ2"]:
+        ys = " ".join(str(y) for y, _ in run)
+        xs = " ".join(str(x) for _, x in run)
+        lines.append('make "v lput [[%s] [%s]] :v' % (ys, xs))
+    lines.append('make "dagg.wiz2 :v')
+    lines.append('make "v []')
+    return lines
+
 
 def object_table_lines(generics, objects, genval, decoded):
     """The §10.2 tables, as Logo statements, in ROM order.
@@ -1083,24 +1201,22 @@ def creature_table_lines(creatures, matrix, decoded):
 
 def game_data_lines(mazes, decoded, generics, objects, genval,
                     creatures, matrix):
-    """The Logo statements that put the maze and the vector lists in memory.
+    """The Logo statements that put the vector lists in memory.
 
     One statement to a line, because `load` only buffers `to ... end`
     blocks -- every other line is lexed and run on its own, so a literal
-    that spans lines does not parse.  A maze row is one line: 32 numbers is
-    up to 151 characters, well inside LOAD_MAX_LINE (256), and a whole-row
-    literal costs exactly what `readlist` used to.  Do NOT be tempted to
-    break the rows up to honour the 40-column source rule -- reassembling
-    them with `se` retains ~10,900 word-table entries.
+    that spans lines does not parse.
+
+    THE MAZES ARE NOT EMITTED.  They used to be, one
+    `make "rows lput [ ... ] :rows` line per row, and they cost 7,905
+    cells -- a quarter of the pool, and more than a Pico 2 W has to spare
+    (B94).  The game now carves them itself on CLIMB, behind MISC.ASM's
+    own "PREPARE!", from the same `DGNGEN` this script implements; see
+    design section 7.2.  They are still generated here, because
+    `check_maze` and `maze_fingerprints` are what pin the Logo carve to
+    the 1982 dungeon.
     """
-    lines = ['make "dagg.mazes []']
-    for maze in mazes:
-        lines.append('make "rows []')
-        for row in range(32):
-            cells = " ".join(str(v) for v in maze[row * 32:(row + 1) * 32])
-            lines.append(f'make "rows lput [{cells}] :rows')
-        lines.append('make "dagg.mazes lput :rows :dagg.mazes')
-    lines.append('make "rows []')
+    lines = []
 
     def runs_literal(name):
         """One vector list: runs of parallel ys/xs, the split done here."""
@@ -1125,9 +1241,26 @@ def game_data_lines(mazes, decoded, generics, objects, genval,
     for var, name in (("dagg.lpeek", "LPEEK"), ("dagg.rpeek", "RPEEK"),
                       ("dagg.celine", "CELINE")):
         lines.append(f'make "{var} [{runs_literal(name)}]')
+    lines.extend(vertical_feature_lines(decoded))
     lines.extend(object_table_lines(generics, objects, genval, decoded))
     lines.extend(creature_table_lines(creatures, matrix, decoded))
     return lines
+
+
+def maze_fingerprints(mazes):
+    """Order-sensitive checksum of each maze, the constant
+    `test_the_carve_reproduces_the_1982_dungeon` pins the Logo carve
+    against.  Kept small (mod 65521) so the same fold is exact in the
+    interpreter's single-precision floats: the widest intermediate is
+    65520 * 31 + 255, well inside 2**24.
+    """
+    out = []
+    for maze in mazes:
+        acc = 0
+        for v in maze:
+            acc = (acc * 31 + v) % 65521
+        out.append(acc)
+    return out
 
 
 def write_game_data(mazes, decoded, tables, path):
@@ -1294,6 +1427,10 @@ def main():
     print(f"rewrote the generated block in {GAME_PATH} "
           f"(longest line {longest} chars)")
     print(f"wrote {REFERENCE_PATH}")
+    # The mazes are no longer emitted -- the game carves them (section 7.2).
+    # These are the constants tests/test_daggorath.c pins the carve against.
+    print("maze fingerprints (test_the_carve_reproduces_the_1982_dungeon): "
+          + " ".join(str(f) for f in maze_fingerprints(mazes)))
 
 
 if __name__ == "__main__":

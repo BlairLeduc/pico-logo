@@ -140,14 +140,19 @@ static void type_line(const char *text)
 }
 
 //==========================================================================
-// The generated maze block -- section 17's "the maze tables"
+// The generated block -- section 17's tables. The MAZES ARE NO LONGER IN
+// IT: they cost 7,905 cells and a Pico 2 W could not load the file (B94),
+// so the game carves them itself (design section 7.2). What the block
+// still holds is the vector lists, and what stands in for the maze rows
+// is test_the_carve_reproduces_the_1982_dungeon below.
 //==========================================================================
 
-void test_the_generated_block_is_five_levels_of_the_right_shape(void)
+void test_the_generated_block_no_longer_ships_the_mazes(void)
 {
-    TEST_ASSERT_EQUAL_FLOAT(5, num("count :dagg.mazes"));
-    TEST_ASSERT_EQUAL_FLOAT(32, num("count item 1 :dagg.mazes"));
-    TEST_ASSERT_EQUAL_FLOAT(32, num("count item 1 (item 1 :dagg.mazes)"));
+    // One resident grid, 32 rows of 32, carved in place for whichever
+    // level you are standing on.
+    TEST_ASSERT_EQUAL_FLOAT(32, num("count :dagg.maze"));
+    TEST_ASSERT_EQUAL_FLOAT(32, num("count item 1 :dagg.maze"));
     TEST_ASSERT_EQUAL_FLOAT(4, num("count :dagg.left"));
     TEST_ASSERT_EQUAL_FLOAT(4, num("count :dagg.forward"));
     TEST_ASSERT_EQUAL_FLOAT(4, num("count :dagg.right"));
@@ -183,7 +188,146 @@ void test_lwall_is_the_rom_shape(void)
 // what level1.svg draws and why `daggorath` can walk forward from it.
 void test_the_player_start_cell_is_the_corridor_the_map_draws(void)
 {
-    TEST_ASSERT_EQUAL_FLOAT(204, num("dagg.cell 0 16 11"));
+    TEST_ASSERT_EQUAL_FLOAT(204, num("dagg.cell 16 11"));
+}
+
+//==========================================================================
+// DGNGEN on the board -- design section 7.2. The mazes used to ship as
+// data; the game now carves them, and these are what say it carves the
+// SAME ones. The fingerprints come from scripts/gen_daggorath.py, which
+// prints them and which still checks its own mazes cell-for-cell against
+// docs/DungeonsOfDaggorath/Levels/ -- so the chain from the published
+// 1982 maps to the board is unbroken, with no maze data in between.
+//==========================================================================
+
+// An order-sensitive fold of all 1,024 cells, mod 65521 (see dagg.mzsum).
+// A single wrong cell, or two cells swapped, moves it.
+void test_the_carve_reproduces_the_1982_dungeon(void)
+{
+    static const int fingerprint[5] = {18072, 13841, 15804, 34354, 61650};
+    for (int level = 0; level < 5; level++)
+    {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "dagg.gen %d", level);
+        run(cmd);
+        char msg[96];
+        snprintf(msg, sizeof(msg), "level %d carved a different dungeon",
+                 level + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(fingerprint[level], num("dagg.mzsum"),
+                                        msg);
+    }
+}
+
+// DGNGEN's own counts, checked independently of the fingerprint so that a
+// carve which drifts tells you HOW: 500 carved cells, and 70 doors and 45
+// secret doors each written into both of the cells they join.
+void test_the_carve_has_dgngens_own_shape(void)
+{
+    for (int level = 0; level < 5; level++)
+    {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "dagg.gen %d", level);
+        run(cmd);
+        run("make \"open 0  make \"dor 0  make \"sdr 0\n"
+            "repeat 32 [make \"r item repcount :dagg.maze\n"
+            "  repeat 32 [make \"v item repcount :r\n"
+            "    if not (:v = 255) [make \"open :open + 1\n"
+            "      repeat 4 [make \"c bitand (lshift :v (0 - ((repcount - 1) * 2))) 3\n"
+            "        if :c = 1 [make \"dor :dor + 1]\n"
+            "        if :c = 2 [make \"sdr :sdr + 1]]]]]");
+        char msg[96];
+        snprintf(msg, sizeof(msg), "level %d", level + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(500, num(":open"), msg);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(140, num(":dor"), msg);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(90, num(":sdr"), msg);
+    }
+}
+
+// The property that makes carving on CLIMB affordable at all. The grid is
+// allocated once and carved in place, and the values written are 0..255,
+// which the first carve interns and no later one pays for -- so a CLIMB
+// costs neither cells nor word table. Measured over levels rather than
+// once, because the first carve legitimately interns and the question is
+// whether the SECOND one does (B91's lesson: the leak that killed a board
+// was a per-turn intern nothing measured).
+static float carve_cost(int carves, const char *counter)
+{
+    char cmd[160];
+    snprintf(cmd, sizeof(cmd),
+             "make \"c0 %s  repeat %d [dagg.gen (modulo repcount 5)]  "
+             "make \"c1 %s", counter, carves, counter);
+    run(cmd);
+    return num(":c0 - :c1");
+}
+
+void test_a_climb_spends_no_nodes_and_no_atoms(void)
+{
+    run("repeat 5 [dagg.gen (repcount - 1)]"); // warm every value
+    // Two lengths, not an absolute zero: a top-level `repeat` command
+    // abandons its own body cells (B93), so the harness has a fixed cost
+    // the game does not. Equal cost at 20 and 40 carves means the CARVE
+    // spends nothing, which is the property a CLIMB depends on.
+    const float n20 = carve_cost(20, "nodes");
+    const float n40 = carve_cost(40, "nodes");
+    const float a20 = carve_cost(20, "atoms");
+    const float a40 = carve_cost(40, "atoms");
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "nodes %d at 20 carves and %d at 40; atoms %d and %d",
+             (int)n20, (int)n40, (int)a20, (int)a40);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(n20, n40, msg);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(a20, a40, msg);
+}
+
+// RESTORE re-enters the level you are already on, and `daggorath` enters
+// level 1 that `load` has already carved. Both are free, and this is also
+// what lets a save file carry a level number instead of a maze.
+void test_re_entering_the_level_you_are_on_does_not_recarve(void)
+{
+    run("dagg.gen 2");
+    const float before = num("dagg.mzsum");
+    run("make \"dagg.s0 0  make \"dagg.s1 0  make \"dagg.s2 0");
+    run("dagg.gen 2");
+    // The RNG state was clobbered, so a real carve would produce a
+    // different dungeon -- an unchanged fingerprint means none happened.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(before, num("dagg.mzsum"),
+                                    "re-entering the same level recarved it");
+    run("dagg.gen 3");
+    TEST_ASSERT_TRUE_MESSAGE(before != num("dagg.mzsum"),
+                             "a different level did not carve");
+}
+
+// The whole path, not the carve on its own: NEWLVL is what PCLI20 calls
+// after it prints "PREPARE!", and it has to leave you on the new level
+// standing in the new level's dungeon. Every other test here reaches
+// dagg.gen directly, and this port keeps learning that a test which stops
+// short of the real path is the one that misses (B88, B91).
+void test_climbing_to_a_new_level_carves_that_levels_dungeon(void)
+{
+    static const int fingerprint[5] = {18072, 13841, 15804, 34354, 61650};
+    run("dagg.makeobjects  dagg.cmx.reset");
+    run("make \"dagg.level 0  dagg.newlvl 0  dagg.givebag");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(fingerprint[0], num("dagg.mzsum"),
+                                    "level 1 is not the level 1 dungeon");
+
+    // Down to 2, and on down to 5 -- the descent a real game makes.
+    for (int level = 1; level < 5; level++)
+    {
+        char cmd[64];
+        snprintf(cmd, sizeof(cmd), "dagg.newlvl %d", level);
+        run(cmd);
+        char msg[96];
+        snprintf(msg, sizeof(msg), "climbing to level %d", level + 1);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(level, num(":dagg.level"), msg);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(fingerprint[level], num("dagg.mzsum"),
+                                        msg);
+    }
+
+    // And back up, because fleeing upstairs is how this game is played and
+    // a level you return to has to be the one you left.
+    run("dagg.newlvl 3");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(fingerprint[3], num("dagg.mzsum"),
+                                    "level 4 came back different");
 }
 
 //==========================================================================
@@ -262,24 +406,26 @@ void test_dagg_stepok_accepts_the_real_start_cell(void)
 // two faithful behaviours look like a bug.
 //==========================================================================
 
-// Mazes are a list of 32 independent row-lists (see dagg.cell) -- built
-// fresh a row at a time so `.setitem` on one row cannot alias another.
+// There is one resident maze and the game carves it in place, so a
+// synthetic maze is WRITTEN INTO it rather than built beside it. That
+// also retires the `recycle` this used to need: the old helper rebuilt 32
+// row-lists and abandoned the previous maze (~1,600 cells) every call, and
+// tests looping over start_game accumulated them. Nothing is allocated now.
+//
+// Nothing resets :dagg.mzlvl here: these tests drive the view, the move
+// and the map directly and never enter a level afterwards, so the carve
+// cache never fires over the synthetic maze. A test that did enter one
+// would get a real dungeon and say so loudly.
 static void build_zero_maze(void)
 {
-    run("make \"rows []");
-    for (int r = 0; r < 32; r++)
-    {
-        run("make \"row []");
-        run("repeat 32 [make \"row fput 0 :row]");
-        run("make \"rows lput :row :rows");
-    }
-    run("make \"dagg.mazes (list :rows)");
+    run("repeat 32 [make \"row item repcount :dagg.maze  "
+        "repeat 32 [.setitem repcount :row 0]]");
 }
 
 static void set_cell(int row, int col, int value)
 {
     char cmd[128];
-    snprintf(cmd, sizeof(cmd), ".setitem %d (item %d :rows) %d",
+    snprintf(cmd, sizeof(cmd), ".setitem %d (item %d :dagg.maze) %d",
              col + 1, row + 1, value);
     run(cmd);
 }
@@ -2055,6 +2201,33 @@ void test_examine_lists_the_floor_and_the_bag(void)
 // centred, the rule the full width, the second entry half way across --
 // so they are recomputed for 40 rather than left at 32 with eight columns
 // of nothing down the right-hand side.
+// PREPAR, MISC.ASM:PREPAX. Reported from a Pico 2 W (B96): it was
+// `pr [PREPARE!]`, which put the message in the input area and left the
+// maze on the screen. The routine opens `JSR EXAMIO` -- EXAMINE's own
+// screen -- so it REPLACES the view, and `LDD #32*9+12` centres eight
+// characters at row 9. Rows carry over, columns recompute for 40, so
+// column 12 of 32 is column 16 of 40.
+void test_prepare_replaces_the_view_and_is_not_printed_at_the_prompt(void)
+{
+    start_game();
+    const MockDeviceState *state = mock_device_get_state();
+
+    run("dagg.prepar");
+    TEST_ASSERT_EQUAL_STRING("PREPARE!", state->label.last_text);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, -160.0f + 8 * 16, state->label.last_x);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 155.0f - 10 * 9, state->label.last_y);
+
+    // And through the whole path, which is where the board met it: a hole
+    // down on level 1 is (15,4) -- VFTTAB's own second entry.
+    run("make \"dagg.row 15  make \"dagg.col 4");
+    mock_device_clear_output();
+    type_line("CLIMB DOWN");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1, num(":dagg.level"),
+                                    "CLIMB DOWN did not descend");
+    TEST_ASSERT_NULL_MESSAGE(strstr(mock_device_get_output(), "PREPARE"),
+                             "PREPARE! was printed in the command area");
+}
+
 void test_the_examine_screen_is_laid_out_for_forty_columns(void)
 {
     start_game();
@@ -2253,9 +2426,17 @@ void test_a_warm_redraw_spends_no_nodes_and_no_atoms(void)
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(nodes_for_redraws(100), nodes_for_redraws(1000),
                                     "the redraw conses, and ten times as many cost ten times as much");
 
-    run("make \"a0 atoms  repeat 1000 [dagg.redraw :dagg.norscl]  make \"a1 atoms");
-    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(num(":a0"), num(":a1"),
-                                    "the redraw interned a word -- the status line is not warm");
+    // Measured at two lengths like the nodes, not against an absolute
+    // zero: every top-level repeat-command abandons its body's two cells
+    // (B93 -- pre-existing, M4's own redraw does it too), and below
+    // LOGO_ATOM_LIMIT that two-cell drop in node_bottom reads as eight
+    // lost atom bytes. M4 never saw it because its node_bottom sits
+    // above the limit, where the clamp hides the wobble. What this
+    // asserts is the rate -- ten times as many redraws cost the same
+    // fixed command cost -- which is the "warm" half of the gate; the
+    // nodes above are the "spends nothing" half.
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(atoms_for_redraws(100), atoms_for_redraws(1000),
+                                    "the redraw interns a word every redraw -- the status line is not warm");
 }
 
 // M3 put two more walks inside the redraw -- OFIND over the floor and
@@ -2292,6 +2473,15 @@ void test_a_warm_redraw_over_an_object_spends_nothing_either(void)
 // CBIRTH places a creature at random by design (design section 7.2), and
 // a level has five hundred open cells, so every behavioural test below
 // puts its creature where it wants it instead.
+//
+// The countdown is 62, not 999: B91 made creature timers small integers
+// (1 to 62 -- a countdown, never a clock reading), and 999 is a value no
+// real game can hold. A long run from 999 burns a thousand distinct
+// number-words into the atom table -- twelve kilobytes of live countdown
+// values that no recycle can reclaim -- which is what OOM'd the long-run
+// tests once M5's own weight left no headroom for it. 62 stays quiescent
+// through every setup here and still fires inside a long run, the way
+// 999 did, for a sixteenth of the atoms.
 static void put_creature(int slot, int type, int row, int col)
 {
     char cmd[320];
@@ -2299,7 +2489,7 @@ static void put_creature(int slot, int type, int row, int col)
              ".setitem %d :dagg.ccuse 1  .setitem %d :dagg.cctyp %d"
              "  .setitem %d :dagg.ccrow %d  .setitem %d :dagg.cccol %d"
              "  .setitem %d :dagg.ccdir 0  .setitem %d :dagg.ccdam 0"
-             "  .setitem %d :dagg.ccobj []  .setitem %d :dagg.cctim 999"
+             "  .setitem %d :dagg.ccobj []  .setitem %d :dagg.cctim 62"
              "  dagg.ccput %d %d %d",
              slot, slot, type, slot, row, slot, col, slot, slot,
              slot, slot, row, col, slot);
@@ -2611,7 +2801,7 @@ void test_creatures_are_born_on_carved_cells_and_never_share_one(void)
         if (num(expr) == 0)
             continue;
         snprintf(expr, sizeof(expr),
-                 "dagg.cell 0 (item %d :dagg.ccrow) (item %d :dagg.cccol)", a, a);
+                 "dagg.cell (item %d :dagg.ccrow) (item %d :dagg.cccol)", a, a);
         TEST_ASSERT_TRUE_MESSAGE(num(expr) != 255, "a creature was born inside rock");
         // and the grid answers with this creature and no other
         snprintf(expr, sizeof(expr),
@@ -3444,31 +3634,124 @@ void test_a_warm_redraw_with_a_creature_in_view_spends_nothing(void)
                                     "the creature pass interns a word every redraw");
 }
 
-// Nodes and atoms grow toward each other inside one 128 KB block
-// (core/memory.h), so `nodes` is the headroom the game has left for
-// everything it will ever cons AND for every word it will ever intern.
-// This game spends most of it at LOAD, on the generated tables and on the
-// procedure bodies themselves, and the trend is the reason this gate
-// exists rather than the absolute figure:
+//==========================================================================
+// B97, and it is B91 one level up: the leak was not in the frame, it was
+// in the COMMAND.  Every budget test above measures something the clock
+// drives -- a redraw, a creature turn, a swing -- and all of them are
+// flat.  Nothing measured the thing the player does, and a typed command
+// is the most expensive act in the game: 106 cells for TURN LEFT, 86 for
+// EXAMINE, ~50 on average across a mixed run.
 //
-//     M3   14,277 free at load
-//     M4    7,698 -- 1,685 of that the twelve creature outlines, ~1,056
-//                    the occupancy grid, and most of the rest the bodies
-//                    of thirty new procedures
+// The pool has no automatic collection -- `recycle` is the only collector
+// in the tree -- so those cells stay spent, and section 14's budget is not
+// a load-time figure but the whole SESSION's.  A Pico 2 W is left 3,873
+// free, which is about seventy-five commands.  A board reported exactly
+// that: `Out of space in dagg.split` after a short game, with
+// `(pr nodes atoms)` answering **0 0**.
 //
-// M5 and M6 are still to come and each of the last two milestones cost
-// about six thousand.  Running out on a board is an out-of-memory panic
-// (see core/limits.h's SRAM note); a failing test here is the warning.
-void test_the_game_leaves_room_to_play_in(void)
+// `dagg.enter` sweeps after every dispatch now.
+static float typed_cost(int rounds, const char *what)
+{
+    char cmd[64];
+    // Being conscious and alive is a precondition of the MEASUREMENT, not
+    // of the fix: a fainted player's commands are no-ops that cost
+    // nothing, which would make the long run look cheaper than the short
+    // one and hide the very drift this is looking for.
+    run("make \"dagg.pdam 0  make \"dagg.faint \"false  make \"dagg.over \"false");
+    snprintf(cmd, sizeof(cmd), "make \"m0 %s", what);
+    run(cmd);
+    for (int i = 0; i < rounds; i++)
+    {
+        type_line("TURN LEFT");
+        type_line("EXAMINE");
+        type_line("MOVE");
+        type_line("LOOK");
+    }
+    snprintf(cmd, sizeof(cmd), "make \"m1 %s", what);
+    run(cmd);
+    return num(":m0") - num(":m1");
+}
+
+void test_a_long_run_of_typed_commands_spends_nothing(void)
 {
     run("dagg.makeobjects  dagg.cmx.reset");
     run("make \"dagg.level 0  dagg.newlvl 0  dagg.givebag");
-    const int free_nodes = (int)num("nodes");
+    run("make \"dagg.row 5  make \"dagg.col 5  make \"dagg.dir 0");
+    run("dagg.enter.level 0");
+    typed_cost(5, "nodes"); // warm: every word a command says, interned once
+
     char msg[160];
+    const float twenty = typed_cost(5, "nodes");
+    const float two_hundred = typed_cost(50, "nodes");
     snprintf(msg, sizeof(msg),
-             "daggorath leaves %d free nodes with level 1 built and populated",
-             free_nodes);
-    TEST_ASSERT_TRUE_MESSAGE(free_nodes > 4096, msg);
+             "20 typed commands cost %d cells and 200 cost %d",
+             (int)twenty, (int)two_hundred);
+    // Ten times the commands is not ten times the cells, and neither
+    // figure is a cost at all.  The shipped code spent 1,015 on the
+    // twenty and ran a board out of memory.
+    TEST_ASSERT_TRUE_MESSAGE(two_hundred <= twenty + 8, msg);
+    TEST_ASSERT_TRUE_MESSAGE(two_hundred <= 8, msg);
+}
+
+// Nodes and atoms grow toward each other inside one arena, so `nodes` is
+// the headroom the game has for everything it will ever cons AND every
+// word it will ever intern.
+//
+// THE ARENA IS NOT THE SAME ON EVERY BOARD, and until B94 nothing here
+// could see that: every test in this tree runs at the default 131,072
+// bytes, which is the Pico Plus 2 W's. A Pico 2 W has 114,688 and a
+// Pico 2 has 98,304 (CMakePresets.json). Four bytes to a cell, so the
+// arithmetic is exact -- 16,384 fewer bytes is 4,096 fewer cells -- and a
+// board reported `Out of space` loading the file with 72 cells left while
+// the host still measured 3,978 free.
+//
+// So the gate is per board, and it is measured IN PLAY rather than at
+// load, for the same reason the globals gate is: level 1 has to be built
+// and populated before the count means anything.
+//
+//     M3   14,277 free at load
+//     M4    7,698
+//     M5    3,978 -- and -118 on a Pico 2 W, which is B94
+//     M5 + the carve (design section 7.2), the mazes gone: 8,456
+typedef struct
+{
+    const char *board;
+    int arena;
+    int floor;
+} BoardBudget;
+
+void test_the_game_leaves_room_to_play_in(void)
+{
+    // The Pico 2 is NOT in this table. It has 8,192 fewer cells than the
+    // host measures and the game does not fit it: at the numbers this
+    // change lands on it loads and then runs out as level 1 is populated.
+    // Carving the mazes bought it 4,000 cells and it needs about 1,500
+    // more -- the vector lists (`make "v`, 2,461 cells) are where they
+    // are. Adding a row here is how that gets claimed.
+    static const BoardBudget boards[] = {
+        {"Pico Plus 2 W", 131072, 4096},
+        {"Pico 2 W",      114688, 2048},
+    };
+
+    run("dagg.makeobjects  dagg.cmx.reset");
+    run("make \"dagg.level 0  dagg.newlvl 0  dagg.givebag");
+    const int measured = (int)num("nodes");
+
+    for (size_t i = 0; i < sizeof(boards) / sizeof(boards[0]); i++)
+    {
+        // Against the arena THIS binary was built with, not a literal, so
+        // the gate stays true if the tests are ever built at a board's own
+        // size (which is one way to check this by hand).
+        const int lost = ((int)LOGO_MEMORY_SIZE - boards[i].arena) / 4;
+        const int free_there = measured - lost;
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+                 "%s (%d-byte arena) is left %d free cells of the %d it "
+                 "needs; this build (%d) measures %d",
+                 boards[i].board, boards[i].arena, free_there,
+                 boards[i].floor, (int)LOGO_MEMORY_SIZE, measured);
+        TEST_ASSERT_TRUE_MESSAGE(free_there > boards[i].floor, msg);
+    }
 }
 
 //==========================================================================
@@ -3531,7 +3814,12 @@ void test_the_game_fits_the_procedure_table(void)
 int main(void)
 {
     UNITY_BEGIN();
-    RUN_TEST(test_the_generated_block_is_five_levels_of_the_right_shape);
+    RUN_TEST(test_the_generated_block_no_longer_ships_the_mazes);
+    RUN_TEST(test_the_carve_reproduces_the_1982_dungeon);
+    RUN_TEST(test_the_carve_has_dgngens_own_shape);
+    RUN_TEST(test_a_climb_spends_no_nodes_and_no_atoms);
+    RUN_TEST(test_climbing_to_a_new_level_carves_that_levels_dungeon);
+    RUN_TEST(test_re_entering_the_level_you_are_on_does_not_recarve);
     RUN_TEST(test_fpasag_is_the_empty_list);
     RUN_TEST(test_lwall_is_the_rom_shape);
     RUN_TEST(test_the_player_start_cell_is_the_corridor_the_map_draws);
@@ -3625,6 +3913,7 @@ int main(void)
     RUN_TEST(test_an_incanted_ring_keeps_its_charges_and_cannot_be_done_twice);
     RUN_TEST(test_incant_reads_both_hands);
     RUN_TEST(test_examine_lists_the_floor_and_the_bag);
+    RUN_TEST(test_prepare_replaces_the_view_and_is_not_printed_at_the_prompt);
     RUN_TEST(test_the_examine_screen_is_laid_out_for_forty_columns);
     RUN_TEST(test_examine_highlights_the_burning_torch);
     RUN_TEST(test_the_torch_leaves_the_listing_when_pulled_and_returns_lit);
@@ -3676,6 +3965,7 @@ int main(void)
     RUN_TEST(test_a_creature_timer_is_a_small_integer_not_a_clock_reading);
     RUN_TEST(test_creature_damage_is_the_one_field_that_still_interns);
     RUN_TEST(test_a_warm_redraw_with_a_creature_in_view_spends_nothing);
+    RUN_TEST(test_a_long_run_of_typed_commands_spends_nothing);
     RUN_TEST(test_the_game_leaves_room_to_play_in);
     RUN_TEST(test_the_game_fits_the_global_table);
     RUN_TEST(test_the_game_fits_the_procedure_table);

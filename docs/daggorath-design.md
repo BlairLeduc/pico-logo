@@ -23,8 +23,12 @@
 
 Play: `load "daggorath` then `daggorath`.
 
-All three boards. Nothing here needs WiFi, TLS or PSRAM, so `LOGO_HAS_WIFI` and
-`LOGO_HAS_TLS` are not consulted anywhere in the game.
+**A Pico Plus 2 W or a Pico 2 W.** Nothing here needs WiFi, TLS or PSRAM, so
+`LOGO_HAS_WIFI` and `LOGO_HAS_TLS` are not consulted anywhere in the game — but
+a board's *arena* is not a capability flag and the three do not share one.
+**A Pico 2 cannot hold this game**: it has 8,192 fewer cells than the host that
+measures the budgets, and at M5 it is about 1,500 short. §14 has the numbers and
+`test_the_game_leaves_room_to_play_in` has the gate.
 
 **`hw.setcpu "fast` is a precondition** (§12.1). Daggorath is turn driven
 rather than a frame loop, so unlike Battlezone and Berzerk it would *run* at
@@ -562,24 +566,62 @@ packed **N E S W** from the low bits up (`DGNGEN.ASM`). `$FF` — solid on all
 four sides — means *not part of the maze*, and is how `STEPOK` and `FNDCEL`
 know where you may not stand.
 
-### 7.2 The maze is generated from a fixed seed, and we ship the result
+### 7.2 The maze is generated from a fixed seed, on the board
 
-`DGNGEN` seeds a 24-bit LFSR from `LVLTAB` — `$73 $C7 $5D $97 $F3` for the
-five levels — carves **500 cells** with a random-walk that refuses to clear a
-2 × 2 block, walls in everything it did not carve, then punches **70 doors and
-45 secret doors**.
+`DGNGEN` seeds a 24-bit LFSR from `LVLTAB` — seven bytes, each level's 3-byte
+SEED a sliding window at a **one**-byte stride — carves **500 cells** with a
+random-walk that refuses to clear a 2 × 2 block, walls in everything it did not
+carve, then punches **70 doors and 45 secret doors**.
 
-**We do not run that on the board, and the reason is arithmetic.** `RANDOM.ASM`
-is a 24-bit shift register whose feedback is the parity of four taps, shifted
-**eight times per byte returned**. In Logo that is ~9 primitive calls a step,
-72 a byte, **≈ 1.75 ms even at §12.1's 300 MHz** — and a level generation needs
-several thousand of them on top of the carve itself. Eight to fifteen seconds
-per `CLIMB` is not a port, it is a punishment.
+**This section used to say we did not run that on the board, and the reason was
+arithmetic.** `RANDOM.ASM` is a 24-bit shift register whose feedback is the
+parity of four taps, shifted **eight times per byte returned**: ~91 Logo
+statements a byte, **1.95 ms** on a Pico 2 W at §12.1's 300 MHz (measured, and
+within 12 % of the 1.75 ms this section estimated). A level draws up to
+**2,235** bytes, so that is 4.4 s of RNG before the carve — and eight to
+fifteen seconds a `CLIMB` is not a port, it is a punishment.
 
-So `scripts/gen_daggorath.py` implements `RANDOX` and `DGNGEN` exactly and
-emits all five mazes into `logo/games/daggorath`. This is **more** faithful, not
-less: the shipped mazes are bit-identical to the 1982 ones, and a Daggorath map
-drawn on paper in 1983 still works.
+**That was right about the port it measured and wrong about the problem.** The
+shift register is **linear**, so eight steps collapse. After one byte `SEED+2`
+holds the old `SEED+1` and `SEED+1` the old `SEED`, and the new low byte
+depends on the old `SEED+1` and `SEED+2` only — and because the feedback is a
+parity fold, that dependence splits:
+
+    new SEED = TA[old SEED+1] xor TB[old SEED+2]
+
+Two 256-entry tables, verified against the bit-at-a-time original **over all
+65,536 pairs**, and then end to end: the table-driven generator reproduces all
+5,120 cells of all five mazes. A byte is **five statements instead of
+ninety-one — 150 µs**, and a whole level is **2.64 s** at worst. That goes
+behind `MISC.ASM`'s own **"PREPARE!"**, which `PCLI20` already shows one line
+before it asks for the new level — and that message **replaces the view**
+rather than printing at the prompt: `PREPAX` opens `JSR EXAMIO`, EXAMINE's own
+screen, and `LDD #32*9+12` centres its eight characters at row 9 ([B96](bugs.md)).
+So the carve happens behind a cleared band with one word on it, which is what
+the pause is for.
+
+Nothing in the file is a transcribed table that could be wrong: `dagg.rtabs`
+builds both from `dagg.slow8`, the honest shift-at-a-time ROM byte, in 512
+draws and ~0.96 s, once per `load`.
+
+**And a carve allocates nothing.** One grid, allocated once and carved in
+place, and the values written are 0..255 — which the first carve interns and no
+later one pays for, so a `CLIMB` costs neither cells nor word table. Re-entering
+the level you are already standing on is free, which is also what lets a save
+file carry a level number instead of a maze.
+
+**Why it changed: the mazes did not fit.** They were 7,905 cells — a quarter of
+the pool — and a Pico 2 W could not load the file at all ([B94](bugs.md)). §7.4
+records what that cost and what else was tried.
+
+`scripts/gen_daggorath.py` still implements `RANDOX` and `DGNGEN` exactly, and
+still checks its mazes cell-for-cell against
+`docs/DungeonsOfDaggorath/Levels/`. What it no longer does is emit them: it
+prints **fingerprints** instead, and
+`test_the_carve_reproduces_the_1982_dungeon` pins the board's own carve to
+them. So the chain from the published 1982 maps to the board is unbroken with
+no maze data in between — the dungeon is still bit-identical to the 1982 one,
+and a Daggorath map drawn on paper in 1983 still works.
 
 **Everything else stays random at run time,** and that is also faithful:
 `DGEN90` spins the generator by the seconds counter before anything else uses
@@ -602,9 +644,6 @@ starting at level 1 puts one each on 1, 2, 3, 4, 5 and then 1 again
 The generator writes into `logo/games/daggorath` itself, between
 `; BEGIN GENERATED DATA` and `; END GENERATED DATA`:
 
-- **the five mazes**, one `make "rows lput [ … ] :rows` line per row —
-  8,134 nodes and ~256 distinct interned numbers, which is a quarter of the
-  32,752-cell pool and nothing against a 32 KB word table;
 - **the vector lists** (§11.2), flattened out of the ROM's relative-nybble
   encoding by the generator and *already split* into the parallel ys/xs
   lists §6.3 wants, one list to a line;
@@ -636,12 +675,23 @@ word-table entries** where the whole-row literal retains none. The 40-column
 rule is a rule about *source you read*; it loses to the word table here, and
 the generated block is marked as generated precisely so nobody reflows it.
 
-**What this forecloses.** All five mazes are now resident from `load`, where a
-file could have been read one level at a time on `CLIMB` — 6,507 nodes, a
-fifth of the pool, that four unvisited levels are holding. If M5 finds that
-RAM binding, the fix is not to bring the file back but to emit each row as a
-64-character hex *word* and expand only the current level, which keeps one
-file and cuts the resident maze to a fifth.
+**The mazes are no longer in this block, and what stood here was wrong.** They
+were 8,134 nodes when this was written and **7,905** by M5 — a quarter of the
+pool — and a Pico 2 W could not load the file ([B94](bugs.md)). This paragraph
+used to say that if M5 found that RAM binding, the fix was "to emit each row as
+a 64-character hex *word* and expand only the current level". **That does not
+fit.** Two characters a cell is 10,240 characters however they are packed, an
+atom entry costs a measured **19.8 bytes** of overhead on top of its
+characters, and the best arrangement is ~11,052 bytes against **11,224 free** —
+it fits by 172 bytes and leaves nothing for the word table to grow into, which
+is the budget [B91](bugs.md) already spends. One character a cell would need
+~138 symbols and **only 58 printable characters round-trip through a word
+literal**.
+
+So the maze does not go into the word table at all: §7.2's carve puts it back
+where the ROM had it, computed rather than stored. The vector lists are now the
+biggest thing in this block (`make "v`, 2,461 cells) and they are where the
+Pico 2's remaining ~1,500 cells would have to come from.
 
 ### 7.5 The ladders and the holes, and the level 3 wall
 
@@ -1312,18 +1362,49 @@ flat namespace to buy 1.31× on the frame, and Daggorath has no frame to buy.
 (It peaks at 108 at M3 and 134 at M4.)
 
 **The third budget is the node pool, and M4 is where it started to move.**
-Nodes and atoms grow toward each other inside one 128 KB block
-(`core/memory.h`), so `nodes` reports the headroom for everything the game
-will ever cons *and* every word it will ever intern. `daggorath` leaves
-**14,277 free cells at load at M3 and 7,698 at M4** — and only 1,685 of that
-six thousand is the twelve creature outlines, with about 1,056 the occupancy
-grid. **Most of the rest is the bodies of thirty new procedures**, which is a
-cost this design had not counted: a procedure table with room in it is not
-the same as memory with room in it.
-`test_the_game_leaves_room_to_play_in` is the gate, written at M4 with the
-trend in its comment for the same reason
-`test_the_game_fits_the_procedure_table` was written at M1 — the failure mode
-it guards is an out-of-memory panic on a board, not a wrong picture.
+Nodes and atoms grow toward each other inside one arena, so `nodes` reports the
+headroom for everything the game will ever cons *and* every word it will ever
+intern. `daggorath` leaves **14,277 free cells at load at M3 and 7,698 at M4** —
+and only 1,685 of that six thousand is the twelve creature outlines, with about
+1,056 the occupancy grid. **Most of the rest is the bodies of thirty new
+procedures**, which is a cost this design had not counted: a procedure table
+with room in it is not the same as memory with room in it.
+
+**THE ARENA IS NOT 128 KB. It is 128 KB on one board of the three**, and this
+section said "one 128 KB block" until a Pico 2 W proved otherwise
+([B94](bugs.md)): 131,072 bytes on a Pico Plus 2 W, **114,688 on a Pico 2 W**,
+**98,304 on a Pico 2** (`CMakePresets.json`). Four bytes to a cell, so the gap
+is exact — a Pico 2 W has 4,096 fewer cells than the host that measures, and a
+Pico 2 has 8,192 fewer. M5 left 3,978 at load, so the board was ~118 short and
+`load` never finished. **Every test in this tree builds at the default 131,072**,
+which is why nothing here could see it.
+
+`test_the_game_leaves_room_to_play_in` is the gate and it is now **per board**,
+deriving each board's headroom from its arena rather than measuring one and
+hoping. After §7.2's carve the game leaves **8,456 free cells at load** and
+7,969 with level 1 built and populated — so a Pico 2 W is left **3,873**.
+
+**The Pico 2 does not fit**, and it is named in that test rather than assumed:
+it needs about 1,500 cells more than the carve bought back. §26's claim of all
+three boards is true of everything in this port except the memory, and this is
+the exception.
+
+**And that headroom is a RATE, not a reserve** ([B97](bugs.md)). The pool has no
+automatic collection — `recycle` is the only collector in the tree — so cells a
+command abandons stay abandoned, and 3,873 free is not a cushion the game sits
+in but a budget it spends. **A typed command is the most expensive act in the
+game**: 106 cells for `TURN LEFT`, 100 for `ATTACK`, 86 for `EXAMINE`, 42 for
+`MOVE`, ~22 steady-state across a mixed run. That is about eighty commands at
+the front of a game, and a board reported exactly that — `Out of space` in
+mid-play, `nodes` and `atoms` both zero.
+
+Every budget test M1–M5 wrote measures something the *clock* drives — a warm
+redraw, 2,000 creature tenths, a hundred swings — and all of them are flat
+because [B91](bugs.md) made them flat. **Nothing measured the thing the player
+does.** `dagg.enter` now sweeps after each dispatch: the one moment in this game
+that is *between* turns rather than in one, and ~4 ms against a heart that beats
+every few hundred. `dagg.zsave` and `dagg.zload` already did this for the same
+reason.
 
 ---
 

@@ -249,7 +249,17 @@ Result proc_define_from_text(const char *text)
     
     Node name_atom = mem_atom(t.start, t.length);
     const char *name = mem_word_ptr(name_atom);
-    
+
+    // A full atom region interns nothing and hands back NODE_NIL, whose
+    // `mem_word_ptr` is NULL -- and `primitive_find` calls `strlen` on what
+    // it is given, so this crashed instead of reporting (B95, and B26 one
+    // path over). `load` reaches here for every `to ... end` block in a
+    // file, which is where a board meets it.
+    if (name == NULL)
+    {
+        return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+    }
+
     // Check not redefining a primitive
     if (primitive_find(name))
     {
@@ -269,7 +279,12 @@ Result proc_define_from_text(const char *text)
         {
             // :param - skip the colon
             Node param_atom = mem_atom(t.start + 1, t.length - 1);
-            params[param_count++] = mem_word_ptr(param_atom);
+            const char *param = mem_word_ptr(param_atom);
+            if (param == NULL)
+            {
+                return result_error_arg(ERR_OUT_OF_SPACE, NULL, NULL);
+            }
+            params[param_count++] = param;
         }
         else
         {

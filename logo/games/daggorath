@@ -38,8 +38,7 @@
 ;     which records SOUNDS.ASM's own SNDTAB index and volume; what is
 ;     missing is the generator behind the index (design section 9.2) and
 ;     the heartbeat thump on voices 0 and 4 (section 9.4).
-;   - three of the fifteen commands, which is why `dagg.soon` exists:
-;     CLIMB, ZLOAD and ZSAVE, all M5.
+;   - three of the fifteen commands (CLIMB, ZLOAD, ZSAVE), all M5.
 ;
 ; `make "dagg.pace 1` before `daggorath` runs the creatures at the ROM's
 ; raw table; 2 is the default and is what a board settled on beside the
@@ -120,178 +119,6 @@ make "dagg.magflg "false
 ; `dagg.ys.of`, `dagg.xs.of` and `dagg.read.runs` are gone.
 
 ; BEGIN GENERATED DATA
-make "dagg.mazes []
-make "rows []
-make "rows lput [195 51 51 51 55 115 31 255 255 255 255 255 255 255 255 255 255 255 207 255 255 255 255 207 255 255 255 255 255 199 115 15] :rows
-make "rows lput [204 255 255 255 255 255 205 255 215 115 51 51 59 183 115 11 179 51 32 51 3 51 51 16 51 51 51 51 51 28 255 204] :rows
-make "rows lput [204 255 211 51 47 255 204 255 205 255 255 255 255 255 255 204 255 255 206 255 204 255 255 205 255 255 255 255 255 205 255 204] :rows
-make "rows lput [204 255 205 255 194 59 128 51 60 255 255 255 255 255 255 204 255 255 204 255 204 255 255 200 179 55 115 51 51 16 51 12] :rows
-make "rows lput [192 51 0 51 12 255 204 255 255 255 255 255 255 255 255 204 255 255 204 255 240 51 51 12 255 255 255 255 255 205 255 204] :rows
-make "rows lput [204 255 204 255 204 255 204 255 255 255 255 255 255 255 255 204 255 255 236 255 255 255 255 204 255 255 255 255 255 192 51 12] :rows
-make "rows lput [192 51 60 255 204 255 224 51 35 51 51 59 183 115 51 12 255 255 194 51 31 255 255 204 255 255 255 255 255 204 255 204] :rows
-make "rows lput [204 255 255 255 204 255 206 255 206 255 255 255 255 255 255 220 255 255 204 255 237 255 255 204 255 255 255 255 255 204 255 236] :rows
-make "rows lput [236 255 255 255 204 255 204 255 204 255 255 255 255 255 255 205 255 255 220 255 206 255 255 204 255 255 255 255 255 196 115 46] :rows
-make "rows lput [206 255 255 255 204 255 204 255 204 255 255 239 255 255 255 240 51 59 129 51 0 55 115 0 51 51 51 51 3 60 255 238] :rows
-make "rows lput [220 255 255 255 204 255 204 255 220 255 255 206 255 255 255 255 255 255 204 255 204 255 255 204 255 255 255 255 204 255 255 206] :rows
-make "rows lput [205 255 255 255 236 255 204 255 221 255 255 204 255 255 255 211 55 115 60 255 204 255 255 192 51 51 59 183 96 55 115 28] :rows
-make "rows lput [192 51 59 179 2 51 48 55 113 3 51 0 59 191 255 205 255 255 255 255 204 255 255 204 255 255 255 255 206 255 255 205] :rows
-make "rows lput [220 255 255 255 204 255 255 255 255 204 255 204 255 255 255 192 51 23 115 51 48 7 115 0 51 59 187 187 144 63 255 204] :rows
-make "rows lput [237 255 255 255 204 255 255 223 255 204 255 204 255 255 255 220 255 205 255 255 255 220 255 204 255 255 255 255 221 255 255 204] :rows
-make "rows lput [242 35 51 51 12 255 255 205 255 204 255 204 255 255 255 237 255 192 51 59 131 61 255 204 255 255 207 255 205 255 255 220] :rows
-make "rows lput [255 206 255 255 220 255 255 204 255 220 255 204 255 255 255 222 255 204 255 255 204 255 255 204 255 255 204 255 236 255 255 205] :rows
-make "rows lput [255 204 255 255 209 55 115 0 51 49 7 124 255 255 255 205 255 204 255 255 204 255 255 240 51 51 12 255 206 255 255 204] :rows
-make "rows lput [255 204 255 255 205 255 255 204 255 255 204 255 255 255 255 220 255 204 255 255 204 255 255 255 255 255 236 255 204 255 255 204] :rows
-make "rows lput [255 208 51 55 64 51 51 28 255 255 204 255 255 255 255 205 255 204 255 255 204 255 255 255 255 255 206 255 204 255 255 204] :rows
-make "rows lput [255 205 255 255 204 255 255 201 179 59 136 183 67 51 51 0 51 0 51 51 0 51 51 51 51 51 0 59 128 51 55 124] :rows
-make "rows lput [255 208 51 51 56 131 51 12 255 255 204 255 220 255 255 204 255 204 255 255 204 255 255 255 255 255 204 255 204 255 255 255] :rows
-make "rows lput [255 221 255 255 255 204 255 220 255 255 204 255 237 255 255 204 255 204 255 255 204 255 255 255 255 255 204 255 204 255 255 255] :rows
-make "rows lput [243 1 51 51 51 16 55 65 55 115 60 255 206 255 255 192 51 4 115 51 0 51 55 115 51 51 0 51 36 115 15 255] :rows
-make "rows lput [255 204 255 255 255 205 255 204 255 255 255 255 204 255 255 220 255 204 255 255 204 255 255 255 255 255 204 255 206 255 204 255] :rows
-make "rows lput [255 204 255 255 255 204 255 204 255 255 255 255 204 255 255 205 255 204 255 255 196 115 51 55 115 51 60 255 204 255 204 255] :rows
-make "rows lput [227 48 51 51 51 0 51 28 255 255 255 255 220 255 255 192 55 64 51 51 12 255 255 255 255 255 255 255 204 255 204 255] :rows
-make "rows lput [206 255 255 255 255 204 255 193 51 51 51 55 125 255 255 204 255 204 255 255 204 255 255 255 255 255 255 255 204 255 204 255] :rows
-make "rows lput [192 51 51 59 183 76 255 204 255 255 255 255 255 255 255 204 255 236 255 255 204 255 255 255 255 255 255 255 192 51 60 255] :rows
-make "rows lput [204 255 255 255 255 204 255 196 115 55 115 51 51 51 51 48 59 142 255 255 220 255 255 255 255 255 255 255 204 255 255 255] :rows
-make "rows lput [204 255 255 255 255 236 255 204 255 255 255 255 255 255 255 255 255 204 255 255 205 255 255 255 255 255 255 255 204 255 255 255] :rows
-make "rows lput [240 51 51 51 51 50 51 48 59 179 51 51 55 115 63 255 255 240 51 51 48 59 179 51 51 51 51 51 60 255 255 255] :rows
-make "dagg.mazes lput :rows :dagg.mazes
-make "rows []
-make "rows lput [255 255 255 195 51 3 51 51 55 119 67 51 59 179 3 51 51 51 15 255 255 255 255 195 59 131 51 15 255 255 255 255] :rows
-make "rows lput [255 255 255 236 255 204 255 255 255 255 236 255 255 255 204 255 255 255 204 255 255 255 255 204 255 204 255 204 255 255 255 255] :rows
-make "rows lput [255 255 255 254 255 220 255 255 255 255 206 255 255 255 204 255 255 255 220 255 255 255 255 204 255 196 119 64 55 115 15 255] :rows
-make "rows lput [255 255 255 255 255 205 255 255 255 255 204 255 255 255 204 255 255 255 205 255 255 255 255 204 255 204 255 236 255 255 192 63] :rows
-make "rows lput [219 179 51 51 51 0 51 51 51 3 52 115 51 3 56 187 179 51 0 51 3 51 3 48 51 32 51 2 59 179 28 255] :rows
-make "rows lput [205 255 255 255 255 204 255 255 255 204 255 255 255 204 255 255 255 255 204 255 204 255 204 255 255 206 255 204 255 255 205 255] :rows
-make "rows lput [204 255 255 255 255 240 59 159 255 220 255 255 255 204 255 255 255 255 236 255 236 255 204 255 255 204 255 204 255 255 204 255] :rows
-make "rows lput [220 255 255 255 255 255 255 205 255 237 255 255 255 192 51 51 51 51 2 51 6 115 48 3 51 8 179 48 3 51 0 63] :rows
-make "rows lput [205 255 255 255 255 255 255 204 255 222 255 255 255 204 255 255 255 255 204 255 204 255 255 204 255 204 255 255 204 255 220 255] :rows
-make "rows lput [204 255 255 255 195 51 51 0 51 1 55 119 119 76 255 255 243 3 48 51 0 51 51 48 51 52 67 59 128 51 13 255] :rows
-make "rows lput [204 255 255 255 204 255 255 204 255 204 255 255 255 240 15 255 255 204 255 255 204 255 255 255 255 255 204 255 204 255 204 255] :rows
-make "rows lput [220 255 255 255 204 255 255 204 255 204 255 255 255 255 204 255 255 204 255 255 204 255 255 255 255 255 204 255 204 255 204 255] :rows
-make "rows lput [205 255 207 255 204 255 255 204 255 220 255 255 255 255 204 255 255 204 255 255 204 255 255 255 255 255 204 255 204 255 204 255] :rows
-make "rows lput [220 255 204 255 204 255 255 204 255 205 255 255 255 255 204 255 255 192 51 51 0 55 115 51 55 115 8 179 8 187 128 63] :rows
-make "rows lput [205 255 204 255 224 51 51 48 55 64 63 255 255 255 204 255 255 204 255 255 204 255 255 255 255 255 204 255 204 255 204 255] :rows
-make "rows lput [196 115 8 179 14 255 255 255 255 204 255 255 255 255 204 255 255 204 255 255 204 255 255 255 255 255 204 255 192 51 48 31] :rows
-make "rows lput [204 255 204 255 204 255 255 255 255 220 255 255 255 255 204 255 255 204 255 255 204 255 255 255 255 255 204 255 204 255 255 205] :rows
-make "rows lput [204 255 204 255 204 255 255 255 255 205 255 255 255 255 204 255 255 192 51 51 48 55 115 59 187 179 0 51 0 51 51 12] :rows
-make "rows lput [204 255 204 255 204 255 255 255 255 192 51 51 3 51 48 51 51 12 255 255 255 255 255 255 255 255 236 255 204 255 255 204] :rows
-make "rows lput [204 255 236 255 204 255 255 255 255 204 255 255 204 255 255 255 255 208 51 7 115 51 59 135 115 55 70 119 64 55 119 108] :rows
-make "rows lput [208 59 162 51 0 51 51 59 187 140 255 255 204 255 255 255 255 205 255 204 255 255 255 204 255 255 204 255 220 255 255 206] :rows
-make "rows lput [205 255 206 255 204 255 255 255 255 204 255 255 208 51 51 55 115 0 51 60 255 255 255 204 255 255 240 55 65 51 59 140] :rows
-make "rows lput [192 55 92 255 204 255 255 255 255 204 255 255 205 255 255 255 255 204 255 255 255 255 255 204 255 255 255 255 220 255 255 220] :rows
-make "rows lput [204 255 205 255 240 51 59 155 179 60 255 255 204 255 255 255 255 204 255 255 255 255 255 204 255 255 255 255 237 255 255 221] :rows
-make "rows lput [204 255 204 255 255 255 255 205 255 255 255 255 204 255 255 255 255 204 255 255 255 255 255 204 255 255 255 255 242 15 255 205] :rows
-make "rows lput [204 255 204 255 255 255 255 220 255 255 255 255 192 59 179 51 51 16 51 51 51 15 255 204 255 255 255 255 255 204 255 220] :rows
-make "rows lput [192 51 0 51 51 51 51 1 51 51 15 255 204 255 255 255 255 205 255 255 255 236 255 204 255 255 255 255 255 204 255 205] :rows
-make "rows lput [204 255 204 255 255 255 255 204 255 255 208 59 188 255 255 255 255 204 255 255 255 222 255 220 255 255 255 255 255 204 255 220] :rows
-make "rows lput [192 51 0 59 179 51 51 16 51 55 77 255 255 255 255 255 255 204 255 255 255 237 255 205 255 255 195 51 55 80 51 13] :rows
-make "rows lput [204 255 204 255 255 255 255 205 255 255 244 123 179 51 51 51 51 0 51 55 115 14 255 220 255 255 204 255 255 205 255 204] :rows
-make "rows lput [204 255 204 255 255 255 255 220 255 255 255 255 255 255 255 255 255 204 255 255 255 204 255 205 255 255 204 255 255 192 51 12] :rows
-make "rows lput [240 51 48 51 51 55 115 49 51 51 55 115 59 183 123 179 51 52 115 51 51 48 51 56 183 115 48 59 183 124 255 252] :rows
-make "dagg.mazes lput :rows :dagg.mazes
-make "rows []
-make "rows lput [195 51 51 3 51 51 3 55 115 63 255 255 255 255 255 255 255 255 207 255 255 223 255 195 51 59 131 51 51 51 3 63] :rows
-make "rows lput [204 255 255 204 255 255 204 255 255 255 255 255 255 255 255 251 179 59 128 51 55 65 51 60 255 255 204 255 255 255 204 255] :rows
-make "rows lput [220 255 255 204 255 255 204 255 255 255 255 255 255 255 255 255 255 255 204 255 255 204 255 255 255 255 220 255 255 255 204 255] :rows
-make "rows lput [205 255 255 204 255 255 204 255 255 255 255 255 255 255 255 255 255 255 252 255 255 240 51 51 51 51 49 51 51 51 36 127] :rows
-make "rows lput [192 51 51 0 51 51 12 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 238 255] :rows
-make "rows lput [204 255 255 204 255 255 204 255 255 215 119 115 51 51 51 51 51 51 51 51 51 51 51 51 59 187 179 51 51 55 126 255] :rows
-make "rows lput [204 255 255 204 255 255 204 255 255 205 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255] :rows
-make "rows lput [204 255 255 204 255 255 204 255 255 192 51 51 51 51 59 179 59 179 51 51 15 255 255 255 255 255 255 255 255 255 255 255] :rows
-make "rows lput [192 51 3 48 51 55 112 51 51 12 255 255 255 255 255 255 255 255 255 255 204 255 255 255 255 255 255 255 255 255 255 255] :rows
-make "rows lput [204 255 204 255 255 255 255 255 255 204 255 255 255 255 255 255 255 255 255 255 204 255 195 51 51 15 255 255 255 255 255 255] :rows
-make "rows lput [236 255 240 51 51 51 51 51 51 52 67 51 51 11 179 51 63 255 255 255 204 255 204 255 255 204 255 255 255 255 255 255] :rows
-make "rows lput [206 255 255 255 255 255 255 255 255 255 204 255 255 204 255 255 255 255 255 255 204 255 204 255 255 204 255 255 255 255 255 255] :rows
-make "rows lput [204 255 255 255 255 255 255 255 255 255 204 255 255 204 255 255 255 255 255 255 220 255 236 255 255 220 255 255 255 255 255 255] :rows
-make "rows lput [204 255 255 255 255 255 255 255 207 255 204 255 255 204 255 255 255 255 255 255 205 255 206 255 255 205 255 255 255 255 255 255] :rows
-make "rows lput [204 255 255 255 255 255 255 255 196 115 16 51 51 4 115 51 51 51 51 51 32 55 64 51 51 0 59 179 15 255 255 255] :rows
-make "rows lput [204 255 255 255 255 255 255 255 204 255 205 255 255 204 255 255 255 255 255 255 206 255 204 255 255 220 255 255 204 255 255 255] :rows
-make "rows lput [236 255 255 255 255 195 51 51 32 51 4 115 39 112 35 51 51 35 51 51 0 51 0 51 55 85 127 255 240 55 115 15] :rows
-make "rows lput [206 255 255 255 255 220 255 255 206 255 204 255 206 255 206 255 255 222 255 255 204 255 204 255 255 221 255 255 255 255 255 204] :rows
-make "rows lput [232 179 51 55 115 1 51 55 64 51 48 51 16 51 40 179 51 57 131 51 16 55 68 115 51 1 51 51 51 51 51 44] :rows
-make "rows lput [222 255 255 255 255 204 255 255 204 255 255 255 221 255 238 255 255 255 220 255 205 255 204 255 255 204 255 255 255 255 255 206] :rows
-make "rows lput [205 255 255 255 255 204 255 255 204 255 255 255 237 255 206 255 255 255 205 255 204 255 220 255 255 236 255 255 255 195 51 12] :rows
-make "rows lput [204 255 255 255 255 204 255 255 204 255 255 255 194 51 0 51 3 51 0 51 48 35 49 3 51 18 51 3 51 44 255 204] :rows
-make "rows lput [204 255 255 255 255 192 51 51 20 119 119 115 12 255 220 255 204 255 220 255 255 206 255 204 255 221 255 204 255 202 179 12] :rows
-make "rows lput [204 255 255 255 255 204 255 255 205 255 255 255 204 255 205 255 204 255 193 51 51 0 51 0 51 13 255 204 255 204 255 204] :rows
-make "rows lput [208 51 51 51 51 0 51 51 28 255 215 115 0 51 12 255 204 255 236 255 255 204 255 204 255 240 3 56 179 0 51 12] :rows
-make "rows lput [205 255 255 255 255 204 255 255 205 255 205 255 204 255 204 255 204 255 206 255 255 204 255 204 255 255 204 255 255 204 255 204] :rows
-make "rows lput [204 255 255 255 255 240 51 51 0 55 64 55 120 131 48 51 0 51 60 255 255 236 255 192 51 55 64 51 55 64 55 76] :rows
-make "rows lput [204 255 255 255 255 255 255 255 204 255 204 255 255 220 255 255 220 255 255 207 255 206 255 220 255 255 220 255 255 204 255 204] :rows
-make "rows lput [204 255 255 255 255 255 255 255 204 255 236 255 255 209 55 115 25 179 51 4 115 0 51 33 55 115 5 115 51 8 187 140] :rows
-make "rows lput [224 51 51 55 115 15 255 255 240 55 74 179 51 45 255 255 205 255 255 204 255 252 255 206 255 255 204 255 255 204 255 204] :rows
-make "rows lput [206 255 255 255 255 204 255 255 255 255 204 255 255 194 51 3 48 7 115 48 31 255 255 204 255 255 192 51 51 12 255 236] :rows
-make "rows lput [252 255 255 255 255 240 59 179 51 51 48 51 55 124 255 252 255 252 255 255 241 51 51 48 51 51 60 255 255 240 51 62] :rows
-make "dagg.mazes lput :rows :dagg.mazes
-make "rows []
-make "rows lput [203 179 51 59 131 55 119 111 255 255 255 255 255 255 255 255 255 255 255 255 255 207 255 255 255 195 51 59 131 51 51 15] :rows
-make "rows lput [204 255 255 255 204 255 255 206 255 255 255 255 255 255 255 207 255 255 255 207 255 208 51 59 179 12 255 255 204 255 255 204] :rows
-make "rows lput [204 255 255 255 204 255 255 204 255 255 255 255 255 255 255 228 115 51 59 140 255 205 255 255 255 192 51 55 64 55 115 28] :rows
-make "rows lput [192 51 51 55 64 59 179 12 255 255 255 255 255 255 255 238 255 255 255 208 51 4 115 51 51 12 255 255 204 255 255 205] :rows
-make "rows lput [236 255 255 255 204 255 255 204 255 255 255 255 255 255 255 206 255 255 255 205 255 204 255 255 255 204 255 255 236 255 255 204] :rows
-make "rows lput [206 255 255 255 204 255 255 220 255 255 255 255 255 255 255 192 59 179 51 0 51 24 179 51 51 20 115 51 14 255 255 204] :rows
-make "rows lput [204 255 255 255 204 255 255 205 255 255 255 255 255 255 255 204 255 255 255 204 255 205 255 255 255 205 255 255 204 255 255 204] :rows
-make "rows lput [192 55 115 55 64 59 187 140 255 255 255 255 255 255 255 196 119 115 51 0 55 112 19 51 51 0 51 51 44 255 255 204] :rows
-make "rows lput [220 255 255 255 204 255 255 220 255 255 255 255 255 255 255 204 255 255 255 220 255 255 205 255 255 204 255 255 242 51 51 60] :rows
-make "rows lput [225 51 55 115 0 51 3 49 51 51 3 51 51 55 119 108 255 255 255 205 255 255 204 255 255 204 255 255 255 255 255 255] :rows
-make "rows lput [206 255 255 255 204 255 252 255 255 255 204 255 255 255 255 206 255 255 255 204 255 255 204 255 255 204 255 255 255 255 207 255] :rows
-make "rows lput [192 51 59 179 44 255 255 199 115 51 12 255 255 255 255 204 255 255 255 204 255 255 204 255 255 204 255 255 255 255 236 255] :rows
-make "rows lput [204 255 255 255 210 55 115 28 255 255 236 255 255 207 255 220 255 255 255 204 255 255 204 255 255 220 255 255 255 255 206 255] :rows
-make "rows lput [192 59 131 51 29 255 255 205 255 255 206 255 255 204 255 205 255 255 255 204 255 255 204 255 255 205 255 255 195 51 16 63] :rows
-make "rows lput [204 255 204 255 205 255 255 220 255 255 204 255 255 204 255 204 255 255 255 204 255 255 220 255 255 196 115 51 44 255 205 255] :rows
-make "rows lput [192 59 176 51 0 51 7 113 39 115 0 51 51 24 179 12 255 255 255 220 255 255 221 255 255 204 255 255 194 51 12 255] :rows
-make "rows lput [204 255 255 255 204 255 204 255 222 255 204 255 255 205 255 204 255 255 255 205 255 255 205 255 255 204 255 255 204 255 220 255] :rows
-make "rows lput [192 51 51 59 144 51 16 51 1 51 0 51 19 48 51 0 59 159 255 236 255 255 204 255 255 204 255 255 204 255 205 255] :rows
-make "rows lput [204 255 255 255 205 255 205 255 204 255 204 255 205 255 255 204 255 225 51 2 51 59 184 179 59 144 51 55 68 115 36 127] :rows
-make "rows lput [204 255 255 255 204 255 204 255 224 51 60 255 204 255 255 236 255 206 255 204 255 255 255 255 255 205 255 255 204 255 238 255] :rows
-make "rows lput [204 255 255 255 204 255 192 51 14 255 255 255 204 255 255 206 255 204 255 204 255 255 255 255 255 204 255 255 204 255 206 255] :rows
-make "rows lput [192 51 51 59 128 51 44 255 196 115 51 51 60 255 255 192 51 0 51 60 255 255 255 255 255 204 255 255 204 255 204 255] :rows
-make "rows lput [204 255 255 255 204 255 206 255 204 255 255 255 255 255 255 204 255 204 255 255 255 255 195 51 51 0 55 115 28 255 236 255] :rows
-make "rows lput [220 255 255 255 204 255 204 255 204 255 255 255 255 255 255 240 51 0 51 15 255 255 204 255 255 204 255 255 237 255 206 255] :rows
-make "rows lput [205 255 255 255 204 255 204 255 220 255 255 255 255 255 255 255 255 204 255 204 255 255 204 255 255 192 51 51 2 51 48 63] :rows
-make "rows lput [204 255 255 255 204 255 204 255 205 255 255 255 255 255 255 255 255 204 255 204 255 255 204 255 255 204 255 255 204 255 255 255] :rows
-make "rows lput [204 255 255 255 204 255 192 51 48 51 51 51 3 51 15 255 255 204 255 208 51 51 0 51 3 48 3 55 112 51 63 255] :rows
-make "rows lput [204 255 255 255 204 255 204 255 255 255 255 255 204 255 200 183 115 12 255 221 255 255 204 255 204 255 204 255 255 255 255 255] :rows
-make "rows lput [204 255 255 255 240 55 64 51 55 79 255 255 204 255 204 255 255 240 51 1 51 51 16 51 12 255 204 255 255 255 255 255] :rows
-make "rows lput [204 255 255 255 255 255 236 255 255 204 255 255 204 255 236 255 255 255 255 204 255 255 205 255 192 51 0 51 51 55 115 63] :rows
-make "rows lput [240 51 51 51 51 51 2 55 115 12 255 255 204 255 206 255 255 195 51 16 51 51 12 255 204 255 204 255 255 255 255 255] :rows
-make "rows lput [255 255 255 255 255 255 252 255 255 244 115 51 48 55 112 51 51 60 255 253 255 255 240 51 48 51 48 55 115 51 51 63] :rows
-make "dagg.mazes lput :rows :dagg.mazes
-make "rows []
-make "rows lput [243 11 179 51 51 35 51 51 3 51 51 19 51 55 119 115 51 51 19 51 55 67 51 35 51 55 123 179 51 51 51 15] :rows
-make "rows lput [255 236 255 255 255 206 255 255 204 255 255 237 255 255 255 255 255 255 205 255 255 204 255 222 255 255 255 255 255 255 255 204] :rows
-make "rows lput [255 206 255 255 255 220 255 255 204 255 255 222 255 255 255 255 255 255 204 255 255 240 51 49 51 51 51 51 51 51 51 12] :rows
-make "rows lput [255 220 255 255 255 205 255 255 220 255 255 205 255 255 255 255 255 255 204 255 255 255 255 255 255 255 255 255 255 255 255 220] :rows
-make "rows lput [255 205 255 255 255 204 255 255 205 255 255 204 255 255 255 255 255 255 204 255 211 51 51 51 51 3 51 59 179 51 51 29] :rows
-make "rows lput [195 48 3 51 55 68 119 115 32 51 51 0 51 3 51 51 51 51 4 115 13 255 255 255 255 204 255 255 255 255 255 205] :rows
-make "rows lput [204 255 204 255 255 204 255 255 222 255 255 204 255 204 255 255 255 255 204 255 236 255 255 255 255 204 255 255 255 195 51 12] :rows
-make "rows lput [204 255 204 255 255 204 255 255 205 255 255 204 255 204 255 255 255 255 244 115 2 51 55 115 51 0 63 255 255 220 255 204] :rows
-make "rows lput [228 115 0 51 3 48 51 51 16 59 179 12 255 204 255 255 255 223 255 255 204 255 255 255 255 204 255 195 51 1 59 140] :rows
-make "rows lput [206 255 236 255 204 255 255 255 205 255 255 192 51 0 51 51 51 33 51 51 12 255 255 255 255 220 255 204 255 204 255 204] :rows
-make "rows lput [204 255 206 255 220 255 255 255 236 255 255 204 255 204 255 255 255 206 255 255 220 255 255 255 255 205 255 204 255 236 255 204] :rows
-make "rows lput [196 123 128 51 61 255 255 255 206 255 255 248 179 0 59 179 51 32 55 115 1 51 3 51 51 0 51 48 19 50 51 12] :rows
-make "rows lput [204 255 204 255 255 255 255 255 204 255 255 255 255 204 255 255 255 206 255 255 204 255 204 255 255 204 255 255 205 255 255 204] :rows
-make "rows lput [204 255 204 255 255 255 255 255 204 255 255 255 255 252 255 255 243 0 51 51 32 51 52 115 59 128 51 51 4 115 51 60] :rows
-make "rows lput [240 59 128 51 59 183 115 51 48 15 255 255 255 255 255 255 255 204 255 255 206 255 255 255 255 204 255 255 204 255 255 255] :rows
-make "rows lput [255 255 204 255 255 255 255 255 255 204 255 255 255 255 255 255 255 204 255 195 56 147 51 51 59 140 255 255 204 255 255 255] :rows
-make "rows lput [255 255 204 255 255 255 255 255 255 192 51 51 51 59 187 179 51 0 51 28 255 205 255 255 255 204 255 255 204 255 255 255] :rows
-make "rows lput [199 123 132 119 115 51 59 179 51 28 255 255 255 255 255 255 255 204 255 205 255 224 51 51 51 28 255 255 204 255 255 255] :rows
-make "rows lput [204 255 204 255 255 255 255 255 255 237 255 255 255 255 255 255 255 196 115 0 51 30 255 255 255 209 51 51 12 255 255 255] :rows
-make "rows lput [204 255 236 255 255 255 255 255 255 206 255 255 255 255 255 255 255 204 255 204 255 205 255 255 255 237 255 255 204 255 255 255] :rows
-make "rows lput [204 255 222 255 255 255 255 255 195 60 255 255 255 255 255 255 255 236 255 192 51 20 115 51 51 50 51 51 0 51 51 15] :rows
-make "rows lput [204 255 221 255 255 255 255 255 204 255 255 255 255 255 255 255 255 238 255 204 255 205 255 255 255 255 255 255 204 255 255 204] :rows
-make "rows lput [204 255 193 51 51 51 51 51 4 115 51 55 115 51 51 51 55 82 55 120 135 112 55 115 51 51 51 55 64 51 51 44] :rows
-make "rows lput [192 51 12 255 255 255 255 255 204 255 255 255 255 255 255 255 255 205 255 255 204 255 255 255 255 255 255 255 220 255 255 206] :rows
-make "rows lput [204 255 192 51 51 51 51 51 12 255 255 255 243 51 51 51 51 0 51 51 60 255 255 255 255 255 255 255 221 255 255 204] :rows
-make "rows lput [192 51 12 255 255 255 255 255 204 255 255 207 255 255 255 255 255 220 255 255 255 255 255 203 179 55 115 51 13 255 255 204] :rows
-make "rows lput [204 255 204 255 255 255 255 255 204 255 255 204 255 255 255 255 255 205 255 255 255 255 255 204 255 255 255 255 204 255 255 204] :rows
-make "rows lput [204 255 204 255 255 255 255 255 204 255 255 204 255 255 255 255 255 220 255 255 255 255 255 204 255 255 255 255 236 255 255 204] :rows
-make "rows lput [204 255 204 255 255 255 255 255 240 3 51 8 179 63 255 255 255 205 255 255 255 255 255 208 51 51 55 115 2 51 3 60] :rows
-make "rows lput [196 115 0 51 51 51 51 63 255 220 255 236 255 255 255 255 255 204 255 255 255 255 255 205 255 255 255 255 204 255 236 255] :rows
-make "rows lput [204 255 204 255 255 255 255 255 255 237 255 222 255 255 255 255 255 204 255 255 255 255 255 204 255 255 255 255 204 255 222 255] :rows
-make "rows lput [240 51 56 179 51 51 55 115 51 50 51 49 51 51 51 55 115 48 51 51 63 255 255 240 51 51 51 51 48 55 113 63] :rows
-make "dagg.mazes lput :rows :dagg.mazes
-make "rows []
 make "v0 [[[38 38 114 114] [29 64 64 27]] [[16 38] [27 64]]]
 make "v1 [[[128 65 68 119] [40 40 56 56]] [[92 93] [48 52]] [[16 38 114 136] [27 64 64 27]]]
 make "v2 [[[128 66 117] [40 50 58]]]
@@ -314,6 +141,68 @@ make "v3 []
 make "dagg.lpeek [[[100 108 112 120 128] [28 36 32 36 28]]]
 make "dagg.rpeek [[[100 108 112 120 128] [228 220 224 220 228]]]
 make "dagg.celine [[[28 28] [47 210]]]
+make "dagg.fwdver []
+make "v []
+make "v lput [[34 24 24 34 34 24] [100 92 164 156 100 100]] :v
+make "v lput [[34 24] [156 156]] :v
+make "v lput [[28 28] [47 96]] :v
+make "v lput [[28 28] [161 210]] :v
+make "dagg.fwdver lput :v :dagg.fwdver
+make "v []
+make "v lput [[24 128] [116 116]] :v
+make "v lput [[24 128] [140 140]] :v
+make "v lput [[28 28] [116 140]] :v
+make "v lput [[40 40] [116 140]] :v
+make "v lput [[52 52] [116 140]] :v
+make "v lput [[64 64] [116 140]] :v
+make "v lput [[76 76] [116 140]] :v
+make "v lput [[88 88] [116 140]] :v
+make "v lput [[100 100] [116 140]] :v
+make "v lput [[112 112] [116 140]] :v
+make "v lput [[123 123] [116 140]] :v
+make "v lput [[34 24 24 34 34 24] [100 92 164 156 100 100]] :v
+make "v lput [[34 24] [156 156]] :v
+make "v lput [[28 28] [47 96]] :v
+make "v lput [[28 28] [161 210]] :v
+make "dagg.fwdver lput :v :dagg.fwdver
+make "v []
+make "v lput [[118 128 128 118 118 128] [100 92 164 156 100 100]] :v
+make "v lput [[118 128] [156 156]] :v
+make "v lput [[28 28] [47 210]] :v
+make "dagg.fwdver lput :v :dagg.fwdver
+make "v []
+make "v lput [[24 128] [116 116]] :v
+make "v lput [[24 128] [140 140]] :v
+make "v lput [[28 28] [116 140]] :v
+make "v lput [[40 40] [116 140]] :v
+make "v lput [[52 52] [116 140]] :v
+make "v lput [[64 64] [116 140]] :v
+make "v lput [[76 76] [116 140]] :v
+make "v lput [[88 88] [116 140]] :v
+make "v lput [[100 100] [116 140]] :v
+make "v lput [[112 112] [116 140]] :v
+make "v lput [[123 123] [116 140]] :v
+make "v lput [[118 128 128 118 118 128] [100 92 164 156 100 100]] :v
+make "v lput [[118 128] [156 156]] :v
+make "v lput [[28 28] [47 210]] :v
+make "dagg.fwdver lput :v :dagg.fwdver
+make "v []
+make "dagg.vfttab [[[1 0 23] [0 15 4] [0 20 17] [1 28 30]] [[1 2 3] [0 3 31] [0 19 20] [0 31 0]] [] [[0 0 31] [0 5 0] [0 22 28] [0 31 16]] []]
+make "v []
+make "v lput [[40 64 42 54 56 40] [86 92 100 82 104 86]] :v
+make "v lput [[66 80 68 74 76 66] [140 140 134 144 134 140]] :v
+make "v lput [[96 120 100 106 116 96] [146 148 136 154 138 146]] :v
+make "v lput [[80 90 86 82 90 80] [116 122 114 122 116 116]] :v
+make "v lput [[64 72 64 78 64 58 54 50 46 40 42 28 28] [124 120 120 110 102 110 118 120 122 116 108 120 126]] :v
+make "v lput [[28 28 36 50 44 46 48 44] [130 136 146 148 136 132 134 136]] :v
+make "v lput [[48 54 116 132 130 120 90 132 72] [134 142 164 132 118 94 110 132 106]] :v
+make "v lput [[64 66 56 54 64] [102 100 94 96 102]] :v
+make "v lput [[66 68 74 76 90] [102 98 102 104 110]] :v
+make "v lput [[88 72] [112 120]] :v
+make "v lput [[62 20 52 64 60 114 80 68 62] [132 128 122 122 124 128 130 130 132]] :v
+make "v lput [[40 38 40 42 40 46 50 50 42 40 46] [130 128 124 126 130 128 128 126 126 124 126]] :v
+make "dagg.wiz2 :v
+make "v []
 make "dagg.gentab [[FLASK] [RING] [SCROLL] [SHIELD] [SWORD] [TORCH]]
 make "dagg.objwgt [5 1 10 25 25 10]
 make "dagg.adjtab []
@@ -593,6 +482,7 @@ make "dagg.k.torch 5
 ; game (M5) rather than being used up.
 make "dagg.t.rn11 19
 make "dagg.t.rn12 21
+make "dagg.t.rn15 18
 make "dagg.t.rn20 22
 
 ; OCBFIX, OBIRTH.ASM: copy ODBTAB's four bytes into P.OCCLS..P.OCPHO, then
@@ -926,7 +816,7 @@ to dagg.fndcel
   until [:ok] [
     make "c random 32
     make "r random 32
-    make "ok not (255 = dagg.cell :dagg.level :r :c)
+    make "ok not (255 = dagg.cell :r :c)
   ]
   output list :r :c
 end
@@ -1022,6 +912,311 @@ to dagg.newlvl :level
 end
 
 ;==========================================================================
+; DGNGEN.ASM -- the maze, carved on the board.
+;
+; The five mazes used to ship as data, one `make "rows lput [ ... ] :rows`
+; line a row.  That cost 7,905 cells -- a quarter of the pool -- and it is
+; more than a Pico 2 W has: `load` ran the arena out and reported
+; `Out of space` with 72 cells and 320 word-table bytes left (B94).
+;
+; Design section 7.2 rejected carving on the board, and was right about
+; the port it measured: RANDOM.ASM's RANDOX shifts a 24-bit register
+; eight times a byte, which is ~91 Logo statements -- 1.95 ms a byte on a
+; Pico 2 W at 300 MHz, and a level draws up to 2,235 of them.  Four and a
+; half seconds of RNG alone.
+;
+; But the register is LINEAR, so eight steps collapse.  After one byte
+; SEED+2 holds the old SEED+1 and SEED+1 the old SEED, and the new low
+; byte depends on the old SEED+1 and SEED+2 only -- and because the
+; feedback is a parity fold, that dependence splits into two halves:
+;
+;     new SEED = TA[old SEED+1] xor TB[old SEED+2]
+;
+; Two 256-entry tables, and a byte becomes five statements instead of
+; ninety-one: 150 us, so a whole level is 2.64 s at worst.  That goes
+; behind MISC.ASM's own "PREPARE!", which PCLI20 already prints one line
+; before it asks for the new level.
+;
+; Nothing here is a transcribed constant that could be wrong.  The tables
+; are built at load by `dagg.slow8` -- the honest shift-at-a-time ROM
+; byte -- so they are derived from the original, not copied from it.  The
+; split itself was checked against that original over all 65,536 pairs,
+; and the carve is pinned cell-for-cell to the 1982 dungeon by
+; `test_the_carve_reproduces_the_1982_dungeon`.
+;==========================================================================
+
+; RANDOM.ASM:RANDOX, one bit at a time.  Only `dagg.rtabs` calls this --
+; it is the definition the fast path is derived from, and the reason no
+; table in this file had to be trusted.
+to dagg.p8 :b
+  local "x
+  make "x bitxor :b (lshift :b -4)
+  make "x bitxor :x (lshift :x -2)
+  make "x bitxor :x (lshift :x -1)
+  output bitand :x 1
+end
+
+to dagg.slow8 :a0 :a1 :a2
+  local "f local "c0 local "c1
+  repeat 8 [
+    make "f dagg.p8 (bitand :a2 225)
+    make "c0 bitand (lshift :a0 -7) 1
+    make "c1 bitand (lshift :a1 -7) 1
+    make "a0 bitand ((lshift :a0 1) + :f) 255
+    make "a1 bitand ((lshift :a1 1) + :c0) 255
+    make "a2 bitand ((lshift :a2 1) + :c1) 255
+  ]
+  output :a0
+end
+
+; TA[x] is the byte a register holding (0, x, 0) produces; TB[x] the one
+; (0, 0, x) produces.  `fput` and not `lput`: lput copies the whole list
+; each time, which is the O(n^2) build that ran a bounded heap out of
+; space before (see dagg.cell's note).
+to dagg.rtabs
+  make "dagg.rta []
+  make "dagg.rtb []
+  repeat 256 [
+    make "dagg.rta fput (dagg.slow8 0 (256 - repcount) 0) :dagg.rta
+    make "dagg.rtb fput (dagg.slow8 0 0 (256 - repcount)) :dagg.rtb
+  ]
+end
+
+to dagg.rnd
+  local "n
+  make "n (bitxor (item (:dagg.s1 + 1) :dagg.rta)
+                  (item (:dagg.s2 + 1) :dagg.rtb))
+  make "dagg.s2 :dagg.s1
+  make "dagg.s1 :dagg.s0
+  make "dagg.s0 :n
+  output :n
+end
+
+; RNDCEL: the COLUMN is drawn first and the row second -- getting that
+; backwards transposes every maze and carves a different dungeon (B83).
+;
+; It answers through two globals rather than a list because `list` is two
+; cells a call and MAKDOR asks ~245 times a level: 1,010 cells a
+; generation that nothing reclaims until `recycle`, which is the same
+; trap dagg.grid's comment names.
+to dagg.rndcel
+  make "dagg.rc bitand dagg.rnd 31
+  make "dagg.rr bitand dagg.rnd 31
+end
+
+; DGNGEN.ASM:LVLTAB.  Seven bytes, and each level's 3-byte SEED is a
+; sliding window at a ONE-byte stride (`LDX #LVLTAB / LDB LEVEL / ABX`),
+; so levels 2-5 each reuse two of the previous level's seed bytes.
+make "dagg.lvltab [115 199 93 151 243 19 135]
+; STPTAB, CRETUR.ASM, split into the two lookups the carve wants.
+make "dagg.stpr [-1 0 1 0]
+make "dagg.stpc [0 1 0 -1]
+; MSKTAB / DORTAB / SDRTAB, DGNGEN.ASM, by direction 0=N 1=E 2=S 3=W.
+make "dagg.msktab [3 12 48 192]
+make "dagg.dortab [1 4 16 64]
+make "dagg.sdrtab [2 8 32 128]
+
+; One grid, allocated once and carved in place for every level there
+; after.  Rebuilding it would be 1,024 fresh cells a CLIMB and nothing
+; reclaims them until `recycle` -- dagg.grid's comment again.  The values
+; written are 0..255, which the first carve interns and no later one
+; pays for, so a generation costs neither cells nor word table (B91).
+make "dagg.maze dagg.grid
+
+to dagg.mzfill
+  local "r
+  repeat 32 [
+    make "r item repcount :dagg.maze
+    repeat 32 [.setitem repcount :r 255]
+  ]
+end
+
+to dagg.mzraw :r :c
+  output item (:c + 1) (item (:r + 1) :dagg.maze)
+end
+
+to dagg.mzput :r :c :v
+  .setitem (:c + 1) (item (:r + 1) :dagg.maze) :v
+end
+
+; FRIEND's per-cell read: a cell outside 0..31 reads as $FF (BORDER).
+; This is NOT dagg.cell's wrap -- the carve has a real edge, the view
+; does not.
+to dagg.mzget :r :c
+  if :r < 0 [output 255]
+  if :r > 31 [output 255]
+  if :c < 0 [output 255]
+  if :c > 31 [output 255]
+  output dagg.mzraw :r :c
+end
+
+; DGNGEN's four BEQ DGEN10 checks: refuse a cell that would complete a
+; fully-carved 2x2 block, which is what keeps the dungeon corridors.
+to dagg.blocked :r :c
+  local "nw local "n local "ne local "w
+  local "e local "sw local "s local "se
+  make "nw dagg.mzget (:r - 1) (:c - 1)
+  make "n  dagg.mzget (:r - 1) :c
+  make "ne dagg.mzget (:r - 1) (:c + 1)
+  make "w  dagg.mzget :r (:c - 1)
+  make "e  dagg.mzget :r (:c + 1)
+  make "sw dagg.mzget (:r + 1) (:c - 1)
+  make "s  dagg.mzget (:r + 1) :c
+  make "se dagg.mzget (:r + 1) (:c + 1)
+  if and (:nw = 0) (and (:n = 0) (:w = 0)) [output "true]
+  if and (:n = 0) (and (:ne = 0) (:e = 0)) [output "true]
+  if and (:e = 0) (and (:se = 0) (:s = 0)) [output "true]
+  if and (:w = 0) (and (:sw = 0) (:s = 0)) [output "true]
+  output "false
+end
+
+; Phase I, one direction-and-distance run.  Distance is 1..8 and every
+; iteration that does not `stop` spends one, so `repeat 8` is the whole
+; run; each `stop` here is one of DGEN10's exits.
+to dagg.walkstep
+  local "dir local "dist local "sr local "sc local "nr local "nc
+  make "dir bitand dagg.rnd 3
+  make "dist (bitand dagg.rnd 7) + 1
+  make "sr item (:dir + 1) :dagg.stpr
+  make "sc item (:dir + 1) :dagg.stpc
+  repeat 8 [
+    make "nr :dagg.dr + :sr
+    make "nc :dagg.dc + :sc
+    if :nr < 0 [stop]
+    if :nr > 31 [stop]
+    if :nc < 0 [stop]
+    if :nc > 31 [stop]
+    ifelse 0 = dagg.mzraw :nr :nc [
+      ; DGEN20: an already-carved cell, walked through rather than cut.
+      make "dagg.dr :nr
+      make "dagg.dc :nc
+      make "dist :dist - 1
+      if :dist = 0 [stop]
+    ] [
+      if dagg.blocked :nr :nc [stop]
+      dagg.mzput :nr :nc 0
+      make "dagg.rem :dagg.rem - 1
+      if :dagg.rem = 0 [stop]
+      make "dagg.dr :nr
+      make "dagg.dc :nc
+      make "dist :dist - 1
+      if :dist = 0 [stop]
+    ]
+  ]
+end
+
+; 500 cells.  The worst level measured takes 571 runs to place them, so
+; 900 is a bound with room and not a guess at the answer.
+to dagg.walk
+  repeat 900 [
+    if :dagg.rem = 0 [stop]
+    dagg.walkstep
+  ]
+end
+
+; Phase II: wall every side of every carved cell that faces a virgin cell
+; or the grid edge.  This is what lets the view walk with no border check
+; at all -- see dagg.cell.
+to dagg.wallin
+  local "r local "c local "v local "bits
+  repeat 32 [
+    make "r repcount - 1
+    repeat 32 [
+      make "c repcount - 1
+      make "v dagg.mzraw :r :c
+      if not (:v = 255) [
+        make "bits 0
+        if 255 = dagg.mzget (:r - 1) :c [make "bits :bits + 3]
+        if 255 = dagg.mzget :r (:c + 1) [make "bits :bits + 12]
+        if 255 = dagg.mzget (:r + 1) :c [make "bits :bits + 48]
+        if 255 = dagg.mzget :r (:c - 1) [make "bits :bits + 192]
+        dagg.mzput :r :c (bitor :v :bits)
+      ]
+    ]
+  ]
+end
+
+; Phase III, MAKDOR.  MDOR10's retry rejects back to the CELL pick and
+; not just the direction: a cell whose sides are all already walls or
+; doors would spin for ever if only the direction were re-rolled.  The
+; worst level measured needs 249 attempts to place its 115 doors.
+to dagg.door :tab
+  local "row local "col local "d local "v
+  local "nr local "nc local "opp
+  repeat 400 [
+    dagg.rndcel
+    make "row :dagg.rr
+    make "col :dagg.rc
+    make "v dagg.mzraw :row :col
+    if not (:v = 255) [
+      make "d bitand dagg.rnd 3
+      if 0 = bitand :v (item (:d + 1) :dagg.msktab) [
+        dagg.mzput :row :col (bitor :v (item (:d + 1) :tab))
+        make "nr modulo (:row + (item (:d + 1) :dagg.stpr)) 32
+        make "nc modulo (:col + (item (:d + 1) :dagg.stpc)) 32
+        make "opp bitand (:d + 2) 3
+        dagg.mzput :nr :nc (bitor (dagg.mzraw :nr :nc)
+                                  (item (:opp + 1) :tab))
+        stop
+      ]
+    ]
+  ]
+end
+
+to dagg.doors
+  repeat 70 [dagg.door :dagg.dortab]
+  repeat 45 [dagg.door :dagg.sdrtab]
+end
+
+; Which level :dagg.maze currently holds, so that re-entering the level
+; you are already standing on is free.  RESTORE and the load below both
+; ask for a level the maze may already be, and a CLIMB is the only thing
+; that has to pay.  Safe because nothing ever writes to the maze after
+; the carve: :dagg.maze has two readers (dagg.cell and dagg.map.row) and
+; no writer outside this section.
+make "dagg.mzlvl -1
+
+; DGNGEN: the whole level, into :dagg.maze.  `:lvl` is 0-based.
+to dagg.gen :lvl
+  if :dagg.mzlvl = :lvl [stop]
+  make "dagg.s0 item (:lvl + 1) :dagg.lvltab
+  make "dagg.s1 item (:lvl + 2) :dagg.lvltab
+  make "dagg.s2 item (:lvl + 3) :dagg.lvltab
+  dagg.mzfill
+  dagg.rndcel
+  make "dagg.dr :dagg.rr
+  make "dagg.dc :dagg.rc
+  make "dagg.rem 500
+  dagg.walk
+  dagg.wallin
+  dagg.doors
+  make "dagg.mzlvl :lvl
+end
+
+; 512 shift-at-a-time draws, ~0.96 s on a Pico 2 W at 300 MHz, once per
+; `load`.  It is the only place dagg.slow8 is used and the only reason
+; there is no transcribed table constant in this file.
+dagg.rtabs
+
+; Level 1, so that a freshly loaded workspace holds a real dungeon rather
+; than an uncarved grid -- which would read as open passage everywhere.
+; `daggorath` enters level 1 too and the cache above makes that free.
+dagg.gen 0
+
+; The order-sensitive fold tests/test_daggorath.c pins the carve with.
+; Kept mod 65521 so it is exact in single-precision floats: the widest
+; intermediate is 65520 * 31 + 255, well inside 2^24.
+to dagg.mzsum
+  local "a local "r
+  make "a 0
+  repeat 32 [
+    make "r item repcount :dagg.maze
+    repeat 32 [make "a modulo ((:a * 31) + (item repcount :r)) 65521]
+  ]
+  output :a
+end
+
+;==========================================================================
 ; The cell -- CD.ASM: 00 passage, 01 door, 10 secret door, 11 wall, packed
 ; N E S W from the low bits up. `dagg.dir`/PDIR: 0=N 1=E 2=S 3=W.
 
@@ -1029,13 +1224,18 @@ end
 ; view walks via STEP+MAP32 with no BORDER check at all (VIEWER.ASM never
 ; calls STEPOK), relying on a real maze always walling its true edges
 ; (Phase II). dagg.stepok is the separate, stricter check MOVE uses.
-; Mazes are stored as levels of 32 rows of 32 cells (not flattened) --
-; building one flat 1024-item list a level with `sentence`/`lput` in a
-; loop is an O(n^2) copy and was enough to run a bounded heap out of
-; space; two `item` lookups cost nothing this walk does not already pay.
-to dagg.cell :level :row :col
+; The maze is 32 rows of 32 cells (not flattened) -- building one flat
+; 1024-item list a level with `sentence`/`lput` in a loop is an O(n^2)
+; copy and was enough to run a bounded heap out of space; two `item`
+; lookups cost nothing this walk does not already pay.
+;
+; There is ONE maze and it is the level you are standing on: every caller
+; passed :dagg.level even when this took a level, and only the current
+; level is ever carved (see DGNGEN.ASM above), so the parameter is gone
+; rather than kept and ignored.
+to dagg.cell :row :col
   output (item ((modulo :col 32) + 1)
-               (item ((modulo :row 32) + 1) (item (:level + 1) :dagg.mazes)))
+               (item ((modulo :row 32) + 1) :dagg.maze))
 end
 
 to dagg.side :cell :dir
@@ -1063,7 +1263,7 @@ to dagg.stepok :row :col
   if :row > 31 [output false]
   if :col < 0 [output false]
   if :col > 31 [output false]
-  output not (255 = dagg.cell :dagg.level :row :col)
+  output not (255 = dagg.cell :row :col)
 end
 
 ;==========================================================================
@@ -1204,6 +1404,49 @@ to dagg.draw.peek :row :col :reldir :code :runs
 end
 
 ;==========================================================================
+; Vertical features -- COMCRE.ASM:VFIND/VSUB00 and VIEWER.ASM:VIEW40,
+; design section 7.5. M5's.
+
+; VFIND: the vertical feature at this cell, or -1 for none (the ROM
+; returns with N set on a miss). Search 1 is the way UP -- the previous
+; level's down-group, which is empty on level 1 (the ROM's leading -128)
+; -- and returns the code as it stands: 0 hole up, 1 ladder up. Search 2
+; is the way DOWN -- this level's own group -- and adds 2: 2 hole down,
+; 3 ladder down. A group entry is [kind row col] with kind 0 a hole and
+; 1 a ladder, COMCRE.ASM:VFTTAB's own bytes.
+to dagg.vfind :row :col
+  local "g local "i
+  if not (:dagg.level = 0) [
+    make "g item :dagg.level :dagg.vfttab
+    repeat count :g [
+      make "i item repcount :g
+      if (and ((item 2 :i) = :row) ((item 3 :i) = :col)) [output item 1 :i]
+    ]
+  ]
+  make "g item (:dagg.level + 1) :dagg.vfttab
+  repeat count :g [
+    make "i item repcount :g
+    if (and ((item 2 :i) = :row) ((item 3 :i) = :col)) [
+      output (item 1 :i) + 2
+    ]
+  ]
+  output -1
+end
+
+; VIEW40: the vertical feature in this cell -- FWDVER by the VF code --
+; or the plain ceiling line when there is none. It draws at every range,
+; because VFIND walks the cell the range stands on.
+to dagg.draw.vert :row :col
+  local "v
+  make "v dagg.vfind :row :col
+  ifelse :v = -1 [
+    dagg.drawit :dagg.celine
+  ] [
+    dagg.drawit item (:v + 1) :dagg.fwdver
+  ]
+end
+
+;==========================================================================
 ; The cell walk -- VIEWER.ASM:VIEWER/VIEW10-VIEW60, design section 6.
 
 to dagg.redraw :table
@@ -1219,7 +1462,7 @@ to dagg.redraw :table
     if not :stop [
       make "dagg.range repcount - 1
       dagg.setscale :dagg.range :table
-      make "cell dagg.cell :dagg.level :row :col
+      make "cell dagg.cell :row :col
       make "lcode dagg.side :cell (modulo (:dagg.dir + 3) 4)
       make "rcode dagg.side :cell (modulo (:dagg.dir + 1) 4)
       make "fcode dagg.side :cell :dagg.dir
@@ -1229,7 +1472,7 @@ to dagg.redraw :table
       dagg.draw.creature :row :col
       dagg.draw.peek :row :col 3 :lcode :dagg.lpeek
       dagg.draw.peek :row :col 1 :rcode :dagg.rpeek
-      dagg.drawit :dagg.celine
+      dagg.draw.vert :row :col
       dagg.draw.objects :row :col
       ifelse :fcode = 0 [
         make "row dagg.step.row :row :dagg.dir
@@ -1291,8 +1534,13 @@ end
 ; graphics background, so `setpc 255` paints in the background and draws a
 ; picture you cannot see, and `setbg 255` is outside setbg's own 0..254
 ; range and errors outright. B81.
+; NEWLVL: "a new dungeon is born around you".  The carve happens here and
+; not in dagg.newlvl because RESTORE re-enters a level too, and a save
+; that regenerates its maze from the level number does not have to carry
+; one.  2.64 s at worst, behind the "PREPARE!" PCLI20 prints first.
 to dagg.enter.level :level
   make "dagg.level :level
+  dagg.gen :level
   ifelse (modulo :level 2) = 0 [
     make "dagg.ink 254  make "dagg.bg 0
     make "dagg.status.fg 0  make "dagg.status.bg 254
@@ -1456,6 +1704,26 @@ to dagg.write.at :row :col :text
   write :text
 end
 
+; PREPAR -- MISC.ASM:PREPAX. It is NOT a line in the command area: the
+; routine opens `JSR EXAMIO`, which is EXAMINE's own screen, so the
+; message REPLACES the view exactly as the EXAMINE listing does, and
+; `CLR TXBFLG` afterwards is what puts ordinary i/o back. PCLI20's own
+; INIVU then draws the new level over it.
+;
+; `LDD #32*9+12` is row 9, column 12 -- eight characters centred on 32
+; columns. Rows carry over and columns are recomputed for 40 (see above),
+; so that is row 9, column 16, the same arithmetic that turns
+; !CREATURE!'s 11 into 15.
+;
+; Reported from a Pico 2 W (B96): it was `pr [PREPARE!]`, which put it in
+; the input area and left the maze on the screen.
+to dagg.prepar
+  clean
+  setpc :dagg.ink
+  dagg.write.at 9 16 [PREPARE!]
+  refresh
+end
+
 ;==========================================================================
 ; EXAMINE -- PEXAM.ASM:EXAMIN. `clean` is EXAMIO's `SWI ZFLOP`: the listing
 ; REPLACES the view rather than overlaying it, and stays up until LOOK.
@@ -1573,7 +1841,7 @@ to dagg.map.row :r
   make "y (160 - (7 * :r)) - 3
   make "run 0
   make "c 0
-  foreach (item (:r + 1) (item (:dagg.level + 1) :dagg.mazes)) [[cell]
+  foreach (item (:r + 1) :dagg.maze) [[cell]
     make "c :c + 1
     ifelse :cell = 255 [
       if :run = 0 [make "run :c]
@@ -1735,6 +2003,40 @@ end
 to dagg.move.cost
   make "dagg.pdam :dagg.pdam + (int (:dagg.objwt / 8)) + 3
   dagg.hupdat
+end
+
+;==========================================================================
+; CLIMB -- PCLIMB.ASM, design section 7.5. M5's.
+;
+; VFIND either misses (no feature: CMDERR) or names the feature
+; (dagg.vfind). The direction comes from DIRTAB: UP is row 5, DOWN row 6,
+; and anything else -- including no direction at all, because PARSER
+; answers 0 for a null token and PCLIMB's BLE takes that to CMDERR with
+; the illegal ones -- is CMDERR too. CLIMB UP takes a ladder up (code 1)
+; and nothing else, not even a hole up; CLIMB DOWN takes anything with
+; BIT1 set, a hole or a ladder down (codes 2, 3).
+to dagg.climb
+  local "f local "n
+  make "f dagg.vfind :dagg.row :dagg.col
+  if :f = -1 [dagg.cmderr  stop]
+  make "n dagg.parse dagg.gettok :dagg.dirtab
+  if :n < 1 [dagg.cmderr  stop]
+  ifelse :n = 5 [
+    if not (:f = 1) [dagg.cmderr  stop]
+    make "f (0 - 1)
+  ] [
+    if not (:n = 6) [dagg.cmderr  stop]
+    if (bitand :f 2) = 0 [dagg.cmderr  stop]
+    make "f 1
+  ]
+  ; PCLI20: the level changes and a new dungeon is born around you -- at
+  ; the same row and column, because NEWLVL never touches PROW. INIVU is a
+  ; fresh view with the heart re-read; the prompt after it is dagg.enter's,
+  ; not this procedure's.
+  dagg.prepar
+  dagg.newlvl :dagg.level + :f
+  dagg.hupdat
+  dagg.show
 end
 
 ;==========================================================================
@@ -2013,6 +2315,10 @@ to dagg.incant.hand :i
   dagg.ocbfil :i :a
   .setitem :i :dagg.ocx1 0
   dagg.comupd
+  ; PINCAN's last test: the OMEGA ring (T.RN15, FINAL) ends the game.
+  ; dagg.comupd runs first, because PINCAN shows the new ring (STATUS)
+  ; before it checks what the ring is.
+  if :a = :dagg.t.rn15 [dagg.winner]
 end
 
 ; PEXAM and PLOOK, with INIVUX in front of the second: clear the text,
@@ -2052,6 +2358,7 @@ make "dagg.s.obj 12
 make "dagg.s.klk2 18
 make "dagg.s.klk3 19
 make "dagg.s.exp0 21
+make "dagg.s.exp1 22
 
 make "dagg.sndn -1
 make "dagg.sndvol 0
@@ -2135,8 +2442,8 @@ end
 ;
 ; Killing either wizard is M5's -- type 10 ends the game's first half
 ; (PATTK.ASM:ENDGAM strips you and drops you on level 4 with a 200-unit
-; weight penalty) and type 11 is the ring riddle. Neither is reachable
-; before the level graph exists.
+; weight penalty) and type 11 is the ring riddle. The loot above already
+; dropped before either runs, which is PATT30's own order.
 to dagg.cdeath :y
   local "r local "c local "row local "t
   make "r item :y :dagg.ccrow
@@ -2159,6 +2466,135 @@ to dagg.cdeath :y
   if :dagg.ppow > 32767 [
     make "dagg.ppow 32512 + (modulo :dagg.ppow 256)
   ]
+  if (item :y :dagg.cctyp) = 10 [dagg.endgam  stop]
+  if (item :y :dagg.cctyp) = 11 [dagg.riddle  stop]
+end
+
+;==========================================================================
+; The levels and the endgame -- design section 7.5 and PATTK/PINCAN.
+; M5's.
+;
+; WIZIX/WIZOX, MISC.ASM, reduced: the full 32-step fade with its buzzing
+; noise is design section 16's first expendable set piece -- a mechanic
+; it is not, and the first thing to go if RAM binds. What carries over
+; is what the game needs: the wizard drawn full-bright at range 1's own
+; scale (WIZIX's own $8080), an explosion behind him (WIZI20/WIZOX's
+; A$EXP1), and the cleared screen the speeches are printed on. The heart
+; keeps beating through it where the ROM stops it; a set piece, not a
+; mechanic either way.
+to dagg.show.wizard :runs
+  dagg.setscale 1 :dagg.norscl
+  clean
+  setpc :dagg.ink
+  dagg.draw.runs :runs
+  refresh
+  dagg.sound :dagg.s.exp1 255
+end
+
+; ENDGAM, PATTK.ASM: killing the plain wizard ends the game's first half.
+; His two speeches (decoded in scripts/gen_daggorath.py, which asserts
+; every byte -- the game keeps the words and drops the ROM's 32-column
+; centering, the same reason EXAMINE's columns are recomputed for 40),
+; a WAIT, and then the strip: the torch is the only thing
+; left in the bag, everything else is gone, and POBJWT goes to 200 flat.
+; What was in your hands stays in your hands -- EGAM10 only re-links the
+; bag. Level 4 (index 3) is born around you and FNDCEL picks a random
+; cell of it for you; the direction does not change, because NEWLVL
+; never touches it. WIZOUT is an explosion and INIVU is dagg.look.
+; WAITX is 81 jiffies -- 1.35 seconds, and `wait` here is milliseconds.
+to dagg.endgam
+  local "cell
+  dagg.show.wizard item 12 :dagg.fwdcre
+  dagg.endgam.speeches
+  wait 1350
+  ifelse :dagg.ptorch = 0 [make "dagg.bag []] [
+    make "dagg.bag (list :dagg.ptorch)
+    .setitem :dagg.ptorch :dagg.ocown 1
+  ]
+  dagg.endgam.discard
+  make "dagg.floor []
+  make "dagg.objwt 200
+  dagg.newlvl 3
+  make "cell dagg.fndcel
+  make "dagg.row item 1 :cell
+  make "dagg.col item 2 :cell
+  dagg.look
+end
+
+; His two speeches, factored out so a host test can read them: dagg.look
+; at the end of dagg.endgam clears the text window (INIVUX's own CLRPRI),
+; so by the time the procedure returns there is nothing to assert on.
+to dagg.endgam.speeches
+  pr []
+  pr [ENOUGH! I TIRE OF THIS PLAY...]
+  pr [PREPARE TO MEET THY DOOM!!!]
+end
+
+; Everything the strip takes: every OCB that is neither in a hand nor
+; the torch. They are marked discarded (-2: owned by nobody and on no
+; floor) rather than unowned, so nothing later -- a creature death, a
+; restore -- reads them back onto a floor. The creatures' own loot
+; chains go with them, for the same reason: the next thing a creature
+; dies holding must be something this half of the game gave it.
+to dagg.endgam.discard
+  local "keep local "i
+  make "keep (list :dagg.plhand :dagg.prhand :dagg.ptorch)
+  repeat :dagg.ocbmax [
+    make "i repcount
+    if not member? :i :keep [.setitem :i :dagg.ocown (0 - 2)]
+  ]
+  repeat :dagg.ccbmax [.setitem repcount :dagg.ccobj []]
+end
+
+; The ring riddle's other half, PATTK.ASM: killing the crescent wizard
+; does not end the game -- saying the Ring of Ohm's name does (dagg.winner
+; below). What it does is stop the world: FRZFLG goes down and every
+; creature spends its turn rescheduling (CRETUR.ASM:CMOV12 is JMP CMOV90)
+; until something thaws it, which is nothing in this ROM. And it turns
+; the lights on: PRLITE goes to $0713, seven regular and nineteen magic
+; (design section 8.3) -- the only scene in the game you can see without
+; a torch. The third half is the OCBPTR truncation: every object but OCB
+; #1 is gone, made explicit the way dagg.endgam.discard makes ENDGAM's
+; strip explicit, because our floor list would otherwise resurrect them.
+; INIVU is dagg.look.
+to dagg.riddle
+  local "o
+  make "dagg.frzflg "true
+  make "dagg.prlite 7
+  make "dagg.prmlite 19
+  ; OCBPTR truncation is dagg.endgam.discard with nothing kept: clear the
+  ; hands and the torch first so the keep list is all zeroes (no OCB is
+  ; ever 0), remember OCB 1's standing, discard, and put it back.
+  make "dagg.plhand 0
+  make "dagg.prhand 0
+  make "dagg.ptorch 0
+  make "o item 1 :dagg.ocown
+  dagg.endgam.discard
+  .setitem 1 :dagg.ocown :o
+  make "dagg.bag []
+  make "dagg.floor []
+  dagg.look
+end
+
+; WINNER, PINCAN.ASM: saying the Ring of Ohm's name with it in either
+; hand. The star wizard fades in (WIZ2 -- D4.ASM's one list in no
+; creature table, generated beside FWDCRE for exactly this), his two
+; speeches print, and the game is over. The ROM sits in BRA * with the
+; victory on the screen; ours sets dagg.over, which walks out through
+; dagg.play and daggorath.quit and puts the screen back -- a Logo game
+; has to let go, the same reason dagg.key owns ESC.
+to dagg.winner
+  dagg.show.wizard :dagg.wiz2
+  dagg.winner.speeches
+  make "dagg.over "true
+end
+
+; Factored out beside dagg.endgam.speeches, for the same reason: the
+; words outlive the procedure that prints them nowhere else.
+to dagg.winner.speeches
+  pr []
+  pr [BEHOLD! DESTINY AWAITS THE HAND]
+  pr [OF A NEW WIZARD...]
 end
 
 ; PATT10's ring counter: ENERGY, ICE and FIRE spend a charge a swing and
@@ -2362,10 +2798,13 @@ end
 ; CMOVE, CRETUR.ASM -- one creature's whole turn.
 ;
 ; The ROM opens with `TST FRZFLG`, which is the crescent wizard's ring
-; riddle stopping the world (PATTK.ASM's own `DEC FRZFLG`).  Nothing can
-; set it before M5 builds that endgame, so the test is not here either.
+; riddle stopping the world (PATTK.ASM's own `DEC FRZFLG`). A frozen
+; creature does nothing but reschedule (CMOV12 is JMP CMOV90) -- it does
+; not pick up, attack, close or wander. dagg.riddle is the only thing
+; that sets it, and nothing clears it.
 to dagg.cmove :y
   local "typ local "i local "r local "c local "dir local "base local "ok
+  if :dagg.frzflg [dagg.cmov90 :y  stop]
   make "typ item :y :dagg.cctyp
   make "r item :y :dagg.ccrow
   make "c item :y :dagg.cccol
@@ -2661,6 +3100,7 @@ make "dagg.luknew.due 0
 make "dagg.tenth.due 0
 make "dagg.cregen.due 0
 make "dagg.newluk "false
+make "dagg.frzflg "false
 
 to dagg.heart.tick
   make "dagg.now ticks
@@ -2732,6 +3172,325 @@ to dagg.hslow
 end
 
 ;==========================================================================
+; ZSAVE/ZLOAD -- PZTAPE.ASM and COMMON.ASM:SAVE/LOAD. M5's.
+;
+; The ROM saves RAM wholesale (DP.BEG to MM.END) to cassette and reads it
+; back the same way; a Logo game saves its own state instead. dagg.snapshot
+; builds the save as a list of run-able lines -- every line numbers and
+; bare words only, so `print` and `readlist` carry them unchanged --
+; dagg.restore runs such lines back into the live game, and dagg.zsave /
+; dagg.zload are the thin file wrappers around the two. The host tests
+; cover snapshot and restore; the wrappers need a card and are a board's.
+;
+; What is stored: the level and position, the player (power, damage,
+; weight, both lights, both hands, the torch, frozen), the bag and the
+; floor, all twelve OCB lists, the seven flat CCB lists plus each
+; creature's loot, and the creature matrix. What is NOT stored is derived
+; or transient and is rebuilt by dagg.snap.done: the occupancy grid (from
+; the CCB positions, the way dagg.newlvl builds it), the scheduler's due
+; times (re-anchored to now, the way daggorath enters them), the display
+; mode (back to the viewer), the fade and map flags, the sound site and
+; the line buffer. Nothing stored interns on restore except game values
+; a long session meets anyway; B91's leak was thirty new numbers a second
+; for ever, and a save is a few dozen numbers once.
+;
+; The file goes on /sd, because B65 breaks writes past 256 bytes on the
+; internal filesystem and a save is thousands. With no card the open
+; fails loudly and says so, which is the whole of the gate's "says so".
+
+; The twelve OCB fields, in chunk/tail numbering -- the READ half.
+; The WRITE half reuses these: `.setitem :pos (dagg.snap.ocb :f) :val`
+; mutates the live list in place, so restoring a save appends nothing
+; and a save costs its lines and nothing else (a warm redraw's own rule:
+; the pool has no automatic collection, only `recycle`, so garbage is
+; permanent until someone sweeps).
+to dagg.snap.ocb :f
+  if :f = 1 [output :dagg.ocrow]
+  if :f = 2 [output :dagg.occol]
+  if :f = 3 [output :dagg.oclvl]
+  if :f = 4 [output :dagg.ocown]
+  if :f = 5 [output :dagg.ocx0]
+  if :f = 6 [output :dagg.ocx1]
+  if :f = 7 [output :dagg.ocx2]
+  if :f = 8 [output :dagg.octyp]
+  if :f = 9 [output :dagg.occls]
+  if :f = 10 [output :dagg.ocrev]
+  if :f = 11 [output :dagg.ocmgo]
+  output :dagg.ocpho
+end
+
+; The seven flat CCB fields, in cchunk/ctail numbering. Same shape.
+to dagg.snap.ccb :f
+  if :f = 1 [output :dagg.ccuse]
+  if :f = 2 [output :dagg.cctyp]
+  if :f = 3 [output :dagg.ccrow]
+  if :f = 4 [output :dagg.cccol]
+  if :f = 5 [output :dagg.ccdir]
+  if :f = 6 [output :dagg.ccdam]
+  output :dagg.cctim
+end
+
+; The save, as a list of lines. Every line is flat numbers and bare
+; words, so `print` and `readlist` carry them unchanged, and every long
+; field goes out in full eight-number chunks with its base -- plus a
+; one-number tail line where 65 is not a multiple of 8 -- so no line is
+; ever near any length limit and no arity is ever exceeded.
+;
+; `fput`, not `lput`: the save is some two hundred lines and `lput`
+; copies the whole list to append one cell, so building it that way is
+; an O(n^2) twenty thousand cells of garbage against a pool with four
+; thousand free in it -- M3's own trap in dagg.zeros, found again here
+; the first time a snapshot ran. `reverse` at the end is the prepend-loop
+; copy P2 built it as, the cheapest possible. The chunk lines read
+; their eight values with nested `item` calls for two related reasons:
+; an eight-list temporary built with `lput` is 36 cells of garbage a
+; chunk (seven thousand a save), and eight nested calls to a *user*
+; procedure in one expression do not evaluate at all -- the interpreter
+; loses the name halfway through (B90's family; `item` is a primitive
+; and nests fine).
+
+; One chunk line -- field :f, eight values at :base + 1 through :base + 8.
+; A procedure of its own because the eight nested `item` calls do not
+; evaluate inside a doubly-nested loop: the interpreter loses a variable
+; halfway through the line (B90's family -- eight nested *primitive*
+; calls are fine on their own and fine singly-nested, but not under two
+; loops in one body). One call a chunk costs nothing; a save is not a
+; frame.
+to dagg.snap.line.ocb :f :base :vals
+  output (sentence [dagg.snap.chunk] :f :base (item (:base + 1) :vals) (item (:base + 2) :vals) (item (:base + 3) :vals) (item (:base + 4) :vals) (item (:base + 5) :vals) (item (:base + 6) :vals) (item (:base + 7) :vals) (item (:base + 8) :vals))
+end
+
+to dagg.snap.line.ccb :f :base :vals
+  output (sentence [dagg.snap.cchunk] :f :base (item (:base + 1) :vals) (item (:base + 2) :vals) (item (:base + 3) :vals) (item (:base + 4) :vals) (item (:base + 5) :vals) (item (:base + 6) :vals) (item (:base + 7) :vals) (item (:base + 8) :vals))
+end
+
+to dagg.snapshot
+  local "out local "f local "n local "vals local "base
+  make "out []
+  make "out fput (sentence [dagg.snap.begin] :dagg.level) :out
+  make "out fput (sentence [dagg.snap.scalars] :dagg.row :dagg.col :dagg.dir :dagg.ppow :dagg.pdam :dagg.objwt :dagg.prlite :dagg.prmlite :dagg.plhand :dagg.prhand :dagg.ptorch :dagg.frzflg) :out
+  foreach :dagg.bag [[k] make "out fput (sentence [dagg.snap.bag] :k) :out]
+  foreach :dagg.floor [[k] make "out fput (sentence [dagg.snap.floor] :k) :out]
+  repeat 12 [
+    make "f repcount
+    make "vals dagg.snap.ocb :f
+    make "out fput (dagg.snap.line.ocb :f 0 :vals) :out
+    repeat 7 [
+      make "base repcount * 8
+      make "out fput (dagg.snap.line.ocb :f :base :vals) :out
+    ]
+    make "out fput (sentence [dagg.snap.tail] :f 65 (item 65 :vals)) :out
+  ]
+  repeat 7 [
+    make "f repcount
+    make "vals dagg.snap.ccb :f
+    make "out fput (dagg.snap.line.ccb :f 0 :vals) :out
+    repeat 3 [
+      make "base repcount * 8
+      make "out fput (dagg.snap.line.ccb :f :base :vals) :out
+    ]
+  ]
+  repeat :dagg.ccbmax [
+    make "n repcount
+    foreach (item :n :dagg.ccobj) [[k]
+      make "out fput (sentence [dagg.snap.ccobj] :n :k) :out
+    ]
+  ]
+  foreach :dagg.cmx [[row] make "out fput (sentence [dagg.snap.cmxrow] :row) :out]
+  make "out fput [dagg.snap.done] :out
+  output reverse :out
+end
+
+
+
+; The restore half: one procedure per line shape. dagg.snap.begin takes
+; the saved level and clears every accumulator; dagg.snap.done rebuilds
+; everything the save does not store and puts the view back up.
+to dagg.snap.begin :level
+  local "i
+  make "dagg.level :level
+  ; The grid is cleared through the creatures standing on it -- the live
+  ; CCB positions below are still the OLD ones here, because the chunks
+  ; have not run yet. dagg.ccb.clear's own pattern, and for its reason:
+  ; rebuilding the grid is 1,024 fresh cells. The OCB/CCB fields are not
+  ; touched at all: they are fixed-size (65/32, sized once at load) and
+  ; the chunks write them back in place.
+  repeat :dagg.ccbmax [
+    make "i repcount
+    if not (0 = item :i :dagg.ccuse) [
+      dagg.ccput (item :i :dagg.ccrow) (item :i :dagg.cccol) 0
+    ]
+    .setitem :i :dagg.ccobj []
+  ]
+  make "dagg.bag []
+  make "dagg.floor []
+  make "dagg.cmx []
+end
+
+to dagg.snap.scalars :row :col :dir :ppow :pdam :objwt :prlite :prmlite :plhand :prhand :ptorch :frz
+  make "dagg.row :row
+  make "dagg.col :col
+  make "dagg.dir :dir
+  make "dagg.ppow :ppow
+  make "dagg.pdam :pdam
+  make "dagg.objwt :objwt
+  make "dagg.prlite :prlite
+  make "dagg.prmlite :prmlite
+  make "dagg.plhand :plhand
+  make "dagg.prhand :prhand
+  make "dagg.ptorch :ptorch
+  ifelse :frz = "true [make "dagg.frzflg "true] [make "dagg.frzflg "false]
+end
+
+; `fput`, not `lput`: the bag arrives in order and `lput` copies the
+; spine per item (triangular garbage); `dagg.snap.done` reverses both
+; lists back once, which is one copy each no matter how long they are.
+to dagg.snap.bag :k
+  make "dagg.bag fput :k :dagg.bag
+end
+
+to dagg.snap.floor :k
+  make "dagg.floor fput :k :dagg.floor
+end
+
+; Eight values into OCB field :f at :base + 1 through :base + 8 --
+; `.setitem` mutates the sized list in place, so a chunk costs nothing
+; beyond its line. The field comes back through the READ accessor, which
+; is the same nodes the global holds.
+to dagg.snap.chunk :f :base :a :b :c :d :e :g :h :i
+  .setitem (:base + 1) (dagg.snap.ocb :f) :a
+  .setitem (:base + 2) (dagg.snap.ocb :f) :b
+  .setitem (:base + 3) (dagg.snap.ocb :f) :c
+  .setitem (:base + 4) (dagg.snap.ocb :f) :d
+  .setitem (:base + 5) (dagg.snap.ocb :f) :e
+  .setitem (:base + 6) (dagg.snap.ocb :f) :g
+  .setitem (:base + 7) (dagg.snap.ocb :f) :h
+  .setitem (:base + 8) (dagg.snap.ocb :f) :i
+end
+
+; The one-number tail where 65 is not a multiple of 8.
+to dagg.snap.tail :f :pos :val
+  .setitem :pos (dagg.snap.ocb :f) :val
+end
+
+to dagg.snap.cchunk :f :base :a :b :c :d :e :g :h :i
+  .setitem (:base + 1) (dagg.snap.ccb :f) :a
+  .setitem (:base + 2) (dagg.snap.ccb :f) :b
+  .setitem (:base + 3) (dagg.snap.ccb :f) :c
+  .setitem (:base + 4) (dagg.snap.ccb :f) :d
+  .setitem (:base + 5) (dagg.snap.ccb :f) :e
+  .setitem (:base + 6) (dagg.snap.ccb :f) :g
+  .setitem (:base + 7) (dagg.snap.ccb :f) :h
+  .setitem (:base + 8) (dagg.snap.ccb :f) :i
+end
+
+to dagg.snap.ccobj :y :k
+  .setitem :y :dagg.ccobj (fput :k (item :y :dagg.ccobj))
+end
+
+to dagg.snap.cmxrow :a :b :c :d :e :g :h :i :j :k :l :m
+  make "dagg.cmx lput (list :a :b :c :d :e :g :h :i :j :k :l :m) :dagg.cmx
+end
+
+
+; The commit: the grid from the CCB positions, the due times re-anchored
+; to now, the transient state back to its entry values, and the view.
+; dagg.look recomputes the heart, redraws and re-prompts through
+; dagg.enter -- this is COMMON.ASM:LOAD90's INIVU and PROMPT.
+to dagg.snap.done
+  local "i
+  make "dagg.bag reverse :dagg.bag
+  make "dagg.floor reverse :dagg.floor
+  repeat :dagg.ccbmax [
+    make "i repcount
+    if not (0 = item :i :dagg.ccuse) [
+      dagg.ccput (item :i :dagg.ccrow) (item :i :dagg.cccol) :i
+    ]
+  ]
+  make "dagg.dspmod 0
+  make "dagg.magflg "false
+  make "dagg.mapflg "false
+  make "dagg.faint "false
+  make "dagg.over "false
+  make "dagg.sndn -1
+  make "dagg.sndvol 0
+  make "dagg.linbuf []
+  make "dagg.tokens []
+  make "dagg.linptr 1
+  dagg.enter.level :dagg.level
+  dagg.hupdat
+  make "dagg.now ticks
+  make "dagg.heart.due ticks
+  make "dagg.hslow.due ticks + (:dagg.heartr * 16.667)
+  make "dagg.luknew.due ticks + 500
+  make "dagg.burner.due ticks + 60000
+  make "dagg.tenth.due ticks + 100
+  make "dagg.cregen.due ticks + 300000
+  dagg.look
+end
+
+; Run a whole save back, line by line -- the in-memory half of ZLOAD,
+; and what the host tests cover.
+to dagg.restore :snap
+  foreach :snap [[line] run :line]
+end
+
+; PZTAPE.ASM:FILNAM: the save name is the next token, its characters
+; joined into a word. An empty name is CMDERR, the way a null token is
+; everywhere else in the parser.
+to dagg.snap.name
+  local "tok local "name
+  make "tok dagg.gettok
+  if empty? :tok [output []]
+  make "name "
+  foreach :tok [[c] make "name word :name :c]
+  output word "/sd/ :name
+end
+
+; ZSAVE: snapshot to /sd/<name>. erasefile first, because open-then-write
+; does not truncate and a shorter save over a longer one would leave the
+; old tail behind. A missing card fails loudly at the open, which is the
+; gate's "says so".
+to dagg.zsave
+  local "name local "snap
+  make "name dagg.snap.name
+  if empty? :name [dagg.cmderr  stop]
+  catch "error [erasefile :name]
+  make "snap dagg.snapshot
+  open :name
+  setwrite :name
+  foreach :snap [[line] print :line]
+  setwrite []
+  close :name
+  ; The save above is abandoned and its two thousand cells are garbage;
+  ; the pool has no automatic collection, so a save that never sweeps
+  ; is a save that cannot be repeated. This is not a frame -- one sweep
+  ; on a file command is nothing.
+  recycle
+end
+
+; ZLOAD: read every line first and close the file, then run them -- so a
+; tape error (ROM: LBNE $A027, restart the world) lands before a single
+; line of state has moved rather than in the middle of it.
+to dagg.zload
+  local "name local "lines local "line
+  make "name dagg.snap.name
+  if empty? :name [dagg.cmderr  stop]
+  open :name
+  setread :name
+  make "lines []
+  make "line readlist
+  until [empty? :line] [
+    make "lines fput :line :lines
+    make "line readlist
+  ]
+  setread []
+  close :name
+  dagg.restore reverse :lines
+  recycle
+end
+
+;==========================================================================
 ; The parser -- PARSER.ASM and TOKEN.ASM.
 ;
 ; A token matches a table entry when it is a PREFIX of that entry's word
@@ -2783,13 +3542,13 @@ end
 ; time, so a list literal that spans lines is not a thing this dialect can
 ; be given; seven `se`s that run once at load read better than one
 ; 320-character line.
-make "dagg.cmdtab [[ATTACK [dagg.pattk]] [CLIMB [dagg.soon]] [DROP [dagg.drop]]]
+make "dagg.cmdtab [[ATTACK [dagg.pattk]] [CLIMB [dagg.climb]] [DROP [dagg.drop]]]
 make "dagg.cmdtab se :dagg.cmdtab [[EXAMINE [dagg.examine]] [GET [dagg.get]]]
 make "dagg.cmdtab se :dagg.cmdtab [[INCANT [dagg.incant]] [LOOK [dagg.look]]]
 make "dagg.cmdtab se :dagg.cmdtab [[MOVE [dagg.move]] [PULL [dagg.pull]]]
 make "dagg.cmdtab se :dagg.cmdtab [[REVEAL [dagg.reveal]] [STOW [dagg.stow]]]
 make "dagg.cmdtab se :dagg.cmdtab [[TURN [dagg.turn]] [USE [dagg.use]]]
-make "dagg.cmdtab se :dagg.cmdtab [[ZLOAD [dagg.soon]] [ZSAVE [dagg.soon]]]
+make "dagg.cmdtab se :dagg.cmdtab [[ZLOAD [dagg.zload]] [ZSAVE [dagg.zsave]]]
 
 ; DIRTAB. The string T.BAK labels is BACK, not BACKWARD -- the CoCo manual
 ; prints MOVE BACKWARD and the table does not hold it, so that spelling
@@ -2884,14 +3643,10 @@ to dagg.cmderr
   type word char 63 char 63
 end
 
-; The three commands whose milestones are still ahead -- CLIMB, ZLOAD and
-; ZSAVE, all M5's. Each row of dagg.cmdtab loses this as its own milestone
-; lands (ATTACK's went at M4); the table is complete from M2 because the
-; PARSER's ambiguity rule depends on it -- Z has to be ambiguous and M has
-; to not be.
-to dagg.soon
-  pr [NOT YET]
-end
+; Every command has its handler now -- CLIMB, ZLOAD and ZSAVE were the
+; last three and landed at M5 (ATTACK's went at M4). The table is complete
+; because the PARSER's ambiguity rule depends on it -- Z has to be
+; ambiguous and M has to not be.
 
 ;==========================================================================
 ; HUMAN -- HUMAN.ASM:PLAY10/HUMAN. Echo the character, buffer it, handle
@@ -2960,6 +3715,14 @@ to dagg.enter
   make "dagg.linbuf []
   make "dagg.linptr 1
   dagg.dispatch
+  ; The pool has no automatic collection, so every cell a command spent is
+  ; still spent when the next one starts, and a Pico 2 W has ~3,900 free
+  ; to play in -- fifty commands of the hundred a TURN costs (B97). This
+  ; is the one moment in the game that is BETWEEN turns rather than in
+  ; one: the command has finished, the screen already shows its result,
+  ; and the player has not typed the next character yet. A sweep is ~4 ms
+  ; (roadmap P13 M3) against a heart that beats every few hundred.
+  recycle
   if :dagg.over [stop]
   if :dagg.faint [stop]
   ; HMAN70: no prompt while the map is up either -- there is nowhere to
@@ -3034,6 +3797,7 @@ to daggorath
   make "dagg.plhand 0  make "dagg.prhand 0  make "dagg.ptorch 0
   make "dagg.bag []  make "dagg.floor []
   make "dagg.dspmod 0
+  make "dagg.frzflg "false
   make "dagg.sndn -1  make "dagg.sndvol 0
   splitscreen
   window
