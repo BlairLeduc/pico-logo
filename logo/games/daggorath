@@ -4,7 +4,8 @@
 ;
 ;   load "daggorath
 ;   daggorath        ; a game
-;   daggorath.demo   ; the attract mode -- any key ends it
+;
+; ESC gives the console back.
 ;
 ; docs/daggorath-design.md is the design and section 15 is the milestone
 ; list. Everything in it is here: the forward-view cell walk (VIEWER.ASM),
@@ -14,15 +15,14 @@
 ; the bag, both hands and all fifteen commands; the CCB table, CMOVE and
 ; its preference walk, the peek-a-boo, combat both ways and CREGEN; the
 ; level graph, both wizards, the ring riddle and ZSAVE/ZLOAD; and
-; SOUNDS.ASM's twenty-three effects with the wizard's voice and the
-; attract mode.
+; SOUNDS.ASM's twenty-three effects with the wizard's voice.
 ;
 ; YOU START IN THE DARK, and that is not a fault: the player's own light
 ; is zero (COMDAT.ASM never sets PRLITE), so until you PULL the pine torch
 ; out of the bag and USE it, RLIGHT is 0 and VCTLST.ASM:SETFAX draws
-; nothing at any range. The ROM's own attract mode opens EXAMINE / PULL
+; nothing at any range. The ROM's own attract mode opened EXAMINE / PULL
 ; RIGHT TORCH / USE RIGHT / LOOK (TOKEN.ASM:AUTTAB) for exactly that
-; reason, and `daggorath.demo` will show you.
+; reason.
 ;
 ; `make "dagg.pace 1` before `daggorath` runs the creatures at the ROM's
 ; raw table; 2 is the default and is what a board settled on beside the
@@ -416,18 +416,24 @@ make "v []
 ;==========================================================================
 ; Object control blocks -- CD.ASM's OCB, as twelve parallel flat lists.
 ;
-; The ROM has room for 72 (`OCBLND RMB OC.LEN*72`) and creates 65: 63 from
-; OMXTAB (ONCE.ASM:CINI40) and the two GAMDAT gives the player. `item` and
-; `.setitem` are the only indexing this Logo has, so a list of records
-; would cost a second level of both on every field read -- the same
-; reasoning, and the same shape, as logo/games/asteroids' rock state.
+; The ROM has room for 72 (`OCBLND RMB OC.LEN*72`) and a GAME creates 65:
+; 63 from OMXTAB (ONCE.ASM:CINI40) and the two GAMDAT gives the player.
+; SIZE IT TO THE ROM'S 72 AND NOT TO THAT 65 (B100): DEMDAT is THREE
+; objects -- an iron sword, a pine torch and a leather shield -- so the
+; attract mode needs 66, and a table cut to the count one path happens to
+; stop at is a table the other path runs off the end of.
+;
+; `item` and `.setitem` are the only indexing this Logo has, so a list of
+; records would cost a second level of both on every field read -- the
+; same reasoning, and the same shape, as logo/games/asteroids' rock
+; state.
 ;
 ; The fields are CD.ASM's, minus P.OCPTR: the ROM threads the bag and each
 ; creature's loot through that one link field, and here the bag is a plain
 ; Logo list of OCB numbers. `dagg.floor` is the other half of it -- see
 ; dagg.ofind.
 
-make "dagg.ocbmax 65
+make "dagg.ocbmax 72
 
 ; `fput`, not `lput`: `lput` copies the whole list to append one cell, so
 ; building twelve 65-cell lists that way is an O(n^2) 26,000 cells of
@@ -553,9 +559,10 @@ end
 make "dagg.gamdat [17 15]
 
 to dagg.givebag
-  local "i
+  local "i local "dat
   make "dagg.bag []
-  foreach :dagg.gamdat [[typ]
+  make "dat :dagg.gamdat
+  foreach :dat [[typ]
     make "i dagg.obirth :typ :dagg.level
     .setitem :i :dagg.ocown 1
     dagg.ocbfil :i :typ
@@ -793,22 +800,18 @@ to dagg.ccfree
   output 0
 end
 
-; FNDCEL, COMCRE.ASM: any cell that is not solid rock. RNDCEL draws the
-; COLUMN first and the row second (`TFR A,B` before the second SWI) -- the
-; same order B83 found the maze generator had backwards -- and at run time
-; it is Logo's own `random`, because everything the ROM randomised after
-; DGEN90's spin stayed random at run time (design section 7.2).
+; FNDCEL, COMCRE.ASM: any cell that is not solid rock, drawn from DGNGEN's
+; OWN generator -- `JSR RNDCEL`, the routine the carve is built out of,
+; running on the one 24-bit SEED the whole cartridge shares. It is not
+; re-seeded between the maze and the monsters, so where a creature is born
+; is a function of the level and of nothing else, and level one's twenty-four
+; are the same twenty-four cells in every game ever played. That is what
+; makes a seventeen-keystroke recorded demo possible at all, and this port
+; used Logo's `random` here instead (B104).
 to dagg.fndcel
-  local "r local "c local "ok
-  make "r 0
-  make "c 0
-  make "ok "false
-  until [:ok] [
-    make "c random 32
-    make "r random 32
-    make "ok not (255 = dagg.cell :r :c)
-  ]
-  output list :r :c
+  dagg.rndcel
+  until [not (255 = dagg.cell :dagg.rr :dagg.rc)] [dagg.rndcel]
+  output list :dagg.rr :dagg.rc
 end
 
 ; CBIRTH, COMCRE.ASM. CBIR20 keeps drawing cells until it finds one nobody
@@ -1166,21 +1169,66 @@ end
 ; no writer outside this section.
 make "dagg.mzlvl -1
 
+; CD.ASM's TIMBEG counters, through COMMON.ASM:CLK42's chain: TENTH rolls at
+; 10 into SECOND and SECOND at 60 into MINUTE (ROLTAB).  Only SECOND is ever
+; read -- DGEN90 spends it, and nothing else in the ROM touches it -- and it
+; is declared up here rather than beside the rest of the clock because
+; `load` carves level one long before that section is reached.  dagg.tenth
+; is what turns them.
+make "dagg.tenth.n 0
+make "dagg.second 0
+
+; The SEED as DGNGEN leaves it, kept beside the level the maze holds.  The
+; ROM re-carves on every entry and hands the running register straight on
+; to CBIRTH, so what the generator is holding when the doors are in is part
+; of the level, not a side effect of having just carved it: a CLIMB back to
+; a level we already have has to arrive at this state, or the creatures
+; would be born out of whatever the last carve happened to leave.
+make "dagg.mzs0 0
+make "dagg.mzs1 0
+make "dagg.mzs2 0
+
 ; DGNGEN: the whole level, into :dagg.maze.  `:lvl` is 0-based.
+;
+; DGEN90 is the tail, and it is the ONLY thing standing between the maze and
+; the monsters: `LDB SECOND / SWI RANDOM / DECB / BNE`, the seconds counter
+; spent as draws.  On the entry every game makes -- COMINI has just zeroed
+; RAM and IRQSYN started the clock three instructions earlier -- that
+; counter is nought, which is why level one's creatures are the same in
+; every game and why `Levels/Levels.html` can print them on a map while
+; saying that "after that, creatures will be randomized on each new level".
+; A CLIMB minutes later spends whatever second it happens to be.
+;
+; The 6809's DECB/BNE is a post-test, so a literal reading of a zero counter
+; is 256 draws and not none -- and 256 draws do not produce the published
+; level one, while 0, 2, 4 and 6 all do.  The ROM's own comment on that
+; instruction says "use the jiffy counter" where the operand says SECOND, so
+; something in those two lines is not what it looks like.  The published map
+; is the only observation of the thing being modelled and it is what this
+; follows; the discrepancy is recorded in design section 7.2.
 to dagg.gen :lvl
-  if :dagg.mzlvl = :lvl [stop]
-  make "dagg.s0 item (:lvl + 1) :dagg.lvltab
-  make "dagg.s1 item (:lvl + 2) :dagg.lvltab
-  make "dagg.s2 item (:lvl + 3) :dagg.lvltab
-  dagg.mzfill
-  dagg.rndcel
-  make "dagg.dr :dagg.rr
-  make "dagg.dc :dagg.rc
-  make "dagg.rem 500
-  dagg.walk
-  dagg.wallin
-  dagg.doors
-  make "dagg.mzlvl :lvl
+  ifelse :dagg.mzlvl = :lvl [
+    make "dagg.s0 :dagg.mzs0
+    make "dagg.s1 :dagg.mzs1
+    make "dagg.s2 :dagg.mzs2
+  ] [
+    make "dagg.s0 item (:lvl + 1) :dagg.lvltab
+    make "dagg.s1 item (:lvl + 2) :dagg.lvltab
+    make "dagg.s2 item (:lvl + 3) :dagg.lvltab
+    dagg.mzfill
+    dagg.rndcel
+    make "dagg.dr :dagg.rr
+    make "dagg.dc :dagg.rc
+    make "dagg.rem 500
+    dagg.walk
+    dagg.wallin
+    dagg.doors
+    make "dagg.mzs0 :dagg.s0
+    make "dagg.mzs1 :dagg.s1
+    make "dagg.mzs2 :dagg.s2
+    make "dagg.mzlvl :lvl
+  ]
+  repeat :dagg.second [ignore dagg.rnd]
 end
 
 ; 512 shift-at-a-time draws, ~0.96 s on a Pico 2 W at 300 MHz, once per
@@ -1260,6 +1308,12 @@ end
 ; The transform -- design section 6.2, board-confirmed at M0
 ; (tests/logo/p17m0): three constants a range, two multiplies and two
 ; subtracts a point.
+;
+; `dagg.c`'s constant term is the turtle y the centroid (128, 76) lands on,
+; and so the y the view scales about: 40, which is device row 120, the
+; middle of the 240-row band. A full-scale view is 190 rows and therefore
+; spans rows 25..214 -- centred, with 25 blank rows above and 25 below, of
+; which the status line on row 23 (section 4.1) is the last ten.
 
 make "dagg.k   0
 make "dagg.kx0 0
@@ -1270,7 +1324,7 @@ to dagg.setscale :range :table
   make "s (item (:range + 1) :table) / 128
   make "dagg.k :s * 1.25
   make "dagg.kx0 128 * :dagg.k
-  make "dagg.c 65 + (95 * :s)
+  make "dagg.c 40 + (95 * :s)
 end
 
 ; SETFAX, VCTLST.ASM (design section 8): outputs whether this range draws
@@ -1494,6 +1548,12 @@ end
 ; The longest name in the game is fourteen characters (MITHRIL SHIELD,
 ; LEATHER SHIELD), so two full hands are 28 of the 40 and the bar always
 ; has room for the heart between them.
+;
+; It sits on the LAST of the band's 24 rows -- row 23, y = -75, pixel rows
+; 230..239 of the 240 -- so the bar is flush against the top of the text
+; area, the way row 152 of the CoCo's bitmap sits against its own four
+; text lines. The viewer above it ends at y = -53.75 (section 4.1), so
+; nothing it draws reaches down here.
 
 to dagg.spaces :n
   local "s
@@ -1510,7 +1570,7 @@ to dagg.status.line
 end
 
 to dagg.status
-  pu (setpos -160 -55)
+  pu (setpos -160 -75)
   (write dagg.status.line :dagg.status.fg :dagg.status.bg)
 end
 
@@ -1810,7 +1870,10 @@ end
 ; tall, which fills the whole 256 x 192 display -- the status line and the
 ; text area included, which is why PUSE.ASM:USC210 turns the drawn heart
 ; off before putting the map up. Ours is 10 x 7, so 320 x 224 at the top
-; of the band, and the status line goes with it for the same reason.
+; of the band, which stops sixteen pixels short of the status row on row
+; 23. The status line goes anyway: MAPPER opens with `clean`, nothing
+; redraws the bar over a map, and USC210's `CLR HEARTF` is an `ht` here
+; rather than something the picture happens to cover.
 ;
 ; Drawn as ONE horizontal stroke per RUN of consecutive wall cells rather
 ; than a stroke a cell: a real level is a couple of hundred strokes instead
@@ -2722,7 +2785,7 @@ to dagg.attack :pow :dpow :ddam
   ] [
     make "t 10 * (:t - 3)
   ]
-  output ((random 256) + :t) > 126
+  output ((dagg.rnd) + :t) > 126
 end
 
 ; DAMAGE, PATTK.ASM: the attacker's power through its own offense
@@ -2956,7 +3019,7 @@ to dagg.pattk.swing :cls :mgo :pho
     make "t 0
     if not (:dagg.ptorch = 0) [make "t item :dagg.ptorch :dagg.octyp]
     if (or (:dagg.ptorch = 0) (:t = :dagg.t.dead)) [
-      if not (0 = random 4) [stop]
+      if not (0 = bitand dagg.rnd 3) [stop]
     ]
   ]
   ; PATT24 is a sound AND an OUTSTI, and M4 ported only the sound: three
@@ -3044,7 +3107,7 @@ to dagg.cwalk :y :rel
   if :b > 2 [output "true]
   ; `BITA #BIT0` -- half the time, and the same random byte the ROM has
   ; already drawn does not get reused here: CWLK20 draws its own.
-  if 1 = random 2 [
+  if 1 = bitand dagg.rnd 1 [
     dagg.sound (item :y :dagg.cctyp) (255 - (31 * :a))
   ]
   make "dagg.newluk "true
@@ -3178,7 +3241,7 @@ to dagg.cmove :y
   ; top bit picks left-before-right or right-before-left; its bottom two
   ; bits give the quarter of the time a turn is tried BEFORE going
   ; forward, which is the `LEAX 1,X` the ROM calls magic.
-  make "i random 256
+  make "i dagg.rnd
   make "base 0
   if :i < 128 [make "base 3]
   if 0 = (modulo :i 4) [make "base :base + 1]
@@ -3204,9 +3267,15 @@ end
 ; the IRQ's own behaviour: the queues keep counting while a task runs, and
 ; a creature that came due during a long redraw takes its turn immediately
 ; after it rather than losing it.
+;
+; CLK42's timer chain rides here too, because this IS the TENTH queue: ten
+; passes make a second and ROLTAB rolls the second at sixty. DGEN90 is the
+; only thing in the ROM that ever reads that counter.
 to dagg.tenth
   local "i local "n
   make "dagg.tenth.due :dagg.tenth.due + 100
+  make "dagg.tenth.n modulo (:dagg.tenth.n + 1) 10
+  if 0 = :dagg.tenth.n [make "dagg.second modulo (:dagg.second + 1) 60]
   repeat :dagg.ccbmax [
     make "i repcount
     if not (0 = item :i :dagg.ccuse) [
@@ -3229,7 +3298,7 @@ to dagg.cregen
   make "n 0
   foreach :row [[v] make "n :n + :v]
   if not (:n < 32) [stop]
-  make "t 2 + random 8
+  make "t 2 + bitand dagg.rnd 7
   .setitem (:t + 1) :row ((item (:t + 1) :row) + 1)
 end
 
@@ -3249,6 +3318,7 @@ make "dagg.olight 8
 make "dagg.hearts "false
 make "dagg.heartf "true
 make "dagg.over "false
+make "dagg.dead "false
 
 ;==========================================================================
 ; The heart -- design section 4.1a: turtle 1 wearing one of two costumes,
@@ -3298,8 +3368,8 @@ to dagg.putheart :slot :rows
 end
 
 ; Centred between the two hand names, on the same character row the status
-; line is written to: turtle x 0 is device column 160, which is columns 19
-; and 20 of the forty.
+; line is written to (row 23, the bottom of the band): turtle x 0 is device
+; column 160, which is columns 19 and 20 of the forty.
 to dagg.setup.heart
   dagg.putheart 1 :dagg.heart.small
   dagg.putheart 2 :dagg.heart.large
@@ -3307,7 +3377,7 @@ to dagg.setup.heart
   make "dagg.heartf "true
   ask 1 [
     setrot "fixed
-    pu (setpos 0 -55)
+    pu (setpos 0 -75)
     setpc :dagg.status.fg
     setsh 1
     st
@@ -3398,10 +3468,22 @@ end
 ; `BRA *` until a keystroke restarts the game. WIZ1's vector list is M4's
 ; creature data, so what M2 owns is the bar going, the message arriving,
 ; and the loop ending.
+;
+; DEATH's last three instructions are `CLR FAINT / DEC AUTFLG / BRA *`, and
+; the ROM's own comment on the first two is "force GAME restart on char":
+; FAINT goes because CLK50 will not look at the keyboard while it is set,
+; AUTFLG comes on because the abort that ends the attract mode is the same
+; abort that starts the next game, and then the machine spins with no task
+; running. That is one flag here, `dagg.dead`, because dagg.play owns the
+; abort and does the holding. PINCAN.ASM:WINNER is the control: its `BRA *`
+; has neither instruction in front of it, which is why a win freezes where
+; a death goes round (B103).
 to dagg.death
   local "a
   make "a [YET ANOTHER DOES NOT RETURN...]
   make "dagg.over "true
+  make "dagg.dead "true
+  make "dagg.faint "false
   make "dagg.heartf "false
   ask 1 [ht]
   pr []
@@ -4035,32 +4117,36 @@ end
 ; HMAN30/HMAN50/HMAN70: terminate the buffer, reset the pointer, dispatch
 ; on the first token, then prompt -- unless we are unconscious, in which
 ; case there is no prompt to give.
+; The two characters this opens with are HMAN30's `CLRA / SWI OUTCHR`, and
+; the character it clears A to is not a control code: `I.SP EQU $00`
+; (CD.ASM) is the SPACE. So the ROM writes a space OVER the cursor and
+; advances, and everything a command prints is separated from the line you
+; typed by exactly one column -- `.ATTACK LEFT !!!`, not `.ATTACK
+; LEFT!!!`. Ours has the cursor past the underline rather than on it (see
+; dagg.prompt), so the same effect is a destructive backspace onto the
+; underline and then the space.
+;
+; The `recycle` after the dispatch is B97's. The pool has no automatic
+; collection, so every cell a command spent is still spent when the next
+; one starts, and a Pico 2 W has ~3,900 free to play in -- fifty commands
+; of the hundred a TURN costs. This is the one moment in the game that is
+; BETWEEN turns rather than in one: the command has finished, the screen
+; already shows its result, and the player has not typed the next
+; character yet. A sweep is ~4 ms (roadmap P13 M3) against a heart that
+; beats every few hundred.
+;
+; HMAN70 is the last test: no prompt while the map is up either -- there
+; is nowhere to put one, and the next keystroke takes the map down anyway.
 to dagg.enter
-  ; HMAN30's `CLRA / SWI OUTCHR`, and the character it clears A to is not
-  ; a control code: `I.SP EQU $00` (CD.ASM) is the SPACE. So the ROM writes
-  ; a space OVER the cursor and advances, and everything a command prints
-  ; is separated from the line you typed by exactly one column -- `.ATTACK
-  ; LEFT !!!`, not `.ATTACK LEFT!!!`. Ours has the cursor past the
-  ; underline rather than on it (see dagg.prompt), so the same effect is a
-  ; destructive backspace onto the underline and then the space.
   type char 8
   type char 32
   make "dagg.tokens dagg.split :dagg.linbuf
   make "dagg.linbuf []
   make "dagg.linptr 1
   dagg.dispatch
-  ; The pool has no automatic collection, so every cell a command spent is
-  ; still spent when the next one starts, and a Pico 2 W has ~3,900 free
-  ; to play in -- fifty commands of the hundred a TURN costs (B97). This
-  ; is the one moment in the game that is BETWEEN turns rather than in
-  ; one: the command has finished, the screen already shows its result,
-  ; and the player has not typed the next character yet. A sweep is ~4 ms
-  ; (roadmap P13 M3) against a heart that beats every few hundred.
   recycle
   if :dagg.over [stop]
   if :dagg.faint [stop]
-  ; HMAN70: no prompt while the map is up either -- there is nowhere to
-  ; put one, and the next keystroke takes the map down anyway.
   if not :dagg.heartf [stop]
   dagg.prompt
 end
@@ -4074,97 +4160,34 @@ to dagg.dispatch
 end
 
 ;==========================================================================
-; The attract mode -- ONCE.ASM:DEMO10 and HUMAN.ASM:PLAY20, design
-; section 15's M6. Design section 16 names it as the FIRST thing this
-; game would give up if it ran out of room, and it did not have to.
-;
-; The demo is a real game with the keyboard replaced: PLAYER's very first
-; test is `TST AUTFLG`, and when it is set the task feeds HUMAN out of
-; AUTTAB instead of out of KBDGET. Everything below that -- the parser,
-; the scheduler, the creatures, the heart -- runs exactly as it does for
-; a player, which is why this costs two procedures and not a mode.
-
-make "dagg.autflg "false
-make "dagg.autptr 1
-make "dagg.autwrd 0
-make "dagg.aut.due 0
-
-; TOKEN.ASM:AUTTAB, seventeen commands. The ATM macro's arguments are the
-; same packed strings CMDTAB, DIRTAB and GENTAB hold, so every word here
-; is one the parser already knows and the generator already checks.
-make "q [[EXAMINE] [PULL RIGHT TORCH] [USE RIGHT]]
-make "q se :q [[LOOK] [MOVE] [PULL LEFT SHIELD]]
-make "q se :q [[PULL RIGHT SWORD] [MOVE] [MOVE]]
-make "q se :q [[ATTACK RIGHT] [TURN RIGHT] [MOVE]]
-make "q se :q [[MOVE] [MOVE] [TURN RIGHT] [MOVE] [MOVE]]
-make "dagg.auttab :q
-make "q []
-
-; DEMO10: the crescent wizard (`LDX #WIZ1`) fades in over the two welcome
-; messages -- decoded out of ONCE.ASM's own bytes rather than transcribed
-; -- and then the game drops into level three at COMDAT.ASM's own (12,22)
-; with DEMDAT's kit: an iron sword, a pine torch and a leather shield.
-; That position is the one M1 found `GAME10` overwriting for a real game
-; (B83), and it is a carved cell of level three even though it is not one
-; of level one.
-;
-; WIZIN0/WIZOUT is dagg.show.wizard, reduced the way M5 reduced it, and
-; the two WAITs after the message are MISC.ASM's own 81 jiffies each.
-to dagg.demo
-  make "dagg.row 12  make "dagg.col 22
-  make "dagg.level 2
-  make "dagg.gamdat [13 15 16]
-  make "dagg.autptr 1
-  make "dagg.autwrd 0
-  make "dagg.aut.due :dagg.now + 1350
-  dagg.show.wizard item 12 :dagg.fwdcre
-  pr []
-  pr [I DARE YE ENTER...]
-  pr [...THE DUNGEONS OF DAGGORATH!!!]
-  wait 2700
-end
-
-; PLAY20/PLAY30/PLAY40/PLAY50: one token at a time, a WAIT before each,
-; a space after each and a carriage return after the last -- so the demo
-; types at 81 jiffies a word, which is the pace of the original and not a
-; choice. When AUTTAB runs out the ROM waits twice more and jumps back to
-; DEMO; ours stops, because a Logo game has to let go (the same reason
-; dagg.key owns ESC).
-to dagg.autplay
-  local "cmd local "w
-  if :dagg.now < :dagg.aut.due [stop]
-  make "dagg.aut.due :dagg.now + 1350
-  make "cmd item :dagg.autptr :dagg.auttab
-  make "dagg.autwrd :dagg.autwrd + 1
-  if :dagg.autwrd > count :cmd [
-    dagg.human "cr
-    make "dagg.autwrd 0
-    make "dagg.autptr :dagg.autptr + 1
-    if :dagg.autptr > count :dagg.auttab [make "dagg.over "true]
-    stop
-  ]
-  make "w item :dagg.autwrd :cmd
-  repeat count :w [dagg.human item repcount :w]
-  dagg.human char 32
-end
-
-;==========================================================================
 ; The game loop -- design section 5. Input is polled and never blocked on:
 ; `readchar` would stop the world and `pollkeys` discards the characters,
 ; and this is a typing game.
 ;
-; DEMO10 opens by arming the ABORT function, so any key ends the attract
-; mode. A player's keystroke is the one thing it is waiting for.
+; The tail is DEATH's `BRA *`: after a death the screen HOLDS rather than
+; flashing past, and the key that ends it is `LDX #GAME` -- another game.
+; That is what `dagg.again` carries, and it is the one thing left asking
+; for a second pass now that the attract mode is gone. ESC is this port's
+; own door, for the reason dagg.key already owns it: the ROM's restart has
+; nowhere to go but another game, and a Logo program has to give the
+; console back.
+
+; DEATH's `DEC AUTFLG`, which the ROM's own comment calls "force GAME
+; restart on char": the pass that just ended asking for another one.
+make "dagg.again "false
 
 to dagg.play
+  local "c
   until [:dagg.over] [
     dagg.tick
-    ifelse :dagg.autflg [
-      if key? [ignore rc  make "dagg.over "true]
-      dagg.autplay
-    ] [
-      if key? [dagg.human dagg.key rc]
-    ]
+    if key? [dagg.human dagg.key rc]
+  ]
+  if :dagg.dead [
+    refresh
+    until [key?] []
+    make "c dagg.key rc
+    while [key?] [ignore rc]
+    if not (:c = "esc) [make "dagg.again "true]
   ]
 end
 
@@ -4192,24 +4215,53 @@ end
 ; Entry points. No `erall` here -- that is the operator's job before
 ; `load`, same convention as tests/logo/p17m0's own header.
 ;
-; `daggorath` is GAME10 through GAME50: set the player where the ROM sets
-; him, build the level, then fall into the scheduler. It returns when the
-; player quits or dies, and puts the screen back the way it found it.
+; `daggorath` is ONCE.ASM:GAME -- COMINI through SCHED, and then the loop
+; the ROM builds out of DEATH's restart. The cartridge's other entry was
+; DEMO, four instructions above it; the attract mode behind it is gone
+; (design section 16), so GAME is the only way in.
+
+to daggorath
+  dagg.cartridge
+end
+
+; The loop itself. Of the three things in the ROM that ask for another
+; pass -- CLK50's `LDX #GAME / STX 10,S`, PLAY20's `JMP DEMO` and DEATH's
+; "force GAME restart on char" -- the first two were the attract mode's
+; and the third is a player's, so a death is what keeps the loop.
+to dagg.cartridge
+  ; `clock` saves the speed it FOUND, so it runs once around the whole
+  ; loop and not once a pass -- a second call would find the fast clock it
+  ; set itself and `restore.clock` would have nothing to give back.
+  ignore clock
+  make "dagg.again "true
+  until [not :dagg.again] [
+    make "dagg.again "false
+    ; CINI10 zeroes $0200-$4000 on EVERY entry through COMINI. This is
+    ; that: the pass that just ended left a dungeon, 66 OCBs and a
+    ; creature table behind it, and the pool has no automatic collection.
+    ; One sweep between games is nothing.
+    recycle
+    daggorath.once
+  ]
+  daggorath.quit
+end
 
 ; ONCE.ASM:GAME10 -- `LDD #$100B / STD PROW` -- row 16, column 11, facing
 ; north, which is where docs/DungeonsOfDaggorath/Levels/level1.svg draws the
-; player's blue dot. COMDAT.ASM's `FCB 12 / FCB 22` is the attract-mode
-; DEMO's start; GAME10 overwrites it, and (12,22) is not a carved cell.
+; player's blue dot. COMDAT.ASM's RAMDAT holds `FCB 12 / FCB 22`, which
+; GAME10 overwrites and which is not a carved cell of level one.
 ;
 ; GAME50 makes the initial view, fakes the prompt and falls into the
 ; scheduler, which is the last three statements here.
-to daggorath
+to daggorath.once
   make "dagg.row 16  make "dagg.col 11  make "dagg.dir 0
   make "dagg.ppow 160  make "dagg.pdam 0  make "dagg.objwt 35
   make "dagg.prlite 0  make "dagg.prmlite 0
   make "dagg.light 0  make "dagg.mlight 0  make "dagg.olight 0
   make "dagg.magflg "false  make "dagg.mapflg "false
   make "dagg.faint "false  make "dagg.over "false
+  make "dagg.dead "false
+  make "dagg.tenth.n 0  make "dagg.second 0
   make "dagg.linbuf []  make "dagg.tokens []  make "dagg.linptr 1
   make "dagg.plhand 0  make "dagg.prhand 0  make "dagg.ptorch 0
   make "dagg.bag []  make "dagg.floor []
@@ -4221,13 +4273,9 @@ to daggorath
   ct
   ht
   setrefresh "manual
-  ignore clock
   make "dagg.now ticks
   dagg.setup.sound
-  ; GAME20 is reached from GAME10 for a game and from DEMO10 for the
-  ; attract mode, and everything above this line is common to both.
   make "dagg.level 0
-  if :dagg.autflg [dagg.demo]
   ; CINI40, then GAME20's NEWLVL, then GAME30, and that order is the game:
   ; the whole dungeon's loot exists before the level does, NLVL40 hands it
   ; to the creatures it has just given birth to, and only THEN does the
@@ -4238,15 +4286,6 @@ to daggorath
   dagg.cmx.reset
   dagg.newlvl :dagg.level
   dagg.givebag
-  ; GAME40: the attract mode opens on the whole map, SLEEP set so nothing
-  ; moves under it, for two of MISC.ASM's 81-jiffy waits.
-  if :dagg.autflg [
-    make "dagg.mapflg "true
-    make "dagg.dspmod 1
-    dagg.pupdat :dagg.norscl
-    wait 2700
-    make "dagg.dspmod 0
-  ]
   dagg.setup.heart
   dagg.hupdat
   make "dagg.heart.due ticks
@@ -4255,27 +4294,18 @@ to daggorath
   make "dagg.burner.due ticks + 60000
   make "dagg.tenth.due ticks + 100
   make "dagg.cregen.due ticks + 300000
-  ; PLAYER is a task like the other five, so the demo's own timer is
-  ; re-anchored here too -- DEMO10 and GAME40 between them hold the screen
-  ; for five seconds, and the first word should arrive 81 jiffies after
-  ; the view does rather than at once.
-  if :dagg.autflg [make "dagg.aut.due ticks + 1350]
   dagg.pupdat :dagg.norscl
   dagg.prompt
+  ; B101, and it is B97's argument one moment earlier. Building a pass
+  ; costs ~2,700 atoms of pure garbage -- 1,900 of them the two heart
+  ; costumes, whose hex rows are long words that `putsh` has already
+  ; copied into the device -- and NOTHING swept between that and the
+  ; player's first command. `dagg.enter` sweeps after a command; there was
+  ; no sweep before the first one. This is the same "between turns rather
+  ; than in one" moment: the view is up, the prompt is drawn, and nobody
+  ; has typed yet.
+  recycle
   dagg.play
-  daggorath.quit
-end
-
-; GAME20 the other way in: DEMDAT rather than GAMDAT, and `daggorath`
-; itself untouched, which is the point -- ONCE.ASM chooses between the two
-; with a pointer and nothing downstream of GAME20 knows which it got.
-to daggorath.demo
-  local "was
-  make "was :dagg.gamdat
-  make "dagg.autflg "true
-  daggorath
-  make "dagg.autflg "false
-  make "dagg.gamdat :was
 end
 
 to daggorath.quit

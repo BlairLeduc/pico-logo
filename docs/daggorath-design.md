@@ -107,8 +107,10 @@ and every wireframe creature wrong. 256 × 1.25 = **320 exactly**, and
 152 × 1.25 = **190**.
 
 ```
- rows   0–189   GRAPHICS   the viewer, 320 x 190      (turtle y  +160 .. -28.75)
- rows 190–239   GRAPHICS   the status line: hands by `write`, heart as a turtle
+ rows   0–24    GRAPHICS   unused: half the gap the 1.25x mapping leaves
+ rows  25–214   GRAPHICS   the viewer, 320 x 190      (turtle y  +135 .. -53.75)
+ rows 215–229   GRAPHICS   unused: the other half, less the status line
+ rows 230–239   GRAPHICS   the status line: hands by `write`, heart as a turtle
  lines 24–31    TEXT       eight lines: messages and the scrolling command line
 ```
 
@@ -140,7 +142,10 @@ the game is fourteen characters, so a second entry at column 20 still ends
 inside the screen. The status line is the same identity read the other way:
 `STATUX` justifies to columns 0 and 31 of 32, and ours to 0 and 39 of 40.
 
-The status line is therefore one `write` at turtle-space `y = -55`, with the
+The status line is therefore one `write` at turtle-space `y = -75` — row 23,
+the **last** of the band's twenty-four, so the bar is flush against the top of
+the text area the way row 152 of the CoCo's bitmap sits against its own four
+text lines — with the
 two hand names justified to columns 0 and 39 as `STATUS.ASM:STATUX` justifies
 them to 0 and 31, and the heart between them.
 
@@ -467,12 +472,14 @@ per point, two multiplies and two subtractions:
 ```
 k    = 1.25 * scale                 x = k*X - kx0
 kx0  = 128 * k                      y = c - k*Y
-c    = 65 + 95 * scale
+c    = 40 + 95 * scale
 ```
 
-Check: at range 1, `k` = 1.25, `kx0` = 160, `c` = 160. `X` = 0 → `x` = −160,
-`X` = 255 → `x` = 158.75, `Y` = 0 → `y` = 160 (screen row 0), `Y` = 151 →
-`y` = −28.75 (row 189). The centroid (128, 76) lands at turtle (0, 65).
+Check: at range 1, `k` = 1.25, `kx0` = 160, `c` = 135. `X` = 0 → `x` = −160,
+`X` = 255 → `x` = 158.75, `Y` = 0 → `y` = 135 (screen row 25), `Y` = 151 →
+`y` = −53.75 (row 214). The centroid (128, 76) lands at turtle (0, 40) —
+device row 120, the middle of the band, which is why the view is centred in
+it at every scale rather than only at full scale.
 
 **Keep the tables as the ROM's own bytes.** The alternative — pre-transforming
 into turtle coordinates offline — costs exactly the same two multiplies at draw
@@ -623,10 +630,90 @@ them. So the chain from the published 1982 maps to the board is unbroken with
 no maze data in between — the dungeon is still bit-identical to the 1982 one,
 and a Daggorath map drawn on paper in 1983 still works.
 
-**Everything else stays random at run time,** and that is also faithful:
-`DGEN90` spins the generator by the seconds counter before anything else uses
-it, so creature positions, object placement, movement and combat rolls were
-never reproducible. Those use Logo's `random`.
+**Creature placement is not "everything else", and this section used to say it
+was.** It read: *"`DGEN90` spins the generator by the seconds counter before
+anything else uses it, so creature positions, object placement, movement and
+combat rolls were never reproducible."* The spin is real — `LDB SECOND / SWI
+RANDOM / DECB / BNE` at the tail of `DGNGEN` — but on the entry every game
+makes there is no second to spend. `COMINI` has just zeroed all of RAM,
+`IRQSYN` started the clock three instructions earlier, and `GAME20` calls
+`NEWLVL` immediately: `SECOND` is nought. So the generator runs straight on
+out of the doors and into `CBIRTH`, which draws through `FNDCEL → RNDCEL →
+RANDOM` — **the same routine, on the same 24-bit SEED, never re-seeded between
+the maze and the monsters.**
+
+Level one's twenty-four creatures are therefore fixed, in every copy of the
+game ever sold, and `Levels/Levels.html` says so in as many words: *"when you
+start the game the creatures on level-one will start off as shown"*, and
+*"after that, creatures will be randomized on each new level"* — which is
+`DGEN90` exactly, because by the time you `CLIMB` there is a second on the
+clock. It prints creatures for level one and for no other level. That
+determinism is also the only reason a seventeen-keystroke recorded demo is
+possible at all.
+
+This port drew those cells from Logo's `random` ([B104](bugs.md)) and so dealt
+a different dungeon population every game.
+`test_level_one_is_born_where_the_1982_game_was_born` now pins all twenty-four
+to the published map, in `NLVL30`'s birth order, and `dagg.tenth` carries
+`CLK42`'s counter so a `CLIMB` still gets `DGEN90`'s spin.
+
+**One thing here does not reconcile, and it is recorded rather than smoothed
+over.** The 6809's `DECB / BNE` is a post-test, so a literal reading of a zero
+counter is **256** draws and not none — and 256 draws do not produce the
+published level one, while 0, 2, 4 and 6 all do. The ROM's own comment on that
+instruction says *"use the jiffy counter"* where the operand says `SECOND`, so
+one of those two lines is not what it looks like. The published map is the
+only observation we have of the thing being modelled, and it is what the port
+follows.
+
+**The run-time rolls come off that same SEED too, and this port had them on
+Logo's `random` as well** ([B106](bugs.md)). The paragraph that used to stand
+here argued that movement, preference walks, combat and `CREGEN`'s type are
+*"interleaved with the player's own timing and not observable as a fixed
+sequence, so nothing is lost by drawing them elsewhere."* That is wrong, and
+the attract mode is what says so. `RANDOM.ASM` is the **only** source of
+randomness the cartridge has — one 24-bit SEED, six draw sites, all of them in
+this repository:
+
+| Site | ROM | What it decides |
+|---|---|---|
+| `RNDCEL` | `DGNGEN.ASM` | every cell of the carve, and `FNDCEL`'s birth cells |
+| `DGEN90` | `DGNGEN.ASM` | the `SECOND` spin between the maze and the monsters |
+| `CMOV70` | `CRETUR.ASM` | the preference walk — one byte doing both jobs |
+| `CWLK20` | `CRETUR.ASM` | whether an approach is heard (`BITA #BIT0`) |
+| `PATT22` | `PATTK.ASM` | the darkness gate (`ANDA #3`) |
+| `ATTK30` | `PATTK.ASM` | every hit roll |
+| `CGEN` | `COMCRE.ASM` | `CREGEN`'s new creature type (`ANDA #7 / ADDA #2`) |
+
+A world built out of one seeded generator replays. That is not a side effect,
+it is the mechanism the attract mode is built on: seventeen keystrokes recorded
+once can only mean anything if playing them back reaches the same dungeon, the
+same monsters and the same fight. Draw any one of those rolls from somewhere a
+seed cannot put back and the recording is a recording of nothing.
+`test_the_world_replays_from_the_roms_one_seed` is the property, and
+`test_every_run_time_roll_draws_from_the_seed` is the same fact stated one site
+at a time — each of these is one `SWI RANDOM`, so each must **move** the SEED.
+
+`SOUNDS.ASM` is the exception and stays on `random`: `BDLBDL`'s squeaks come
+from `SNOISE`'s own `SNDRND`, a second generator the ROM keeps for the DAC
+alone, and nothing in the dungeon ever reads it.
+
+**Replaying the generator is necessary and it is not sufficient, and the rest
+of the distance is what ended the attract mode** ([B108](bugs.md)).
+Reproducing the 1982 demo beat-for-beat also needs the draws consumed in the
+ROM's *order* — `COMMON.ASM:QUESCN` walks the TENTH queue as a linked list,
+delinking each due task and re-adding it, so the order reshuffles as the game
+runs where this port walks CCB slots 1..32 fixed — and it needs the `SECOND`
+the demo's own opening leaves on the clock, which is not nought the way a
+game's is: `DEMO10` spends a wizard fade, two messages, two 81-jiffy `WAIT`s
+and a fade-out before it reaches `GAME20`. What that counter reads there
+**cannot be derived from the source**, because the fade's frame cost is 6809
+drawing time; static bounds give 3 to 5. Driving the whole demo off
+`dagg.now` on the host and searching `DGEN90`'s spin 0..12 showed no spin
+puts the giant the board saw on the player at the attack, so the spin was
+never the gap. The two tests above stay, because a world that replays from
+one seed is right whether or not anything replays it; the attract mode does
+not (§16).
 
 ### 7.3 Which is also why all the loot starts on monsters
 
@@ -2025,9 +2112,10 @@ is fixed, and says so if there is no card.
 tests — 170 here and four in `test_sound_engine`, which the board run is
 the reason for ([B99](bugs.md#fixed)). The gate is an ear and it is met:
 knight, wraith and spider told apart by ear, and the heartbeat under
-them.** Every effect in §9.2, the wizard's voice, and
-the attract mode (`HUMAN.ASM:PLAY20`, the ROM's own autoplay table, on level 3
-with an iron sword, pine torch and leather shield). *Gate: a listening test
+them.** Every effect in §9.2, the wizard's voice, and — until M7 removed it
+— the attract mode (`HUMAN.ASM:PLAY20`, the ROM's own autoplay table, on
+level 3 with an iron sword, pine torch and leather shield).
+*Gate: a listening test
 against a recording of the original — a spider, a knight, a wraith, a sword
 swing, a torch, an explosion and the heartbeat, identified by ear without
 labels.*
@@ -2050,23 +2138,141 @@ lowest note is c1 (32.7 Hz), so `BEOOP`'s bottom five steps clamp there; its
 shortest note is 25 ms (l32 at t300), so `SQUEAK` — 14.3 ms — is one note and
 the sweep in it is gone. Everything else has room.
 
-**And the attract mode did not have to be spent.** §16 names it as the first
+**And the attract mode did not have to be spent for room** — it went at M7
+for fidelity instead. §16 names it as the first
 thing this game would give up if it ran out of room. The sound tables cost 405
 cells net of a `recycle` at load, the demo cost three procedures, and the game
 leaves 8,051 free at load against M5's 8,456 — 3,955 on a Pico 2 W against a
 2,048 floor.
+
+**M7 — the cartridge, and it ended by taking the attract mode out.** The
+milestone set out to make the attract mode the way in, which is the shape
+`ONCE.ASM` always had: the cold start is `DEMO`, `CLK50`'s armed ABORT turns
+any keystroke into a transfer to `GAME` rather than a quit, and `PLAY20` ends
+an exhausted `AUTTAB` with `JMP DEMO`. *Gate: a board run — whether an
+attract mode reads as one is a thing you watch, not a thing a host test can
+assert.* **Three runs said it does not, and the third closed the milestone by
+removing it** ([B108](bugs.md)); the paragraph at the end of this section is
+the whole of why. What the milestone kept is everything under the demo that
+was never the demo's: `daggorath` is `ONCE.ASM:GAME` and the pass loop stays,
+because `DEATH`'s restart is a player's and not an attract mode's. ESC stays
+this port's door out, for the reason `dagg.key` has owned it since M2.
+
+**It opened by finding that M6's demo had never run** ([B100](bugs.md)), and
+the five defects below are the milestone's real return — every one of them is
+a ROM fact this design had read and not used, and four of the five outlived
+the mode that exposed them.
+
+`DEMDAT` is three objects where `GAMDAT` is two, so the demo needs 66 OCBs
+and the table held 65 — under a comment quoting `CD.ASM`'s own 72. M6
+shipped two attract tests and neither of them typed `daggorath.demo`. That
+is §17's list read too literally: every item on it is a *piece*, and the
+thing a player does is a path.
+
+**Then it died on its first command** ([B101](bugs.md)), and that one had
+been waiting since M3 for somebody to type `EXAMINE` first. Building a pass
+spends ~2,700 atom bytes of garbage (1,932 of them the two heart costumes)
+and §14's `recycle` runs *after* a command, never before the first one — so
+the player got 120 bytes, and `AUTTAB` opens with the game's largest word
+build. The attract mode was a **deterministic worst case for the first
+command**, and losing it cost the test its bite: a game builds level 1 where
+the demo built level 3 under a whole-map render, so the sweep is no longer
+the difference between running and failing on the host. It is worth 2,840
+atom bytes, measured both ways, and the test gates the handover figure on
+that instead.
+
+The second budget in §14 is the atom table, and it needs no per-board
+table: `mem_free_atoms` caps at 32 KB (`LOGO_ATOM_LIMIT`) and the node pool
+never reaches down to it here, so what the host measures is what a Pico 2 W
+has.
+
+**The board run then found the two things that made the demo unwatchable,
+and both are the same mistake as B100 — a ROM number read and not used.**
+The attract mode had been dealt a real game's power ([B102](bugs.md)):
+`COMDAT.ASM`'s ONCE-only table ends `FCB $17,160 ;PPOW` = 6048, and
+`GAME10` does not *set* the power but **corrects** it — `CLR PPOW` clears
+the high byte alone, leaving 160 — while `DEMO10` branches straight to
+`GAME20` and never reaches that instruction. The demo is a player with
+thirty-seven times the power, which is the whole reason seventeen commands
+on level three do not kill it; ours had 160 and died in seconds. That is
+[B83](bugs.md) one line lower in the same eight bytes. And a death then let
+go of the cartridge instead of restarting it ([B103](bugs.md)):
+`HUPDAT.ASM:DEATH` ends `CLR FAINT / DEC AUTFLG / BRA *`, and the ROM's own
+comment on the first two is *"force GAME restart on char"* — the death
+screen **holds**, and the next key is a `GAME`. `PINCAN.ASM:WINNER` is the
+control and is why this is one flag and not a property of the pass: its
+`BRA *` has neither instruction above it, so a win freezes where a death
+goes round.
+
+**The comments are the memory, which is the part worth carrying to the next
+game.** Writing those two up in this file's prose style broke twenty-two
+tests with "Out of space", and the only difference was 28 lines of comment:
+`load` defines every `to ... end` block through `proc_define_from_text`,
+which lexes with `preserve_comments` set, so **a comment inside a procedure
+body is stored in that body** and costs atoms and cells for as long as the
+game is loaded, while a comment *between* procedures costs nothing. 1,748
+free atom bytes with the prose inside the bodies against **3,236** with the
+same prose one line higher — ~53 bytes and ~15 cells a line, against the
+~1,144 atoms `EXAMINE` needs. This design's convention of a block above each
+procedure was a readability habit and is now a budget rule.
+`test_the_loaded_game_leaves_atoms_to_play_with` holds the floor.
+
+**And the second board run found the one that had been there since M4: a
+whole subsection of this design was wrong** ([B104](bugs.md)). The report
+asked whether the seeded generator was broken. It was not — §7.2's carve is
+pinned cell-for-cell to the published mazes — it was **not being used**:
+`CBIRTH` draws through `FNDCEL → RNDCEL → RANDOM`, the routine the carve is
+built out of, on the one SEED the cartridge shares and never re-seeds between
+the maze and the monsters. §7.2 said *"creature positions … were never
+reproducible"* on the strength of `DGEN90`'s spin, and on the entry every game
+makes there is no second to spend. **Level one's twenty-four creatures are
+fixed in every copy of the game**, and `Levels/Levels.html` — in the tree
+since M1, read for its mazes and never for its prose — prints them and says
+so, and prints them for no other level. §7.2 now carries the correction and
+the one reading that does not reconcile.
+
+That fix cost 99 cells and did not fit: the attract mode's peak was within a
+hundred cells of the whole pool ([B105](bugs.md)), because `GAME40` opened the
+demo on the whole map with a level already populated under it and §14's budget
+test measures a *game's* start. It was landed by moving `dagg.enter`'s
+sixteen in-body comment lines above its `to` — the finding above paying for a
+fix rather than causing one. B105 asked for a per-board gate on the demo's
+peak and never got one; removing the demo closed it, and the game's own gate
+is the whole gate again.
+
+**And then the third run ended it** ([B108](bugs.md)). The board's ground
+truth was specific — the cartridge's first `ATTACK` lands on a stone giant,
+and the giant's peek-a-boo is visible one command earlier — and ours landed
+on a scorpion. B104 fixed where creatures are born and B106 put all five
+remaining run-time rolls back on the ROM's one generator, and the demo still
+was not the demo: §7.2's closing paragraph is the measurement, and what is
+left needs `QUESCN` rebuilt as the ROM's linked list plus a value for the
+demo's `SECOND` that the listing does not contain. That is a large change
+bought with a magic number, for a mode a player never asks for, and a demo
+that types the ROM's keystrokes into a different dungeon is a recording of
+nothing. **So M7's answer to its own gate is no, and the mode is gone.** The
+milestone is not wasted by that: B100 through B105 are all still fixed, and
+the attract mode found every one of them precisely because it was a
+deterministic path through the whole game — which is the argument for
+building one, and not the argument for shipping it.
 
 ---
 
 ## 16. Reduced-resource choices
 
 Kept in reserve, in the order they would be spent. **Nothing on this list was
-spent** — M6 shipped with the attract mode in it, and the game leaves 3,955
-free cells on the board with the smallest arena that loads it.
+spent for room** — the game leaves 3,955 free cells on the board with the
+smallest arena that loads it.
 
-- **The attract mode** (M6) is the first thing to go: it is the ROM's autoplay
-  table and a demo dungeon and it buys the player nothing. It cost three
-  procedures and about 200 cells in the end, which is why it stayed.
+- **The attract mode** (M6, M7) was the first thing on this list and it did
+  go — on 2026-09-06, for fidelity rather than for cells ([B108](bugs.md)).
+  `AUTTAB` is seventeen keystrokes recorded against *one* dungeon, and three
+  board runs said this port does not reproduce that dungeon; §7.2's closing
+  paragraph is the measurement and §15's M7 is the account. What is left to
+  close it is `QUESCN`'s queue order and a `SECOND` the listing does not
+  state, which is a large change bought with a magic number for a mode the
+  player never asks for. It cost three procedures and about 200 cells; the
+  player is not the one who loses them.
 - **`ZSAVE`/`ZLOAD`** are cassette routines (`COMMON.ASM:SAVE`/`LOAD`) with no
   gameplay behind them.
 - **The wizard fade-in/out** (`MISC.ASM:WIZIX`/`WIZOX`) is a set piece, not a
@@ -2092,7 +2298,7 @@ Host tests, mock device, mirroring `tests/test_berzerk.c`:
   the generated block and compared against constants transcribed here, so a generator
   bug is a failing test rather than a wrong game;
 - **the transform** — §6.2's `k`/`kx0`/`c` against hand-computed corners at
-  ranges 0, 1 and 9, and the centroid at (0, 65);
+  ranges 0, 1 and 9, and the centroid at (0, 40);
 - **the cell walk** — a hand-built corridor renders the expected sequence of
   lists, and stops at the first non-passage;
 - **the fade** — §8's table both ways up, including "draw nothing" at ≤ −8;

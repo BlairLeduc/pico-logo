@@ -118,10 +118,19 @@ static float num(const char *expr)
     return n;
 }
 
+// The message carries the interpreter's own error text and not just the
+// statement: nothing else in the harness prints it, and "Out of space in
+// dagg.shrow" is the difference between reading a failure and bisecting
+// one.
 static void run(const char *input)
 {
     Result r = run_string(input);
-    TEST_ASSERT_TRUE_MESSAGE(r.status == RESULT_NONE || r.status == RESULT_OK, input);
+    if (r.status == RESULT_NONE || r.status == RESULT_OK)
+        return;
+    static char why[320];
+    snprintf(why, sizeof(why), "%.180s || %s", input,
+             r.status == RESULT_ERROR ? error_format(r) : "did not complete");
+    TEST_ASSERT_TRUE_MESSAGE(false, why);
 }
 
 // Push a command line through the real HUMAN path -- one character at a
@@ -340,7 +349,8 @@ void test_the_transform_matches_the_m0_confirmed_numbers(void)
     run("dagg.setscale 1 :dagg.norscl");
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.25f, num(":dagg.k"));
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 160.0f, num(":dagg.kx0"));
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 160.0f, num(":dagg.c"));
+    // Device row 25: the 190-row view centred in the 240-row band (4.1).
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 135.0f, num(":dagg.c"));
 }
 
 //==========================================================================
@@ -646,10 +656,10 @@ void test_the_turn_sweep_blanks_the_screen_and_draws_turn00s_two_lines(void)
     TEST_ASSERT_TRUE_MESSAGE(mock_device_get_state()->graphics.cleared,
                              "TURN00's ZFLIP never happened -- the sweep is over the view");
     // LINES, PTURN.ASM: CoCo rows 16 and 136 across the full 256, through
-    // the 1:1 transform (k 1.25, kx0 160, c 160).
-    TEST_ASSERT_TRUE_MESSAGE(mock_device_has_line_from_to(-160, 140, 158.75, 140, 1.0f),
+    // the 1:1 transform (k 1.25, kx0 160, c 135).
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_has_line_from_to(-160, 115, 158.75, 115, 1.0f),
                              "the top horizontal line is missing");
-    TEST_ASSERT_TRUE_MESSAGE(mock_device_has_line_from_to(-160, -10, 158.75, -10, 1.0f),
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_has_line_from_to(-160, -35, 158.75, -35, 1.0f),
                              "the bottom horizontal line is missing");
 }
 
@@ -661,15 +671,15 @@ void test_the_left_to_right_sweep_starts_at_eight(void)
     build_synthetic_corridor();
     mock_device_clear_graphics();
     run("dagg.turnsweep \"lr");
-    TEST_ASSERT_TRUE_MESSAGE(mock_device_has_line_from_to(-150, 138.75, -150, -8.75, 0.5f),
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_has_line_from_to(-150, 113.75, -150, -33.75, 0.5f),
                              "the first stroke is not at CoCo column 8");
-    TEST_ASSERT_FALSE_MESSAGE(mock_device_has_line_from_to(-160, 138.75, -160, -8.75, 0.5f),
+    TEST_ASSERT_FALSE_MESSAGE(mock_device_has_line_from_to(-160, 113.75, -160, -33.75, 0.5f),
                               "the sweep still starts at column 0");
     // RLTU10 runs 248 down to 24, so its first stroke is not the mirror of
     // this one -- the two sweeps are not symmetric and the ROM's are not.
     mock_device_clear_graphics();
     run("dagg.turnsweep \"rl");
-    TEST_ASSERT_TRUE_MESSAGE(mock_device_has_line_from_to(150, 138.75, 150, -8.75, 0.5f),
+    TEST_ASSERT_TRUE_MESSAGE(mock_device_has_line_from_to(150, 113.75, 150, -33.75, 0.5f),
                              "the right-to-left sweep does not start at CoCo column 248");
 }
 
@@ -1157,9 +1167,10 @@ void test_the_status_line_survives_a_redraw(void)
     // The opposite polarity to the view above it -- P18 M1's third argument
     TEST_ASSERT_EQUAL_FLOAT(num(":dagg.status.fg"), (float)state->label.last_colour);
     TEST_ASSERT_EQUAL_FLOAT(num(":dagg.status.bg"), (float)state->label.last_background);
-    // Column 0 of the 40, and the character row the status band starts on
+    // Column 0 of the 40, and row 23 -- the LAST row of the band, so the
+    // bar sits flush above the text area (section 4.1).
     TEST_ASSERT_FLOAT_WITHIN(0.5f, -160.0f, state->label.last_x);
-    TEST_ASSERT_FLOAT_WITHIN(0.5f, -55.0f, state->label.last_y);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, -75.0f, state->label.last_y);
 }
 
 // It is the bar and not just the glyphs: STATUX inverts the whole status
@@ -1384,10 +1395,15 @@ void test_every_object_in_the_dungeon_is_created_and_creature_owned(void)
                                         "an object was born unowned");
     // Nothing is lying on the floor at the start of a game (section 7.3)
     TEST_ASSERT_EQUAL_FLOAT(0, num("count :dagg.floor"));
-    // ...and there is room for GAMDAT's two on top, exactly
+    // ...and there is room for GAMDAT's two on top, and for DEMDAT's
+    // three: the table is CD.ASM's own `OCBLND RMB OC.LEN*72` and not the
+    // 65 a game happens to stop at, which is what the attract mode ran off
+    // the end of (B100).
     run("dagg.givebag");
     TEST_ASSERT_EQUAL_FLOAT(65, num(":dagg.ocbptr"));
-    TEST_ASSERT_EQUAL_FLOAT(65, num(":dagg.ocbmax"));
+    TEST_ASSERT_EQUAL_FLOAT(72, num(":dagg.ocbmax"));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(72, num("count :dagg.octyp"),
+                                    "a column shorter than the table it indexes");
 }
 
 // CINI44 walks DOWN from the object's first level and wraps, and it allows
@@ -2359,10 +2375,13 @@ void test_the_status_line_names_both_hands_and_still_measures_forty(void)
 
 //==========================================================================
 // The whole game, started and stopped.  Every other test drives a piece of
-// `daggorath` and this is the only one that runs it -- which is where a
-// typo in the init sequence would otherwise hide, because nothing else
-// calls dagg.makeobjects, dagg.givebag and dagg.setup.heart in order
-// against the real maze.  ESC is the one key that ends dagg.play.
+// it and this is the only one that runs it -- which is where a typo in the
+// init sequence would otherwise hide, because nothing else calls
+// dagg.makeobjects, dagg.givebag and dagg.setup.heart in order against the
+// real maze.  ESC is the one key that ends dagg.play.
+//
+// `daggorath` is ONCE.ASM:GAME.  DEMO, the cartridge's other entry four
+// instructions above it, is gone with the attract mode.
 //==========================================================================
 
 void test_the_game_starts_and_stops(void)
@@ -2787,6 +2806,221 @@ void test_a_level_is_populated_from_the_matrix(void)
     for (int typ = 0; typ < 12; typ++)
         TEST_ASSERT_EQUAL_INT(WANT[typ], seen[typ]);
 }
+
+// The one published observation of CBIRTH.  Levels/Levels.html prints level
+// one's creatures on the map -- "when you start the game the creatures on
+// level-one will start off as shown" -- and then says that "after that,
+// creatures will be randomized on each new level", which is DGEN90 exactly:
+// the generator runs straight on from the doors into the births, so the only
+// thing that can vary is the seconds counter DGEN90 spends, and at a cold
+// start there is none to spend.  Level one is therefore fixed, for ever, in
+// every copy of the game -- and that is what makes a seventeen-keystroke
+// recorded demo possible at all.
+//
+// Cells read off level1.svg: the grid carries a one-cell margin, so a text
+// label at translate(x,y) belongs to row (y-30)/50-1 and col (x-6)/50-1.
+// All twenty-four land on carved cells of our own level one, which is the
+// cross-check that the reading is right.
+//
+// Order is NLVL30's -- `LDA #CTYPES-1`, most ferocious type first, so level
+// one's [9 9 4 2] is two blobs, then four club giants, then nine vipers,
+// then nine spiders -- and it is the order the map's own B1/B2/G1... labels
+// run in, because that numbering is the CCB table.  Getting a set of
+// twenty-four cells right is one thing; getting them right IN THIS ORDER is
+// what says the draws are the ROM's draws (B104).
+void test_level_one_is_born_where_the_1982_game_was_born(void)
+{
+    static const struct { const char *who; int type, row, col; } BORN[24] = {
+        {"B1", 3, 28,  5}, {"B2", 3, 23, 18},
+        {"G1", 2,  3, 29}, {"G2", 2, 11,  6}, {"G3", 2, 24, 12}, {"G4", 2, 17, 4},
+        {"N1", 1,  6,  4}, {"N2", 1,  4,  6}, {"N3", 1, 18,  7}, {"N4", 1,  6, 8},
+        {"N5", 1,  8, 31}, {"N6", 1, 10, 28}, {"N7", 1, 16, 23}, {"N8", 1,  8, 20},
+        {"N9", 1, 24,  1},
+        {"R1", 0,  7, 20}, {"R2", 0, 12,  9}, {"R3", 0, 19,  6}, {"R4", 0, 27, 17},
+        {"R5", 0,  8, 30}, {"R6", 0,  1, 10}, {"R7", 0, 22, 28}, {"R8", 0, 11,  0},
+        {"R9", 0,  7,  6},
+    };
+
+    // Twice, and the second time matters as much as the first: re-entering a
+    // level takes dagg.gen's cached path, which has to arrive at the same
+    // SEED the carve left rather than at whatever the last carve did.
+    for (int pass = 0; pass < 2; pass++)
+    {
+        run("dagg.cmx.reset");
+        run("make \"dagg.level 0  dagg.newlvl 0");
+        for (int i = 0; i < 24; i++)
+        {
+            char expr[96], msg[128];
+            snprintf(msg, sizeof(msg), "pass %d: %s of the published level one",
+                     pass + 1, BORN[i].who);
+            snprintf(expr, sizeof(expr), "item %d :dagg.cctyp", i + 1);
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(BORN[i].type, num(expr), msg);
+            snprintf(expr, sizeof(expr), "item %d :dagg.ccrow", i + 1);
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(BORN[i].row, num(expr), msg);
+            snprintf(expr, sizeof(expr), "item %d :dagg.cccol", i + 1);
+            TEST_ASSERT_EQUAL_FLOAT_MESSAGE(BORN[i].col, num(expr), msg);
+        }
+    }
+}
+
+// DGEN90 is the whole of the difference between level one and the rest: the
+// seconds counter, spent as draws before anything is born.  A game that has
+// been running long enough to CLIMB has one, which is why Levels.html prints
+// creatures for level one and for no other level.
+void test_the_second_dgen90_spends_moves_the_creatures(void)
+{
+    run("dagg.cmx.reset");
+    run("make \"dagg.level 0  dagg.newlvl 0");
+    const float row = num("item 1 :dagg.ccrow");
+    const float col = num("item 1 :dagg.cccol");
+
+    // One second on the clock, and the same level is repopulated elsewhere.
+    run("make \"dagg.second 1  dagg.newlvl 0");
+    TEST_ASSERT_TRUE_MESSAGE(row != num("item 1 :dagg.ccrow") ||
+                             col != num("item 1 :dagg.cccol"),
+                             "DGEN90 spent a second and nothing moved");
+
+    // And back to nought is back to the published level one, which is what
+    // says the spin is the only thing that varies.
+    run("make \"dagg.second 0  dagg.newlvl 0");
+    TEST_ASSERT_EQUAL_FLOAT(row, num("item 1 :dagg.ccrow"));
+    TEST_ASSERT_EQUAL_FLOAT(col, num("item 1 :dagg.cccol"));
+}
+
+// RANDOM.ASM holds the only source of randomness the cartridge has: one
+// 24-bit SEED, and EVERY roll in the game is `SWI RANDOM` on it.  There are
+// six sites and they are all in this repository: DGNGEN's carve and
+// COMCRE's FNDCEL (B104), CRETUR's CMOV70 preference walk and CWLK20
+// approach sound, PATTK's PATT22 darkness gate and ATTK30 hit roll, and
+// COMCRE's CGEN.  That single generator is what a recorded demo is
+// recorded AGAINST: put the SEED back and the world does the same thing
+// again, which is why seventeen keystrokes can be an attract mode at all.
+//
+// This port drew five of those from Logo's `random` -- the device's
+// generator, which no seed puts back -- so the world was a different world
+// every time it was built (B106).  SOUNDS.ASM is the exception and stays on
+// `random`: BDLBDL's squeaks come from SNOISE's own SNDRND, a second
+// generator the ROM keeps for the DAC alone, and nothing in the dungeon
+// reads it.
+static void seeded_world(const char *seed, char *out, size_t cap)
+{
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "%s", seed);
+    run(cmd);
+    run("dagg.ccb.clear  make \"dagg.pdam 0");
+    // Off the player's row AND column, all three of them: CMOV50 and
+    // CMOV52 are the sight tests, and a creature that can see the player
+    // closes on him without drawing anything at all.  CMOV70 is the site
+    // under test, so nothing here may be in line.
+    put_creature(1, 6, 2, 8);  // scorpion, movement delay 5
+    put_creature(2, 8, 8, 2);  // wraith, 3
+    put_creature(3, 9, 9, 9);  // balrog, 4
+    run(".setitem 1 :dagg.cctim 1  .setitem 2 :dagg.cctim 1"
+        "  .setitem 3 :dagg.cctim 1");
+
+    // Sampled along the way and not only at the end: all three of these
+    // hunt, so given long enough they all arrive on the player and the
+    // final positions say nothing about the road taken.
+    out[0] = '\0';
+    for (int step = 0; step < 8; step++)
+    {
+        for (int i = 0; i < 5; i++)
+            run("dagg.tenth");
+        for (int i = 1; i <= 3; i++)
+        {
+            char expr[64], piece[32];
+            snprintf(expr, sizeof(expr), "item %d :dagg.ccrow", i);
+            const int r = (int)num(expr);
+            snprintf(expr, sizeof(expr), "item %d :dagg.cccol", i);
+            const int c = (int)num(expr);
+            snprintf(piece, sizeof(piece), "(%d,%d)", r, c);
+            strncat(out, piece, cap - strlen(out) - 1);
+        }
+    }
+    char tail[32];
+    snprintf(tail, sizeof(tail), " dam %d", (int)num(":dagg.pdam"));
+    strncat(out, tail, cap - strlen(out) - 1);
+}
+
+void test_the_world_replays_from_the_roms_one_seed(void)
+{
+    const char *seed = "make \"dagg.s0 17  make \"dagg.s1 129  make \"dagg.s2 200";
+    build_synthetic_corridor();
+    char first[512], again[512], other[512];
+    seeded_world(seed, first, sizeof(first));
+    seeded_world(seed, again, sizeof(again));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(first, again,
+                                     "the same SEED built a different world");
+
+    // And a different SEED is a different world -- otherwise the run above
+    // is replaying nothing and the creatures merely walked the only road
+    // there was.
+    seeded_world("make \"dagg.s0 3  make \"dagg.s1 7  make \"dagg.s2 11",
+                 other, sizeof(other));
+    TEST_ASSERT_TRUE_MESSAGE(strcmp(first, other) != 0,
+                             "a different SEED built the same world");
+}
+
+// The same fact stated one site at a time, because a roll that reaches the
+// device leaves the SEED standing where it was.  Each of these is one
+// `SWI RANDOM`, so each must move it.
+static bool seed_moved(const char *action)
+{
+    const int s0 = (int)num(":dagg.s0"), s1 = (int)num(":dagg.s1"),
+              s2 = (int)num(":dagg.s2");
+    run(action);
+    return (int)num(":dagg.s0") != s0 || (int)num(":dagg.s1") != s1 ||
+           (int)num(":dagg.s2") != s2;
+}
+
+void test_every_run_time_roll_draws_from_the_seed(void)
+{
+    build_synthetic_corridor();
+
+    // ATTK30: `SWI RANDOM / TFR A,B / CLRA / ADDD ,S++ / SUBD #127`.
+    TEST_ASSERT_TRUE_MESSAGE(seed_moved("ignore dagg.attack 160 100 0"),
+                             "ATTK30's hit roll did not come from the SEED");
+
+    // CMOV70: one byte doing both jobs -- the top bit picks the preference
+    // order, the bottom two give the quarter of the time a turn is tried
+    // first.  The creature is off the player's row and column, so CMOV50
+    // and CMOV52 both fail and the walk is the random one.
+    run("dagg.ccb.clear");
+    put_creature(1, 0, 2, 8);
+    TEST_ASSERT_TRUE_MESSAGE(seed_moved("dagg.cmove 1"),
+                             "CMOV70's preference walk did not come from the SEED");
+
+    // CGEN: `SWI RANDOM / ANDA #7 / ADDA #2`.
+    TEST_ASSERT_TRUE_MESSAGE(seed_moved("dagg.cregen"),
+                             "CGEN's creature type did not come from the SEED");
+
+    // PATT22: the darkness gate, `SWI RANDOM / ANDA #3 / BNE PATT99`.  It
+    // is reached only with no torch and only after ATTK30 has landed, so
+    // this swing spends two bytes and not one -- which is the point: both
+    // of them are the ROM's, and neither is the device's.
+    run("dagg.ccb.clear  make \"dagg.ptorch 0  make \"dagg.pdam 0");
+    put_creature(1, 0, 5, 5);
+    TEST_ASSERT_TRUE_MESSAGE(
+        seed_moved("dagg.pattk.swing 4 0 128"),
+        "PATT22's darkness gate did not come from the SEED");
+}
+
+// CLK42's chain, ROLTAB: ten of dagg.tenth's passes make a second, and the
+// second rolls at sixty.  Only DGEN90 reads it, but it has to be a real
+// clock or a CLIMB would always land on the same dungeon.
+void test_the_tenth_queue_turns_the_seconds_counter(void)
+{
+    run("make \"dagg.second 0  make \"dagg.tenth.n 0");
+    run("repeat 9 [dagg.tenth]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":dagg.second"),
+                                    "nine tenths is not a second");
+    run("dagg.tenth");
+    TEST_ASSERT_EQUAL_FLOAT(1, num(":dagg.second"));
+    run("make \"dagg.second 59  repeat 10 [dagg.tenth]");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":dagg.second"),
+                                    "ROLTAB rolls the second at sixty");
+}
+
 
 // CBIR20: an occupiable cell nobody is standing on.  Both halves matter --
 // a creature inside rock would be unreachable, and two in one cell would
@@ -3763,6 +3997,29 @@ void test_the_game_leaves_room_to_play_in(void)
     }
 }
 
+// The atom table is the other budget, and unlike the cells above it is the
+// SAME SIZE ON EVERY BOARD: `mem_free_atoms` caps at
+// `min(node_bottom, LOGO_ATOM_LIMIT)` and this game's node pool never grows
+// down that far, so what the host measures here is what a Pico 2 W has.
+//
+// It binds through the comments, which is not obvious. `load` defines every
+// `to ... end` block through `proc_define_from_text`, and that lexes with
+// `preserve_comments` set -- so a comment INSIDE a body is stored in the
+// body and costs atoms and cells for as long as the game is loaded, while a
+// comment BETWEEN procedures costs nothing. Twenty in-body lines are about
+// 1,060 atom bytes, and EXAMINE alone needs ~1,144 to run (B101). Keep the
+// prose above the `to` line.
+void test_the_loaded_game_leaves_atoms_to_play_with(void)
+{
+    const int free_now = (int)num("atoms");
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "the loaded game leaves %d atom bytes; EXAMINE alone needs "
+             "~1,100 and a pass spends ~2,700 building itself",
+             free_now);
+    TEST_ASSERT_TRUE_MESSAGE(free_now > 2500, msg);
+}
+
 //==========================================================================
 // The global table -- section 14's second budget. It is 254 slots and the
 // design does not expect it to bind (this game has no frame to buy, so
@@ -4430,75 +4687,107 @@ void test_a_swing_that_lands_sounds_different_from_one_that_misses(void)
     run("make \"dagg.gamdat [17 15]");
 }
 
-//==========================================================================
-// Design section 15's third piece of M6 -- the attract mode.
-//==========================================================================
-
-// DEMO10 and COMDAT.ASM's DEMDAT: level three, (12,22), an iron sword, a
-// pine torch and a leather shield -- and GAMDAT put back afterwards, so
-// the seam a board uses to reach a ring survives the demo running.
-void test_the_attract_mode_opens_where_the_demo_opens(void)
+// dagg.play's keyboard half, with the scheduler parked: every task's due
+// time is put ahead of the clock, so dagg.tick does nothing and the only
+// thing left running is the abort.  dagg.heart.tick re-reads `ticks` every
+// pass, so the dues are set from `ticks` rather than from a constant.
+static void park_the_scheduler(void)
 {
-    run("make \"dagg.now 0  make \"dagg.autflg \"true");
-    run("dagg.demo");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(12, (int)num(":dagg.row"), "DEMO's row");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(22, (int)num(":dagg.col"), "DEMO's column");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(2, (int)num(":dagg.level"), "DEMO is on level three");
-    // ADJTAB rows: IRON 13 (a sword), PINE 15 (a torch), LEATHER 16 (a
-    // shield) -- DEMDAT, where GAMDAT is a WOODEN sword and the same
-    // torch.
-    TEST_ASSERT_EQUAL_INT(3, (int)num("count :dagg.gamdat"));
-    TEST_ASSERT_EQUAL_INT(13, (int)num("item 1 :dagg.gamdat"));
-    TEST_ASSERT_EQUAL_INT(15, (int)num("item 2 :dagg.gamdat"));
-    TEST_ASSERT_EQUAL_INT(16, (int)num("item 3 :dagg.gamdat"));
-    // PLAY30 waits before the first token, not after it.
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1350, (int)num(":dagg.aut.due"),
-                                  "the demo types before MISC.ASM's own wait");
-    run("make \"dagg.autflg \"false  make \"dagg.gamdat [17 15]");
+    run("make \"dagg.heart.due ticks + 1000000  make \"dagg.tenth.due ticks + 1000000");
+    run("make \"dagg.hslow.due ticks + 1000000  make \"dagg.luknew.due ticks + 1000000");
+    run("make \"dagg.burner.due ticks + 1000000  make \"dagg.cregen.due ticks + 1000000");
 }
 
-// AUTTAB, typed.  This is the whole path -- the autoplay table, HUMAN,
-// the line buffer, the parser and the commands -- and it is the ROM's own
-// opening: EXAMINE, PULL RIGHT TORCH, USE RIGHT, LOOK.  M3 arrived at
-// those four independently as the only way to see anything at all, which
-// is the strongest thing that can be said about them.
-void test_the_attract_mode_types_the_roms_own_opening(void)
+
+// B101 -- the sweep between BUILDING a pass and PLAYING it, which is B97's
+// argument one moment earlier.  `dagg.enter` sweeps after a command; nothing
+// swept before the first one, and init leaves ~2,700 atoms of pure garbage
+// behind it -- 1,900 of them the two heart costumes, whose long hex rows
+// `putsh` has already copied into the device.
+//
+// EXAMINE is the witness because it is this game's largest word build:
+// `dagg.exbar` assembles a 40-character rule one `word` at a time, which
+// is 1+2+...+40 characters of intermediates, ~1,100 atoms.  The attract
+// mode used to find this on its own first command, TOKEN.ASM:AUTTAB
+// opening with EXAMINE; with the demo gone the command is typed.
+//
+// THE GATE IS THE HANDOVER FIGURE AND NOT THE COMMAND, because the demo
+// was the expensive pass and it is the pass that is gone: level 3 with
+// twenty-three creatures under a whole-map render, where a game builds
+// level 1.  Measured both ways on the host, the sweep is worth 2,840 atom
+// bytes -- 5,656 free at the handover with it and 2,816 without -- so the
+// unswept build no longer runs EXAMINE out of room here, and a threshold
+// that only asked whether EXAMINE fits would no longer fail against it.
+// 4,000 is between the two measurements with ~1,600 bytes of margin, and
+// it is the board that wants the headroom: LOGO_ATOM_LIMIT is the same
+// 32 KB everywhere, but a board reaches this point having spent more.
+//
+// **No per-board table here, unlike the cell budget.**  `mem_free_atoms`
+// caps at `min(node_bottom, LOGO_ATOM_LIMIT)` and LOGO_ATOM_LIMIT is 32 KB,
+// which the node pool never reaches down to in this game -- so the atom
+// table has the same capacity on a Pico 2 W as on the host, and what this
+// test measures is what a board has.  That is why it reproduces here at all.
+void test_the_first_command_of_a_pass_has_room_to_run(void)
 {
-    start_game();
-    run("make \"dagg.linbuf []  make \"dagg.linptr 1");
-    run("make \"dagg.autflg \"true  make \"dagg.autptr 1  make \"dagg.autwrd 0");
-    run("make \"dagg.now 0  make \"dagg.aut.due 0");
+    mock_device_set_input("\x1b");
+    run("daggorath");
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(17, (int)num("count :dagg.auttab"),
-                                  "AUTTAB is seventeen commands");
-    TEST_ASSERT_EQUAL_STRING("EXAMINE", text("item 1 (item 1 :dagg.auttab)"));
-    TEST_ASSERT_EQUAL_STRING("PULL", text("item 1 (item 2 :dagg.auttab)"));
-    TEST_ASSERT_EQUAL_STRING("RIGHT", text("item 2 (item 2 :dagg.auttab)"));
-    TEST_ASSERT_EQUAL_STRING("TORCH", text("item 3 (item 2 :dagg.auttab)"));
+    const int at_handover = (int)num("atoms");
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "a pass hands over to the player with %d atom bytes free; "
+             "the sweep before dagg.play is worth 2,840 and leaves 5,656",
+             at_handover);
+    TEST_ASSERT_TRUE_MESSAGE(at_handover > 4000, msg);
 
-    // Nothing happens until the wait has passed, which is the pace of the
-    // original and not a choice: MISC.ASM's WAITX is 81 jiffies.
-    run("make \"dagg.aut.due 1000  dagg.autplay");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)num(":dagg.autwrd"),
-                                  "the demo typed before its wait was up");
+    // The first command, through the real HUMAN/parser path.  Against the
+    // unswept handover this raises "Out of space" inside `word`.
+    run("make \"dagg.over \"false");
+    type_line("EXAMINE");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2, num(":dagg.dspmod"),
+                                    "EXAMINE did not reach its own screen");
+    run("dagg.look");
 
-    // Four commands' worth of words and returns.  Each call is one token
-    // or one carriage return, so the count is words + one per command.
-    run("make \"dagg.aut.due 0");
-    for (int i = 0; i < 40 && (int)num(":dagg.autptr") <= 4; i++)
-        run("make \"dagg.now :dagg.now + 1350  dagg.autplay");
+    snprintf(msg, sizeof(msg), "EXAMINE left only %d atom bytes", (int)num("atoms"));
+    TEST_ASSERT_TRUE_MESSAGE(num("atoms") > 500, msg);
+}
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(5, (int)num(":dagg.autptr"),
-                                  "the demo did not get through its first four commands");
-    // PULL RIGHT TORCH took the torch out of the bag and USE RIGHT lit it
-    // and stowed it again, so the player is no longer in the dark -- which
-    // is the only thing this opening exists to do.
-    TEST_ASSERT_TRUE_MESSAGE(num(":dagg.ptorch") > 0,
-                             "the attract mode never lit its torch");
-    run("dagg.setlight");
-    TEST_ASSERT_TRUE_MESSAGE(num(":dagg.light") > 0,
-                             "the attract mode is still in the dark");
-    run("make \"dagg.autflg \"false");
+// HUPDAT.ASM:DEATH ends `CLR FAINT / DEC AUTFLG / BRA *`, and the ROM's own
+// comment on the first two is "force GAME restart on char": FAINT goes
+// because CLK50 will not look at the keyboard while it is set, and then the
+// machine spins with no task running.  So the death screen HOLDS -- it does
+// not flash past -- and the next key is `LDX #GAME`, another game.
+//
+// PINCAN.ASM:WINNER is the control: its `BRA *` has neither instruction in
+// front of it, so a win freezes and a death goes round (B103).
+void test_a_death_holds_and_asks_for_another_game(void)
+{
+    build_synthetic_corridor();
+    run("make \"dagg.again \"false  make \"dagg.dead \"false");
+    run("make \"dagg.faint \"true"); // skip the faint set piece
+    run("make \"dagg.pdam 161  dagg.hupdat");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", text(":dagg.dead"),
+                                     "the death did not arm the restart");
+    TEST_ASSERT_EQUAL_STRING("true", text(":dagg.over"));
+
+    mock_device_set_input("X");
+    run("dagg.play");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", text(":dagg.again"),
+                                     "the key at the death screen did not force a transfer to GAME");
+
+    // ESC is this port's own door, the same one dagg.key owns.
+    run("make \"dagg.again \"false  make \"dagg.dead \"true");
+    mock_device_set_input("\x1b");
+    run("dagg.play");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("false", text(":dagg.again"),
+                                     "ESC at the death screen started a game instead of letting go");
+
+    // ...and a pass that ended any other way does not hold at all: no key
+    // is queued here, so a hold would spin for ever rather than fail.
+    run("make \"dagg.dead \"false  make \"dagg.again \"false");
+    run("dagg.play");
+    TEST_ASSERT_EQUAL_STRING("false", text(":dagg.again"));
+    run("make \"dagg.dead \"false");
 }
 
 //==========================================================================
@@ -4626,6 +4915,11 @@ int main(void)
     RUN_TEST(test_the_elvish_sword_costs_eight_times_the_wooden_one);
     RUN_TEST(test_an_empty_hand_swings_as_emphnd);
     RUN_TEST(test_a_level_is_populated_from_the_matrix);
+    RUN_TEST(test_level_one_is_born_where_the_1982_game_was_born);
+    RUN_TEST(test_the_second_dgen90_spends_moves_the_creatures);
+    RUN_TEST(test_the_tenth_queue_turns_the_seconds_counter);
+    RUN_TEST(test_the_world_replays_from_the_roms_one_seed);
+    RUN_TEST(test_every_run_time_roll_draws_from_the_seed);
     RUN_TEST(test_creatures_are_born_on_carved_cells_and_never_share_one);
     RUN_TEST(test_nlvl40_hands_every_object_on_the_level_to_a_creature);
     RUN_TEST(test_a_creature_picks_up_one_object_and_spends_its_turn_on_it);
@@ -4671,9 +4965,10 @@ int main(void)
     RUN_TEST(test_every_sound_site_in_the_rom_is_a_sound_here);
     RUN_TEST(test_a_swing_that_lands_sounds_different_from_one_that_misses);
     RUN_TEST(test_the_wizard_speaks_and_can_be_told_not_to);
-    RUN_TEST(test_the_attract_mode_opens_where_the_demo_opens);
-    RUN_TEST(test_the_attract_mode_types_the_roms_own_opening);
+    RUN_TEST(test_the_first_command_of_a_pass_has_room_to_run);
+    RUN_TEST(test_a_death_holds_and_asks_for_another_game);
     RUN_TEST(test_the_game_leaves_room_to_play_in);
+    RUN_TEST(test_the_loaded_game_leaves_atoms_to_play_with);
     RUN_TEST(test_the_game_fits_the_global_table);
     RUN_TEST(test_the_game_fits_the_procedure_table);
     return UNITY_END();

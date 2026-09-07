@@ -608,11 +608,7 @@ def check_message_strings():
     winner = read_messages("PINCAN.ASM", "WINNER")
     assert winner == ['\nBEHOLD! DESTINY AWAITS THE HAND',
                       '        OF A NEW WIZARD...'], winner
-    # ONCE.ASM:DEMO10's two welcome messages, which M6's attract mode
-    # prints over the crescent wizard, and HUPDAT.ASM:DEATH's one.
-    assert read_messages("ONCE.ASM", "DEMO10") == [
-        '\nI DARE YE ENTER...\n',
-        '...THE DUNGEONS OF DAGGORATH!!!'], read_messages("ONCE.ASM", "DEMO10")
+    # HUPDAT.ASM:DEATH's one.
     assert read_messages("HUPDAT.ASM", "DEATH") == [
         '\n YET ANOTHER DOES NOT RETURN...'], read_messages("HUPDAT.ASM", "DEATH")
 
@@ -746,38 +742,6 @@ def check_sound_tables():
              for m in list(re.finditer(r"^\w*\s+FDB\s+\$([0-9A-F]{4})", body, re.M))[:6]]
     assert words == [0x0080, 0x0001, 0x0050, 0x0004, 0x0050, 0x0005], words
     assert "\nBANGD" in sw and sw.index("\nBANGD") > sw.index("\nTHUDD")
-
-
-def check_autoplay_table():
-    """TOKEN.ASM:AUTTAB against the seventeen commands the game types.
-
-    The ATM macro's arguments are the same packed strings CMDTAB, DIRTAB
-    and GENTAB hold, so what is checked is that every word in the game's
-    own copy is one of those -- and that the sequence is the ROM's.
-    """
-    text = (REPO_ROOT / "docs" / "DungeonsOfDaggorath" / "TOKEN.ASM").read_text()
-    start = text.index("AUTTAB  EQU")
-    body = text[start:text.index("AUTEND", start)]
-    rows = [m.group(1).split(",")
-            for m in re.finditer(r"^\s+ATM\d\s+(\S+)", body, re.M)]
-    symbols = {"M$EXAM": "EXAMINE", "M$PULL": "PULL", "M$RT": "RIGHT",
-               "M$LT": "LEFT", "M$TOR0": "TORCH", "M$SHI0": "SHIELD",
-               "M$SWO0": "SWORD", "M$USE": "USE", "M$LOOK": "LOOK",
-               "M$MOVE": "MOVE", "M$ATTK": "ATTACK", "M$TURN": "TURN"}
-    got = [[symbols[t] for t in row] for row in rows]
-    assert got == [
-        ["EXAMINE"], ["PULL", "RIGHT", "TORCH"], ["USE", "RIGHT"], ["LOOK"],
-        ["MOVE"], ["PULL", "LEFT", "SHIELD"], ["PULL", "RIGHT", "SWORD"],
-        ["MOVE"], ["MOVE"], ["ATTACK", "RIGHT"], ["TURN", "RIGHT"],
-        ["MOVE"], ["MOVE"], ["MOVE"], ["TURN", "RIGHT"], ["MOVE"], ["MOVE"],
-    ], got
-    # And every word in it is one the parser already knows.
-    known = set(w for _, w, _ in read_token_table("CMDTAB"))
-    known |= set(w for _, w, _ in read_token_table("DIRTAB"))
-    known |= set(w for _, w, _ in read_token_table("GENTAB"))
-    for row in got:
-        for w in row:
-            assert w in known, w
 
 
 # OBIRTH.ASM:GENVAL, by class: -1 leaves the object as it was born, anything
@@ -1570,7 +1534,6 @@ def main():
     check_command_tables()
     check_message_strings()
     check_sound_tables()
-    check_autoplay_table()
 
     longest = write_game_data(mazes, decoded, tables, GAME_PATH)
     REFERENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
