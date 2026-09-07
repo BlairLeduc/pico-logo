@@ -2378,6 +2378,31 @@ day (2026-09-02); a fifth was opened by a board at M4 and settled the same way.
    it. That number is a measurement against a memory of the original, which
    is the only instrument this particular question has, and it is written
    down here rather than left as taste.
+
+   **And a game found the half of it that was wrong** ([B109](bugs.md),
+   2026-09-06): *"a viper can kill the player in the original but it will not
+   in the port."* The knob was applied to **every** creature delay, the attack
+   included, and that does not slow the game down — it stops it being losable.
+   **Recovery is not linear in damage.** `HSLOW` recovers `ceil(damage/64)`
+   and reschedules itself `HEARTR` jiffies out (§10.3), and `HEARTR` *falls*
+   as damage rises — 46 jiffies fresh, 4 at 150 of 160 — so the heart
+   accelerates and recovery accelerates with it, from about two points a
+   second at 35 damage to about forty-five at 150. A viper's 35 a hit every
+   0.7 s outruns that curve and kills in six seconds; the same viper at 1.4 s
+   never does, and you park just short of death for as long as you stand
+   still. Twenty simulated seeds: 20/20 deaths at pace 1, 0/20 at pace 2.
+
+   **So the knob is the movement delay only, and that is the ROM's control
+   flow rather than a balance patch.** What it models is the redraw throttle,
+   and the throttle never touched an attack. A creature that *walks* redraws
+   — `CRETUR.ASM:CWLK90` sets `NEWLUK`, and `CMOV90` forces a `PUPDAT` for the
+   step that lands on you — but a creature already standing on you does not:
+   `CMOV20` attacks and `CMOV30` jumps **past** `CMOV90`'s `PUPDAT` straight
+   to `CMOV92`, so the only screen work in an attack is `HUPDAT`'s status
+   line. There was no throttle on it to model. `P.CCTMV` is paced at the two
+   sites that read it; `P.CCTAT` is the raw table at both sites that
+   substitute it. **How fast a creature closes on you is the board's 2; what
+   happens once it arrives is the cartridge's.**
 1. **The heart is turtle 1 wearing one of two costumes** (§4.1a), not a drawing
    and not a `stamp`. The question as originally written was confused: it read
    as though the status line were text-window text. **It is not, and §4.1 was

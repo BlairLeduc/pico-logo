@@ -3172,7 +3172,8 @@ void test_a_creature_on_the_player_attacks_at_attack_speed(void)
     one_creature(0, 5, 5);
     run("make \"dagg.pdam 0  make \"dagg.ppow 160");
     run("make \"dagg.sndn -1  dagg.cmove 1");
-    TEST_ASSERT_EQUAL_FLOAT(22, num("item 1 :dagg.cctim")); // 11 tenths x 2
+    // 11 tenths, and :dagg.pace does not touch it (B105)
+    TEST_ASSERT_EQUAL_FLOAT(11, num("item 1 :dagg.cctim"));
     // The spider's own sound is played whether or not the blow lands, and
     // CLANK (19) on top of it when it does.
     const float snd = num(":dagg.sndn");
@@ -3190,7 +3191,7 @@ void test_walking_onto_the_player_speeds_a_creature_up(void)
     run("dagg.cmove 1");
     TEST_ASSERT_EQUAL_FLOAT(5, num("item 1 :dagg.ccrow"));
     TEST_ASSERT_EQUAL_FLOAT(5, num("item 1 :dagg.cccol"));
-    TEST_ASSERT_EQUAL_FLOAT(22, num("item 1 :dagg.cctim")); // the attack delay
+    TEST_ASSERT_EQUAL_FLOAT(11, num("item 1 :dagg.cctim")); // the attack delay
     TEST_ASSERT_EQUAL_STRING("false", text(":dagg.newluk"));
 }
 
@@ -3433,7 +3434,8 @@ void test_a_creature_closes_on_you_and_the_typed_attack_lands(void)
                                     "the spider did not close on the player");
     TEST_ASSERT_EQUAL_FLOAT(1, num("dagg.cfind 16 11"));
     // CMOV90 fell into CMOV92: it is on you, so it is on attack time now
-    TEST_ASSERT_EQUAL_FLOAT(22, num("item 1 :dagg.cctim"));
+    // -- the spider's raw 11 tenths, which :dagg.pace does not scale (B105)
+    TEST_ASSERT_EQUAL_FLOAT(11, num("item 1 :dagg.cctim"));
 
     // A sword in a hand and a torch alight, then the command line.
     run("make \"dagg.ppow 160  make \"dagg.pdam 0");
@@ -3670,10 +3672,18 @@ void test_the_pace_knob_scales_creatures_and_only_creatures(void)
     run("make \"dagg.pace 2  dagg.cmove 1");
     TEST_ASSERT_EQUAL_FLOAT(46, num("item 1 :dagg.cctim")); // the default 2
 
-    // ...the attack delay with it (CMOV92 goes through the same reader)
+    // ...but NOT the attack delay, which stays the raw 11 tenths.  CMOV20
+    // attacks and CMOV30 jumps past CMOV90's PUPDAT straight to CMOV92, so
+    // a creature standing on you does no screen work beyond HUPDAT's status
+    // line -- there was no redraw throttle on it for the knob to model, and
+    // pacing it anyway made the game unlosable (B105).
     one_creature(0, 5, 5);
-    run("make \"dagg.pdam 0  make \"dagg.ppow 160  dagg.cmove 1");
-    TEST_ASSERT_EQUAL_FLOAT(22, num("item 1 :dagg.cctim"));
+    run("make \"dagg.pace 2  make \"dagg.pdam 0  make \"dagg.ppow 160");
+    run("dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT(11, num("item 1 :dagg.cctim"));
+    run("make \"dagg.pace 5  dagg.cmove 1");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(11, num("item 1 :dagg.cctim"),
+                                    "the pace reached the attack delay");
 
     // ...and birth, so a level built at a slow pace stays slow
     run("make \"dagg.pace 3  dagg.ccb.clear  dagg.cbirth 0");
@@ -3693,6 +3703,33 @@ void test_the_pace_knob_scales_creatures_and_only_creatures(void)
     TEST_ASSERT_EQUAL_FLOAT(100000 + 300000, num(":dagg.cregen.due"));
     run("make \"dagg.ppow 160  make \"dagg.pdam 0  dagg.hupdat");
     TEST_ASSERT_EQUAL_FLOAT(46, num(":dagg.heartr"));
+}
+
+// And the knob's limit, which only a game found (B105).  Recovery is not
+// linear in damage: HSLOW rides the heart (COMPLR.ASM returns HEARTR and
+// Q.JIF) and HUPDAT's heart accelerates as you are hurt, so a player at
+// 150 of 160 heals about 45 points a second where one at 35 heals two.  A
+// viper's 35 a hit every 0.7 s outruns that curve and kills in six
+// seconds; the same viper at 1.4 s does not, and the player parks just
+// short of death for ever.  Halving a creature's attack rate does not
+// halve the time it takes to kill you -- it takes it to infinity.
+//
+// So this is an OUTCOME test and not a delay test: the delay it is really
+// about is asserted above, and what a board reported was that the game
+// could not be lost.
+void test_a_viper_standing_on_you_kills_you(void)
+{
+    one_creature(1, 5, 5); // a viper, on the player's own cell
+    run("make \"dagg.ppow 160  make \"dagg.pdam 0");
+    // Thirty seconds of the real scheduler at the board's own ~30 Hz --
+    // five times what the ROM's numbers need.
+    for (int i = 1; i <= 900 && strcmp(text(":dagg.over"), "true") != 0; i++)
+    {
+        set_mock_ticks(100000 + 33 * i);
+        run("dagg.tick");
+    }
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("true", text(":dagg.over"),
+                                     "thirty seconds under a viper and still alive");
 }
 
 // CREGEN, COMCRE.ASM: every five minutes, one more of a random type in
@@ -4946,6 +4983,7 @@ int main(void)
     RUN_TEST(test_thirty_two_creatures_all_take_their_turn);
     RUN_TEST(test_a_creature_moves_only_when_it_is_due);
     RUN_TEST(test_the_pace_knob_scales_creatures_and_only_creatures);
+    RUN_TEST(test_a_viper_standing_on_you_kills_you);
     RUN_TEST(test_cregen_restocks_the_matrix_and_stops_at_thirty_two);
     RUN_TEST(test_a_long_run_of_creature_turns_spends_nothing);
     RUN_TEST(test_a_creature_timer_is_a_small_integer_not_a_clock_reading);

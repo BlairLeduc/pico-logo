@@ -26,8 +26,9 @@
 ;
 ; `make "dagg.pace 1` before `daggorath` runs the creatures at the ROM's
 ; raw table; 2 is the default and is what a board settled on beside the
-; memory of the original -- see dagg.creature.delay. It touches creature
-; turns only, never the heart, the torch or your own commands.
+; memory of the original -- see dagg.creature.delay. It touches how fast
+; a creature CLOSES on you and nothing else: not its attack once it gets
+; there, and never the heart, the torch or your own commands.
 ;
 ; `make "dagg.voice "false` stops the wizard speaking his speeches aloud
 ; (design section 9.5). The words are printed either way; the CoCo only
@@ -729,6 +730,21 @@ end
 ; in 40-80 ms and meet every timer on time, which is faster than the game
 ; anyone remembers. 1 is the raw table; 2 is what a Pico Plus 2 W settled
 ; on beside the memory of the original, and is the default.
+;
+; IT IS THE MOVEMENT DELAY ONLY, and that is the ROM's own control flow
+; and not a balance patch (B105). A creature that WALKS redraws -- CWLK90
+; sets NEWLUK, and CMOV90 forces a PUPDAT for the step that lands on you
+; -- so movement is what the CoCo's redraw throttled. A creature already
+; standing on you does not: CMOV20 attacks and CMOV30 jumps PAST CMOV90's
+; PUPDAT straight to CMOV92, so the only screen work in an attack is
+; HUPDAT's status line. There was never a throttle on it to model.
+;
+; Pacing it anyway made the game unlosable, because recovery is not linear
+; in damage: HSLOW rides the heart (COMPLR.ASM returns HEARTR and Q.JIF)
+; and HUPDAT's heart accelerates as you are hurt, so a player at 150 of
+; 160 heals about 45 points a second where one at 35 heals two. A viper's
+; 35 a hit every 0.7 s outruns that curve and kills in six seconds; at
+; 1.4 s it never does, and you park just short of death for ever.
 make "dagg.pace 2
 
 to dagg.creature.delay :d
@@ -3150,18 +3166,18 @@ end
 ; before it reschedules -- the redraw is part of its turn and the ROM
 ; charges it for it. `dagg.hslow` already reads the clock this way.
 ;
-; Every creature delay goes through `dagg.creature.delay`, which is also
-; where :dagg.pace is applied.
+; The movement delay goes through `dagg.creature.delay`, where :dagg.pace
+; is applied; the attack delay CMOV92 substitutes here does not, because
+; the attack was never the thing a CoCo throttled (see the knob).
 to dagg.cmov90 :y
-  local "t
-  make "t dagg.cc :y 6
   if (and (:dagg.row = item :y :dagg.ccrow)
           (:dagg.col = item :y :dagg.cccol)) [
     dagg.show
     make "dagg.newluk "false
-    make "t dagg.cc :y 7
+    .setitem :y :dagg.cctim dagg.cc :y 7
+    stop
   ]
-  .setitem :y :dagg.cctim dagg.creature.delay :t
+  .setitem :y :dagg.cctim dagg.creature.delay (dagg.cc :y 6)
 end
 
 ; CMOV20, CRETUR.ASM: the creature's attack, through the same ATTACK and
@@ -3182,7 +3198,7 @@ to dagg.cattack :y
     make "dagg.pdam :d
   ]
   dagg.hupdat
-  .setitem :y :dagg.cctim dagg.creature.delay (dagg.cc :y 7)
+  .setitem :y :dagg.cctim dagg.cc :y 7
 end
 
 ; CMOVE, CRETUR.ASM -- one creature's whole turn.

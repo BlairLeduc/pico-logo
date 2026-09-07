@@ -2519,7 +2519,7 @@ only — no board has seen a creature yet; M5 and M6 written and **M6
 confirmed on a Pico Plus 2 W 2026-09-05, which leaves the game complete**
 at 174 tests, 184 procedures of 192 and 7,423 free cells — that run found
 the mixer bug that had silenced every percussive note ([B99](bugs.md)).
-M7 written 2026-09-06 with **three board runs**, 176 tests: it set out to
+M7 written 2026-09-06 with **four board runs**, 176 tests: it set out to
 make the attract mode the cartridge's front door the way `ONCE.ASM` opens on
 `DEMO`, and it **ended by removing the attract mode** ([B108](bugs.md)) when
 the third run showed the demo still does not replay the 1982 recording and
@@ -3191,7 +3191,7 @@ already uses. With it fixed the run passes: knight, wraith and spider
 told apart by ear, and the heartbeat under it.
 
 **M7 — the cartridge, and the attract mode comes out. Written 2026-09-06,
-three board runs, 176 tests.**
+four board runs, 176 tests.**
 M6 built the demo and left it on a side entrance; M7 set out to make it the
 front door, which is the shape `ONCE.ASM` had all along, and **finished by
 taking it out altogether** ([B108](bugs.md)) — the last section here is why.
@@ -3476,7 +3476,9 @@ now stops short of the status row instead of painting over it, so the comment
 saying the bar is hidden *because the map covers it* is wrong; the map screen is
 bare because `MAPPER` opens with `clean` and nothing redraws the bar, and
 `USC210`'s `CLR HEARTF` is a real `ht` on turtle 1. §4.1 and §6.2 carry the new
-numbers.
+numbers. **Both confirmed on a Pico Plus 2 W 2026-09-06** — the view and the
+turn animation read correctly in their new place, and the status line sits
+where the CoCo's does.
 
 *Gate: met, by answering no. The gate was "a board run — whether an attract
 mode reads as one is a thing you watch", and three runs watched it: it does
@@ -3485,9 +3487,36 @@ produced a defect the host could not have found — B102/B103, then B104, then
 B106 — and the pattern held every time: a ROM fact read, reasoned about, and
 then not used. **That is the argument for building a deterministic path
 through a whole game, and it is not the argument for shipping one.** What a
-board is still owed is an ordinary play session against the five fixes that
-outlived the demo — B100 through B104 — since every one of them was reached
-through the attract mode and none of them is the attract mode's.*
+board is still owed is an ordinary play session against the fixes that outlived
+the demo, since every one of them was reached through the attract mode and none
+of them is the attract mode's. **Three of the five are what a player can
+actually reach**, and the count in an earlier draft of this line was wrong:
+[B102](bugs.md)'s fix was one `make "dagg.ppow 6048` inside `dagg.demo` and it
+left with the demo, and [B100](bugs.md)'s survives but is inert — `dagg.ocbmax`
+is the ROM's 72 where a game creates 65, so no player path reaches the entry
+that overran. That leaves [B101](bugs.md), [B103](bugs.md) and
+[B104](bugs.md). **B101 confirmed on a Pico Plus 2 W 2026-09-06**: `EXAMINE`
+typed as the first command of a pass, which is the crash itself, and the torch's
+`CHUCK` audible with it ([B98](bugs.md), [B99](bugs.md)). Still open: B103's
+death restart and B104's level-one creature cells.*
+
+**And the session found something no board run before it could have**, because
+every earlier one was a recording that ended before anything killed anybody:
+*"a viper can kill the player in the original but it will not in the port"*
+([B109](bugs.md)). `:dagg.pace`, the M4 knob, was scaling the attack delay along
+with the movement delay, and because damage recovery accelerates with the heart
+(`HSLOW` rides `HEARTR`, which falls as you are hurt) halving a creature's
+attack rate does not halve the time it takes to kill you — it takes it to
+infinity. Twenty simulated seeds: 20/20 deaths at pace 1, 0/20 at pace 2. The
+knob is now the **movement** delay only, which is what the ROM's own control
+flow says it always should have been — `CMOV30` jumps past `CMOV90`'s `PUPDAT`,
+so a creature standing on you does no redraw and was never throttled by one.
+**This is the milestone's real lesson about the demo, stated from the other
+side:** removing the attract mode did not cost coverage, it bought it. A
+recording exercises the paths a recording reaches; a game is the only thing
+that can report that it cannot be lost. **Confirmed on a Pico Plus 2 W the same
+day** — *"the game is behaving correctly"* — which also puts B103 within a
+player's reach for the first time, since the way to a death screen is to die.*
 
 A faithful port of the 1982 DynaMicro game from **its own 6809 source**, 9,866
 lines of it, kept under `docs/DungeonsOfDaggorath/` with the grant of licence
