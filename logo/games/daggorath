@@ -15,7 +15,7 @@
 ; the bag, both hands and all fifteen commands; the CCB table, CMOVE and
 ; its preference walk, the peek-a-boo, combat both ways and CREGEN; the
 ; level graph, both wizards, the ring riddle and ZSAVE/ZLOAD; and
-; SOUNDS.ASM's twenty-three effects with the wizard's voice.
+; SOUNDS.ASM's twenty-three effects.
 ;
 ; YOU START IN THE DARK, and that is not a fault: the player's own light
 ; is zero (COMDAT.ASM never sets PRLITE), so until you PULL the pine torch
@@ -29,10 +29,6 @@
 ; memory of the original -- see dagg.creature.delay. It touches how fast
 ; a creature CLOSES on you and nothing else: not its attack once it gets
 ; there, and never the heart, the torch or your own commands.
-;
-; `make "dagg.voice "false` stops the wizard speaking his speeches aloud
-; (design section 9.5). The words are printed either way; the CoCo only
-; printed them, and the voice is this port's one deliberate addition.
 ;
 ; The object and creature tables and every vector list are generated into
 ; this file by scripts/gen_daggorath.py -- see the marked block below. The
@@ -2479,12 +2475,6 @@ make "dagg.s.exp1 22
 make "dagg.sndn -1
 make "dagg.sndvol 0
 
-; Design section 9.5, and it is flagged as an addition because it is one:
-; the CoCo PRINTED the wizard's speeches and the death message, and we
-; print them AND speak them. `make "dagg.voice "false` before `daggorath`
-; turns the speaking off; the text is the same either way.
-make "dagg.voice "true
-
 ; `play` spells a frequency as a note, so a sweep is rounded to semitones
 ; -- worth at most 3 % of a hertz, inaudible in a squeak, and it is
 ; logo/games/berzerk's own method. The RANGE is what costs something:
@@ -2679,8 +2669,6 @@ to dagg.setup.sound
   setwave [3 7] "white
   setenv [0 4] [0 25 0 60]
   setenv [1 5 2 6 3 7] [0 0 15 0]
-  ; PATTK/PINCAN's wizard, design section 9.5: pitched low.
-  setvoice [30 120 190 100]
 end
 
 ; SOUNDX, whose dispatch is `JSR [A,X]` on SNDTAB. `SNOUT` multiplies
@@ -2919,9 +2907,10 @@ end
 ; His two speeches, factored out so a host test can read them: dagg.look
 ; at the end of dagg.endgam clears the text window (INIVUX's own CLRPRI),
 ; so by the time the procedure returns there is nothing to assert on.
-; Spoken as well as printed at M6 -- design section 9.5. `say` reads the
-; same list `pr` does, so the speech cannot drift from the caption; `.`
-; and `!` are pauses to it and the rest of the punctuation it ignores.
+; M6 SPOKE THEM TOO and M7 took the voice back out -- design section 9.5.
+; The cartridge printed these four lines and said nothing, and a board
+; playing the game said so. The words are what carries over; the voice
+; was ours.
 to dagg.endgam.speeches
   local "a local "b
   make "a [ENOUGH! I TIRE OF THIS PLAY...]
@@ -2929,7 +2918,6 @@ to dagg.endgam.speeches
   pr []
   pr :a
   pr :b
-  if :dagg.voice [say :a  say :b]
 end
 
 ; Everything the strip takes: every OCB that is neither in a hand nor
@@ -3000,7 +2988,6 @@ to dagg.winner.speeches
   pr []
   pr :a
   pr :b
-  if :dagg.voice [say :a  say :b]
 end
 
 ; PATT10's ring counter: ENERGY, ICE and FIRE spend a charge a swing and
@@ -3505,7 +3492,6 @@ to dagg.death
   pr []
   type char 32
   pr :a
-  if :dagg.voice [say :a]
 end
 
 ;==========================================================================

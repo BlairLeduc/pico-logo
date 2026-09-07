@@ -4580,48 +4580,50 @@ void test_a_long_run_of_sounds_spends_nothing(void)
 }
 
 //==========================================================================
-// Design section 9.5 -- the wizard speaks.
+// Design section 9.5 -- the wizard is silent.
 //==========================================================================
 
-void test_the_wizard_speaks_and_can_be_told_not_to(void)
+// THE WIZARD DOES NOT TALK.  M6 shipped `say` on his speeches and the death
+// message as a flagged, switchable addition, and a board playing the game
+// asked for it back out: *"the original did not have it."*  The design had
+// argued the moment wanted a voice; the cartridge PRINTS these four lines
+// and nothing else, and that is the whole of the argument against it.
+//
+// So this is an outcome test in both directions -- the words still arrive
+// on the screen, and NOTHING reaches the speech engine while they do.  The
+// second half is what fails against the old code.  The two `.speeches`
+// procedures stay factored out for the reason they always were: `dagg.look`
+// at the end of `dagg.endgam` clears the text window (INIVUX's own CLRPRI),
+// so by the time the procedure returns there is nothing to assert on.
+void test_the_wizard_prints_his_speeches_and_says_none_of_them(void)
 {
     const MockDeviceState *st = mock_device_get_state();
     static const char *what[3] = {"dagg.endgam.speeches", "dagg.winner.speeches",
                                   "dagg.death"};
+    static const char *words[3] = {"ENOUGH! I TIRE OF THIS PLAY...",
+                                   "BEHOLD! DESTINY AWAITS THE HAND",
+                                   "YET ANOTHER DOES NOT RETURN..."};
     for (int i = 0; i < 3; i++)
     {
         char msg[160];
         mock_speech_set_status(false, SPEECH_QUEUE_LEN);
-        run("make \"dagg.voice \"true");
         mock_device_clear_output();
-        int mark = st->speech.queued_count;
+        const int mark = st->speech.queued_count;
         run(what[i]);
-        const char *spoken = mock_device_get_output();
-        snprintf(msg, sizeof(msg), "%s said nothing out loud", what[i]);
-        TEST_ASSERT_TRUE_MESSAGE(st->speech.queued_count > mark, msg);
-        // The same words, printed, either way -- the speech is an
-        // addition and not a replacement.
-        char printed[512];
-        snprintf(printed, sizeof(printed), "%s", spoken ? spoken : "");
-
-        mock_speech_set_status(false, SPEECH_QUEUE_LEN);
-        run("make \"dagg.voice \"false");
-        mock_device_clear_output();
-        mark = st->speech.queued_count;
-        run(what[i]);
-        snprintf(msg, sizeof(msg), "%s spoke with the voice turned off", what[i]);
+        const char *printed = mock_device_get_output();
+        snprintf(msg, sizeof(msg), "%s printed nothing", what[i]);
+        TEST_ASSERT_NOT_NULL_MESSAGE(printed ? strstr(printed, words[i]) : NULL, msg);
+        snprintf(msg, sizeof(msg), "%s spoke out loud", what[i]);
         TEST_ASSERT_EQUAL_INT_MESSAGE(mark, st->speech.queued_count, msg);
-        snprintf(msg, sizeof(msg), "%s printed something different when silent",
-                 what[i]);
-        const char *again = mock_device_get_output();
-        TEST_ASSERT_EQUAL_STRING_MESSAGE(printed, again ? again : "", msg);
     }
-    run("make \"dagg.voice \"true");
-    // Pitched low, which is the whole of the departure: `setvoice`'s
-    // pitch is in half-Hertz, so 30 is a 60 Hz voice.
+    // And nothing sets a speech voice up for a game that has no speech in
+    // it.  `setvoice` is the whole of what M6 added here; `setwave` and
+    // `setenv` are the PSG and stay.
+    mock_speech_set_status(false, SPEECH_QUEUE_LEN);
+    const int pitch = st->speech.voice_pitch;
     run("dagg.setup.sound");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(30, st->speech.voice_pitch,
-                                  "the wizard is not pitched low");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(pitch, st->speech.voice_pitch,
+                                  "the game still pitches a wizard's voice");
 }
 
 // EVERY SOUND SITE IN THE ROM, walked.  M4's entry says every one of them
@@ -5002,7 +5004,7 @@ int main(void)
     RUN_TEST(test_a_long_run_of_sounds_spends_nothing);
     RUN_TEST(test_every_sound_site_in_the_rom_is_a_sound_here);
     RUN_TEST(test_a_swing_that_lands_sounds_different_from_one_that_misses);
-    RUN_TEST(test_the_wizard_speaks_and_can_be_told_not_to);
+    RUN_TEST(test_the_wizard_prints_his_speeches_and_says_none_of_them);
     RUN_TEST(test_the_first_command_of_a_pass_has_room_to_run);
     RUN_TEST(test_a_death_holds_and_asks_for_another_game);
     RUN_TEST(test_the_game_leaves_room_to_play_in);

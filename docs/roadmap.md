@@ -3095,8 +3095,17 @@ and the board has now met it.**
 SOUNDS.ASM's twenty-three effects behind `SNDTAB`'s index, `say` on the
 wizard's four speeches, and `daggorath.demo` — ONCE.ASM's `DEMO10` and
 HUMAN.ASM's `PLAY20` driving TOKEN.ASM's own seventeen-command autoplay
-table. **The attract mode was removed at the end of M7 and that entry says
-why**; the rest of M6 stands.
+table. **Two of those three were removed at M7.** The attract mode went
+because it could not reproduce the cartridge's, and that entry says why;
+**the voice went because there was nothing to reproduce** — the user, playing
+the game: *"take the talking out of the game, the original did not have it."*
+`say` on the wizard was this port's one flagged, switchable addition, and the
+switch is what the removal answers: the default is what the game is, and
+nobody types `make "dagg.voice "false` before `daggorath`. Gone are
+`dagg.voice`, the three `say` sites and the `setvoice` in `dagg.setup.sound`;
+the four lines still print, which is what the CoCo did. Design §9.5 keeps the
+proposal and records the withdrawal beside it. The twenty-three effects — all
+of M6 that was ever the ROM's — stand, and so does its ear gate.
 Design §16 names the attract mode as the first thing this game
 would give up if it ran out of room and it did not have to: the whole
 milestone cost 1,033 cells of 8,456, three procedures of the eleven left,
@@ -3190,8 +3199,8 @@ reading the ring the DMA would play, the pattern `test_screen_refresh`
 already uses. With it fixed the run passes: knight, wraith and spider
 told apart by ear, and the heartbeat under it.
 
-**M7 — the cartridge, and the attract mode comes out. Written 2026-09-06,
-four board runs, 176 tests.**
+**M7 — the cartridge, and two things come back out: the attract mode and
+the wizard's voice. Written 2026-09-06, five board runs, 177 tests.**
 M6 built the demo and left it on a side entrance; M7 set out to make it the
 front door, which is the shape `ONCE.ASM` had all along, and **finished by
 taking it out altogether** ([B108](bugs.md)) — the last section here is why.
@@ -3518,6 +3527,29 @@ that can report that it cannot be lost. **Confirmed on a Pico Plus 2 W the same
 day** — *"the game is behaving correctly"* — which also puts B103 within a
 player's reach for the first time, since the way to a death screen is to die.*
 
+**And the same session took the wizard's voice out**, which is the second
+thing the milestone removed and the only one that was never a defect: *"take
+the talking out of the game, the original did not have it."* M6 shipped `say`
+on the three speeches and the death message as a **flagged, switchable**
+addition — design §9.5's own words — and the flag is exactly what the removal
+answers. **A switch does not make an addition safe, because the default is what
+the game is**: nobody types `make "dagg.voice "false` before `daggorath`, so
+the only Daggorath anybody played was the one with a voice the cartridge never
+had. Gone: `dagg.voice`, the three `say` sites, and `setvoice` out of
+`dagg.setup.sound` — `setwave` and `setenv` stay, because those are the PSG and
+the PSG is playing `SOUNDS.ASM`. The four lines still print, unchanged, which
+is all `PATTK.ASM` and `HUPDAT.ASM` ever did with them.
+`test_the_wizard_speaks_and_can_be_told_not_to` became
+`test_the_wizard_prints_his_speeches_and_says_none_of_them` and now asserts
+both halves — the words arrive and nothing reaches the speech engine — which
+also keeps the only assertion in the suite on the two wizard speeches
+themselves. **Put beside the attract mode it is the same removal twice, from
+opposite ends**: the demo went because it could not reproduce the cartridge's,
+and the voice went because there was no cartridge behind it to reproduce.
+**What is left of this port's own additions is `:dagg.pace` and ESC**, and both
+are there because a Logo program on this board is not a cartridge on a CoCo —
+which is the only ground an addition to a faithful port gets to stand on.*
+
 A faithful port of the 1982 DynaMicro game from **its own 6809 source**, 9,866
 lines of it, kept under `docs/DungeonsOfDaggorath/` with the grant of licence
 beside it. Every rule in the design cites the file and routine it came from,
@@ -3618,8 +3650,9 @@ bar — `HEARTR = 64P/(P+2D) - 19` jiffies, 80 bpm at the start, faint at 3, dea
 when damage passes power — and every long effect calls the scheduler between
 its steps so the beat keeps time through it, which is what the CoCo's IRQ did
 for free while the sound routine blocked the game. M6's gate is a **listening
-test** against a recording of the original. `say` is adopted for the wizard's
-three speeches as a flagged, switchable addition.
+test** against a recording of the original. `say` was adopted for the wizard's
+three speeches as a flagged, switchable addition **and taken back out at M7 on
+the user's call** — the cartridge printed them and said nothing.
 
 **And the level graph is four rows of a table.** `VFTTAB` plus `PCLIMB`'s one
 rule — down a hole or a ladder, up a ladder only — gives 1↔2 and 2↔3 by ladder,

@@ -1138,18 +1138,42 @@ Fainting is a set piece worth keeping (`HUPDAT.ASM:HUPD30`): the light is
 walked down one step at a time with a full redraw at each, until the screen is
 black. Waking up walks it back.
 
-### 9.5 The wizard speaks — a deliberate departure
+### 9.5 The wizard speaks — a departure, proposed and withdrawn
 
 `say` shipped with P16 and `PATTK.ASM` and `PINCAN.ASM` contain three
 speeches: *"ENOUGH! I TIRE OF THIS PLAY…"*, *"PREPARE TO MEET THY DOOM!"* and
 *"BEHOLD! DESTINY AWAITS THE HAND OF A NEW WIZARD…"*, plus the death message
 *"YET ANOTHER DOES NOT RETURN…"*.
 
-The CoCo printed them. **We propose to print them *and* speak them**, with
-`setvoice` pitched low, because a wizard fading in out of the dark to tell you
-he is bored of you is the one moment in this game that wants a voice. It is an
-addition and is flagged as one: `make "dagg.voice "false` turns it off, and the
-text is unchanged either way.
+The CoCo printed them. This section proposed to print them *and* speak them,
+with `setvoice` pitched low, because a wizard fading in out of the dark to tell
+you he is bored of you is the one moment in this game that wants a voice. It
+shipped at M6 behind `make "dagg.voice "false`, on the argument that an
+addition flagged as one and switchable is a safe addition.
+
+**It was removed at M7, on the user's call: *"take the talking out of the game,
+the original did not have it."*** That is the whole of the argument against it,
+and it is a better argument than the one for it. The switch does not rescue an
+addition, because *the default is what the game is* — nobody types
+`make "dagg.voice "false` before `daggorath`, so the game every player meets was
+the one with a voice the cartridge never had. Gone with it: `dagg.voice`, the
+three `say` sites, and `setvoice` out of `dagg.setup.sound` (`setwave` and
+`setenv` stay — they are the PSG, and §9.1–9.4 are the ROM's own twenty-three
+effects). The four lines still print, unchanged, which is what `PATTK.ASM` and
+`HUPDAT.ASM` do.
+
+The two `.speeches` procedures stay factored out, for the reason they were
+factored out in the first place rather than for the voice: `dagg.look` at the
+end of `dagg.endgam` clears the text window, so a host test has nothing to read
+by the time the procedure returns.
+
+**The general lesson, and it is the second time this design has learned it**
+(the first is §19 decision 0, `:dagg.pace`): a deviation that is *defensible*
+is not the same as a deviation that is *wanted*. The attract mode went because
+it could not reproduce the cartridge's; the voice went because it reproduced
+nothing at all — there was no original to be faithful to. What is left of the
+port's own additions is `:dagg.pace`, which exists because this board's redraw
+is not a CoCo's, and it stands because a board asked for it.
 
 ---
 
