@@ -7,6 +7,7 @@ _codeql*
 Testing/
 *.log
 *.o
+__pycache__
 
 # Graphify: everything under graphify-out/ is generated, so none of it is
 # tracked.  `graphify update .` rebuilds the lot from source in about five

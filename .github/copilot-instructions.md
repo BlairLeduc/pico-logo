@@ -66,6 +66,11 @@ many speculative ones. Never ask the author to run or add tests first.
   shipped on that date, and a later row amends an earlier one rather than rewriting it.
   Don't flag an older entry as inaccurate because a later change superseded it — including
   when both entries land in the same PR.
+- `docs/DungeonsOfDaggorath/` is **vendored third-party material, verbatim** — the 1982
+  assembly source and the published `Levels/` maps. It is the external ground truth the
+  maze carve is gated against, and the design quotes it, so its typos, capitalisation
+  (`sNake`) and broken markup (an unmatched `</div>`) are the original's and stay. Never
+  flag spelling, grammar or HTML validity there. `PROVENANCE.md` records the licence.
 - `graphify-out/` is machine-generated, committed as-is; never flag it. Dated snapshots
   archive the *prior* state, so a header trailing its directory date is by design.
 - A blob word can never be a list element: `mem_cons` returns NODE_NIL for a blob

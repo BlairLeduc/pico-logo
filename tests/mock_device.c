@@ -1441,6 +1441,13 @@ void mock_sound_clear_gates(void)
     mock_state.sound.gate_count = 0;
 }
 
+// The queued log is 512 events and a test that walks a whole game's sound
+// table overruns it -- so it clears the same way the gate log does.
+void mock_sound_clear_queued(void)
+{
+    mock_state.sound.queued_count = 0;
+}
+
 //
 // Mock speech operations (P16). The same shape as the sound ops above: every
 // accepted phoneme is logged in order, and each speech_status poll drains one

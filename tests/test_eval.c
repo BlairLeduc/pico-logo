@@ -855,6 +855,39 @@ void test_a_quoted_word_reports_a_full_workspace_instead_of_crashing(void)
     TEST_ASSERT_EQUAL(RESULT_OK, r.status);
 }
 
+// B95. The same bug as B26, one path over, and the one `load` reaches.
+// `proc_define_from_text` interns the procedure name and hands the pointer
+// straight to `primitive_find`, which calls `strlen` on it -- so a
+// definition read on a full atom region crashed instead of reporting. That
+// is exactly what `load` does with every `to ... end` block in a file, and
+// a Pico 2 W loading `logo/games/daggorath` came within 320 word-table
+// bytes of it (B94): the cells ran out first, so the board reported
+// `Out of space` rather than faulting. The parameter names below it had
+// the same shape, and stored NULLs into `params[]` for the same reason.
+void test_a_definition_reports_a_full_workspace_instead_of_crashing(void)
+{
+    exhaust_the_atom_region();
+
+    Result r = proc_define_from_text("to a.name.not.interned.yet\n"
+                                     "  print 1\n"
+                                     "end");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_ERROR, r.status,
+                              "a definition was built out of a failed intern");
+    TEST_ASSERT_EQUAL_MESSAGE(ERR_OUT_OF_SPACE, result_get_error_code(r),
+                              "a full workspace reported something other than out of space");
+
+    // The parameter list is the second site, and it is reached only when
+    // the name itself interned -- so this uses a name the loop above has
+    // already put in the table, and a parameter it has not.
+    r = proc_define_from_text("to w1 :a.param.not.interned.yet\n"
+                              "  print 1\n"
+                              "end");
+    TEST_ASSERT_EQUAL_MESSAGE(RESULT_ERROR, r.status,
+                              "a parameter was built out of a failed intern");
+    TEST_ASSERT_EQUAL_MESSAGE(ERR_OUT_OF_SPACE, result_get_error_code(r),
+                              "a full workspace reported something other than out of space");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -951,6 +984,7 @@ int main(void)
     RUN_TEST(test_b10_valid_exponent_forms_still_numbers);
 
     RUN_TEST(test_a_quoted_word_reports_a_full_workspace_instead_of_crashing);
+    RUN_TEST(test_a_definition_reports_a_full_workspace_instead_of_crashing);
 
     return UNITY_END();
 }

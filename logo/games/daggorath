@@ -1,0 +1,4334 @@
+; Dungeons of Daggorath -- P17, complete: M1 the dungeon and the view, M2
+; the command line and the clock, M3 objects, M4 creatures, M5 the levels
+; and the endgame, M6 sound.
+;
+;   load "daggorath
+;   daggorath        ; a game
+;
+; ESC gives the console back.
+;
+; docs/daggorath-design.md is the design and section 15 is the milestone
+; list. Everything in it is here: the forward-view cell walk (VIEWER.ASM),
+; MOVE and TURN with both animations, the dot fade, inverted levels and
+; the `write`-based status bar; the parser (PARSER.ASM/TOKEN.ASM), the
+; scheduler, the heart drawn and beating, fainting and death; the OCBs,
+; the bag, both hands and all fifteen commands; the CCB table, CMOVE and
+; its preference walk, the peek-a-boo, combat both ways and CREGEN; the
+; level graph, both wizards, the ring riddle and ZSAVE/ZLOAD; and
+; SOUNDS.ASM's twenty-three effects.
+;
+; YOU START IN THE DARK, and that is not a fault: the player's own light
+; is zero (COMDAT.ASM never sets PRLITE), so until you PULL the pine torch
+; out of the bag and USE it, RLIGHT is 0 and VCTLST.ASM:SETFAX draws
+; nothing at any range. The ROM's own attract mode opened EXAMINE / PULL
+; RIGHT TORCH / USE RIGHT / LOOK (TOKEN.ASM:AUTTAB) for exactly that
+; reason.
+;
+; `make "dagg.pace 1` before `daggorath` runs the creatures at the ROM's
+; raw table; 2 is the default and is what a board settled on beside the
+; memory of the original -- see dagg.creature.delay. It touches how fast
+; a creature CLOSES on you and nothing else: not its attack once it gets
+; there, and never the heart, the torch or your own commands.
+;
+; The object and creature tables and every vector list are generated into
+; this file by scripts/gen_daggorath.py -- see the marked block below. The
+; MAZES are not: the game carves them the way DGNGEN.ASM does, because
+; shipping five of them cost a quarter of the cell pool and a Pico 2 W
+; could not load the file (B94). There is no second file to ship and
+; nothing to open at run time.
+;
+; `load` only defines things. The carve and the RNG tables it needs are
+; the first thing `daggorath` does, behind the "PREPARE!" screen, which is
+; where three and a half seconds are a moment to get ready rather than a
+; file that will not finish loading.
+
+;==========================================================================
+; The scale tables -- design section 6.1, verbatim (also tests/logo/p17m0,
+; where the transform this file reuses was board-confirmed at M0).
+
+make "dagg.norscl [200 128 80 50 31 20 12 8 4 2]
+make "dagg.hlfscl [255 156 100 65 40 26 16 10 6 3]
+
+; BAKSCL, VIEWER.ASM: "the same table shifted one entry along" -- the
+; second through eleventh entries of the eleven-value HLFSCL/BAKSCL block
+; VIEWER.ASM lays out (the eleventh, marked *DEBUG in the source, is
+; BAKSCL's own last entry, not dead data once the table is read this way).
+make "dagg.bakscl [156 100 65 40 26 16 10 6 3 1]
+
+; VECTOR.ASM's fade table (design section 8), the dash column -- P18 M2's
+; `setpendash` makes a dotted stroke cost the same as a solid one, so dots
+; are M1's default (the grey alternative is M1a, optional, not built here).
+;
+; It is BITMSK read through two of VECTOR.ASM's own quirks. SETFAX loads
+; `BITMSK+8` indexed by A, and A only ever reaches -6 there (the `CMPA #-7
+; / BLE` above it takes the darkness branch first), so the six entries used
+; are BIT0 through BIT5 -- 1, 2, 4, 8, 16, 32. VECTOR then does `INC
+; VCTFAD` before loading FADCNT from it, so the PERIOD is one more than the
+; table byte: 2, 3, 5, 9, 17, 33. There is no 65 -- design section 8 lists
+; one, reading BITMSK as though A reached -7, and that entry is unreachable
+; because -7 is already total darkness.
+make "dagg.dash [1 2 3 5 9 17 33]
+
+; The two light channels -- CD.ASM's RLIGHT/MLIGHT and PRLITE/PMLITE,
+; design section 8.3. PRLITE is the player's OWN light and COMDAT.ASM never
+; sets it, so it is zero: with no burning torch the whole dungeon is dark.
+; PUPDAT.ASM:PSUB10 adds the torch's two XXXTAB values on top of it, and
+; that sum is what SETFAX attenuates by range.
+;
+; MAGFLG is the channel selector, set for one vector list at a time by
+; whatever is about to draw something magical -- a secret door
+; (VIEWER.ASM:VIEW22), a floor object (VIEW52, which draws it twice, once
+; under each channel), or a magical creature (CMRDRW, M4). SETFAX consumes
+; and clears it, which is why it is set immediately before a draw and never
+; anywhere else.
+make "dagg.prlite 0
+make "dagg.prmlite 0
+make "dagg.light 0
+make "dagg.mlight 0
+make "dagg.magflg "false
+
+;==========================================================================
+; The maze and the architectural vector lists.
+;
+; EVERYTHING BETWEEN THE TWO MARKERS BELOW IS GENERATED. Do not hand-edit
+; it -- run `python3 scripts/gen_daggorath.py`, which rewrites the block in
+; place (and gates the mazes against docs/DungeonsOfDaggorath/Levels/).
+;
+; It is *in this file* rather than in a `daggdata` beside it because a game
+; should be one file to ship. That costs nothing in RAM: measured on the
+; host, whole-row list literals land in exactly the same node and word-table
+; count `readlist` did (27,082 free nodes against 27,025, the difference
+; being the loader procedure that no longer exists). What it does cost is
+; the 40-column source rule -- a maze row is 32 numbers and will not fit,
+; and splitting it into 40-column pieces to be reassembled with `se` is the
+; one form that is NOT free: that burns ~10,900 word-table entries where
+; the whole-row literal burns none.
+;
+; Mazes are a list of levels of 32 rows of 32 cells, not flattened -- see
+; dagg.cell. Each vector list is a list of runs, and each run is already
+; the two parallel ys/xs lists `dagg.draw.run` wants: the generator does
+; the splitting section 6.3 used to do here at load time, which is why
+; `dagg.ys.of`, `dagg.xs.of` and `dagg.read.runs` are gone.
+
+; BEGIN GENERATED DATA
+make "v0 [[[38 38 114 114] [29 64 64 27]] [[16 38] [27 64]]]
+make "v1 [[[128 65 68 119] [40 40 56 56]] [[92 93] [48 52]] [[16 38 114 136] [27 64 64 27]]]
+make "v2 [[[128 66 117] [40 50 58]]]
+make "v3 [[[16 38 114 136] [27 64 64 27]]]
+make "dagg.left (list :v0 :v1 :v2 :v3)
+make "v0 []
+make "v1 [[[114 67 67 114] [108 108 148 148]] [[94 94] [126 130]] [[38 38] [64 192]] [[114 114] [64 192]]]
+make "v2 [[[113 67 114] [108 128 148]]]
+make "v3 [[[38 38] [64 192]] [[114 114] [64 192]]]
+make "dagg.forward (list :v0 :v1 :v2 :v3)
+make "v0 [[[38 38 114 114] [229 192 192 229]] [[16 38] [229 192]]]
+make "v1 [[[128 65 68 119] [216 216 200 200]] [[92 93] [208 204]] [[16 38 114 136] [229 192 192 229]]]
+make "v2 [[[128 66 117] [216 206 198]]]
+make "v3 [[[16 38 114 136] [229 192 192 229]]]
+make "dagg.right (list :v0 :v1 :v2 :v3)
+make "v0 []
+make "v1 []
+make "v2 []
+make "v3 []
+make "dagg.lpeek [[[100 108 112 120 128] [28 36 32 36 28]]]
+make "dagg.rpeek [[[100 108 112 120 128] [228 220 224 220 228]]]
+make "dagg.celine [[[28 28] [47 210]]]
+make "dagg.fwdver []
+make "v []
+make "v lput [[34 24 24 34 34 24] [100 92 164 156 100 100]] :v
+make "v lput [[34 24] [156 156]] :v
+make "v lput [[28 28] [47 96]] :v
+make "v lput [[28 28] [161 210]] :v
+make "dagg.fwdver lput :v :dagg.fwdver
+make "v []
+make "v lput [[24 128] [116 116]] :v
+make "v lput [[24 128] [140 140]] :v
+make "v lput [[28 28] [116 140]] :v
+make "v lput [[40 40] [116 140]] :v
+make "v lput [[52 52] [116 140]] :v
+make "v lput [[64 64] [116 140]] :v
+make "v lput [[76 76] [116 140]] :v
+make "v lput [[88 88] [116 140]] :v
+make "v lput [[100 100] [116 140]] :v
+make "v lput [[112 112] [116 140]] :v
+make "v lput [[123 123] [116 140]] :v
+make "v lput [[34 24 24 34 34 24] [100 92 164 156 100 100]] :v
+make "v lput [[34 24] [156 156]] :v
+make "v lput [[28 28] [47 96]] :v
+make "v lput [[28 28] [161 210]] :v
+make "dagg.fwdver lput :v :dagg.fwdver
+make "v []
+make "v lput [[118 128 128 118 118 128] [100 92 164 156 100 100]] :v
+make "v lput [[118 128] [156 156]] :v
+make "v lput [[28 28] [47 210]] :v
+make "dagg.fwdver lput :v :dagg.fwdver
+make "v []
+make "v lput [[24 128] [116 116]] :v
+make "v lput [[24 128] [140 140]] :v
+make "v lput [[28 28] [116 140]] :v
+make "v lput [[40 40] [116 140]] :v
+make "v lput [[52 52] [116 140]] :v
+make "v lput [[64 64] [116 140]] :v
+make "v lput [[76 76] [116 140]] :v
+make "v lput [[88 88] [116 140]] :v
+make "v lput [[100 100] [116 140]] :v
+make "v lput [[112 112] [116 140]] :v
+make "v lput [[123 123] [116 140]] :v
+make "v lput [[118 128 128 118 118 128] [100 92 164 156 100 100]] :v
+make "v lput [[118 128] [156 156]] :v
+make "v lput [[28 28] [47 210]] :v
+make "dagg.fwdver lput :v :dagg.fwdver
+make "v []
+make "dagg.vfttab [[[1 0 23] [0 15 4] [0 20 17] [1 28 30]] [[1 2 3] [0 3 31] [0 19 20] [0 31 0]] [] [[0 0 31] [0 5 0] [0 22 28] [0 31 16]] []]
+make "v []
+make "v lput [[40 64 42 54 56 40] [86 92 100 82 104 86]] :v
+make "v lput [[66 80 68 74 76 66] [140 140 134 144 134 140]] :v
+make "v lput [[96 120 100 106 116 96] [146 148 136 154 138 146]] :v
+make "v lput [[80 90 86 82 90 80] [116 122 114 122 116 116]] :v
+make "v lput [[64 72 64 78 64 58 54 50 46 40 42 28 28] [124 120 120 110 102 110 118 120 122 116 108 120 126]] :v
+make "v lput [[28 28 36 50 44 46 48 44] [130 136 146 148 136 132 134 136]] :v
+make "v lput [[48 54 116 132 130 120 90 132 72] [134 142 164 132 118 94 110 132 106]] :v
+make "v lput [[64 66 56 54 64] [102 100 94 96 102]] :v
+make "v lput [[66 68 74 76 90] [102 98 102 104 110]] :v
+make "v lput [[88 72] [112 120]] :v
+make "v lput [[62 20 52 64 60 114 80 68 62] [132 128 122 122 124 128 130 130 132]] :v
+make "v lput [[40 38 40 42 40 46 50 50 42 40 46] [130 128 124 126 130 128 128 126 126 124 126]] :v
+make "dagg.wiz2 :v
+make "v []
+make "dagg.gentab [[FLASK] [RING] [SCROLL] [SHIELD] [SWORD] [TORCH]]
+make "dagg.objwgt [5 1 10 25 25 10]
+make "dagg.adjtab []
+make "dagg.adjtab lput [SUPREME 1] :dagg.adjtab
+make "dagg.adjtab lput [JOULE 1] :dagg.adjtab
+make "dagg.adjtab lput [ELVISH 4] :dagg.adjtab
+make "dagg.adjtab lput [MITHRIL 3] :dagg.adjtab
+make "dagg.adjtab lput [SEER 2] :dagg.adjtab
+make "dagg.adjtab lput [THEWS 0] :dagg.adjtab
+make "dagg.adjtab lput [RIME 1] :dagg.adjtab
+make "dagg.adjtab lput [VISION 2] :dagg.adjtab
+make "dagg.adjtab lput [ABYE 0] :dagg.adjtab
+make "dagg.adjtab lput [HALE 0] :dagg.adjtab
+make "dagg.adjtab lput [SOLAR 5] :dagg.adjtab
+make "dagg.adjtab lput [BRONZE 3] :dagg.adjtab
+make "dagg.adjtab lput [VULCAN 1] :dagg.adjtab
+make "dagg.adjtab lput [IRON 4] :dagg.adjtab
+make "dagg.adjtab lput [LUNAR 5] :dagg.adjtab
+make "dagg.adjtab lput [PINE 5] :dagg.adjtab
+make "dagg.adjtab lput [LEATHER 3] :dagg.adjtab
+make "dagg.adjtab lput [WOODEN 4] :dagg.adjtab
+make "dagg.adjtab lput [FINAL 1] :dagg.adjtab
+make "dagg.adjtab lput [ENERGY 1] :dagg.adjtab
+make "dagg.adjtab lput [ICE 1] :dagg.adjtab
+make "dagg.adjtab lput [FIRE 1] :dagg.adjtab
+make "dagg.adjtab lput [GOLD 1] :dagg.adjtab
+make "dagg.adjtab lput [EMPTY 0] :dagg.adjtab
+make "dagg.adjtab lput [DEAD 5] :dagg.adjtab
+make "dagg.odb []
+make "dagg.odb lput [1 255 0 5] :dagg.odb
+make "dagg.odb lput [1 170 0 5] :dagg.odb
+make "dagg.odb lput [4 150 64 64] :dagg.odb
+make "dagg.odb lput [3 140 13 26] :dagg.odb
+make "dagg.odb lput [2 130 0 5] :dagg.odb
+make "dagg.odb lput [0 70 0 5] :dagg.odb
+make "dagg.odb lput [1 52 0 5] :dagg.odb
+make "dagg.odb lput [2 50 0 5] :dagg.odb
+make "dagg.odb lput [0 48 0 5] :dagg.odb
+make "dagg.odb lput [0 40 0 5] :dagg.odb
+make "dagg.odb lput [5 70 0 5] :dagg.odb
+make "dagg.odb lput [3 25 0 26] :dagg.odb
+make "dagg.odb lput [1 13 0 5] :dagg.odb
+make "dagg.odb lput [4 13 0 40] :dagg.odb
+make "dagg.odb lput [5 25 0 5] :dagg.odb
+make "dagg.odb lput [5 5 0 5] :dagg.odb
+make "dagg.odb lput [3 5 0 10] :dagg.odb
+make "dagg.odb lput [4 5 0 16] :dagg.odb
+make "dagg.odb lput [1 0 0 0] :dagg.odb
+make "dagg.odb lput [1 0 255 255] :dagg.odb
+make "dagg.odb lput [1 0 255 255] :dagg.odb
+make "dagg.odb lput [1 0 255 255] :dagg.odb
+make "dagg.odb lput [1 0 0 5] :dagg.odb
+make "dagg.odb lput [0 0 0 5] :dagg.odb
+make "dagg.odb lput [5 5 0 5] :dagg.odb
+make "dagg.xxx []
+make "dagg.xxx lput [3 18 0] :dagg.xxx
+make "dagg.xxx lput [3 19 0] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [64 64 0] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [3 20 0] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [60 13 11] :dagg.xxx
+make "dagg.xxx lput [96 128 0] :dagg.xxx
+make "dagg.xxx lput [3 21 0] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [30 10 4] :dagg.xxx
+make "dagg.xxx lput [15 7 0] :dagg.xxx
+make "dagg.xxx lput [108 128 0] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [] :dagg.xxx
+make "dagg.xxx lput [0 0 0] :dagg.xxx
+make "dagg.omx []
+make "dagg.omx lput [4 1] :dagg.omx
+make "dagg.omx lput [3 1] :dagg.omx
+make "dagg.omx lput [3 1] :dagg.omx
+make "dagg.omx lput [3 2] :dagg.omx
+make "dagg.omx lput [2 3] :dagg.omx
+make "dagg.omx lput [2 3] :dagg.omx
+make "dagg.omx lput [1 1] :dagg.omx
+make "dagg.omx lput [1 3] :dagg.omx
+make "dagg.omx lput [1 6] :dagg.omx
+make "dagg.omx lput [1 4] :dagg.omx
+make "dagg.omx lput [1 4] :dagg.omx
+make "dagg.omx lput [1 6] :dagg.omx
+make "dagg.omx lput [0 1] :dagg.omx
+make "dagg.omx lput [0 4] :dagg.omx
+make "dagg.omx lput [0 8] :dagg.omx
+make "dagg.omx lput [0 8] :dagg.omx
+make "dagg.omx lput [0 3] :dagg.omx
+make "dagg.omx lput [0 4] :dagg.omx
+make "dagg.genval [-1 -1 -1 16 17 15]
+make "v0 [[[110 120 120 110] [162 164 160 162]]]
+make "v1 [[[122 124 126 124 122] [60 62 60 58 60]]]
+make "v2 [[[118 120 126 124 118] [194 192 200 202 194]]]
+make "v3 [[[134 128 122 128 134 134] [172 192 186 168 164 172]]]
+make "v4 [[[114 124] [80 100]] [[118 114] [82 86]]]
+make "v5 [[[118 116 114 118] [60 74 72 60]]]
+make "dagg.fobj (list :v0 :v1 :v2 :v3 :v4 :v5)
+make "v0 []
+make "v1 []
+make "v2 []
+make "v3 []
+make "v4 []
+make "v5 []
+make "dagg.cdb []
+make "dagg.cdb lput [32 0 255 128 255 23 11] :dagg.cdb
+make "dagg.cdb lput [56 0 255 80 128 15 7] :dagg.cdb
+make "dagg.cdb lput [200 0 255 52 192 29 23] :dagg.cdb
+make "dagg.cdb lput [304 0 255 96 167 31 31] :dagg.cdb
+make "dagg.cdb lput [504 0 128 96 60 13 7] :dagg.cdb
+make "dagg.cdb lput [704 0 128 128 48 17 13] :dagg.cdb
+make "dagg.cdb lput [400 255 128 255 128 5 4] :dagg.cdb
+make "dagg.cdb lput [800 0 64 255 8 13 7] :dagg.cdb
+make "dagg.cdb lput [800 192 16 192 8 3 3] :dagg.cdb
+make "dagg.cdb lput [1000 255 5 255 3 4 3] :dagg.cdb
+make "dagg.cdb lput [1000 255 6 255 0 13 7] :dagg.cdb
+make "dagg.cdb lput [8000 255 6 255 0 13 7] :dagg.cdb
+make "dagg.cmt []
+make "dagg.cmt lput [9 9 4 2 0 0 0 0 0 0 0 0] :dagg.cmt
+make "dagg.cmt lput [2 4 0 6 6 6 0 0 0 0 0 0] :dagg.cmt
+make "dagg.cmt lput [0 0 0 4 0 6 8 4 0 0 1 0] :dagg.cmt
+make "dagg.cmt lput [0 0 0 0 0 0 8 6 6 4 0 0] :dagg.cmt
+make "dagg.cmt lput [2 2 2 2 2 2 2 4 4 8 0 1] :dagg.cmt
+make "dagg.fwdcre []
+make "v []
+make "v lput [[124 116 120 116 120 124 120 120 120 116 124] [160 164 168 176 184 176 168 176 184 188 192]] :v
+make "v lput [[124 116 120 122 120 116 124] [168 170 172 176 180 182 184]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+make "v lput [[132 112 92 94 94 92 112 128 132 132 120 106 120 124 124] [130 122 124 126 130 132 130 140 136 114 108 118 112 116 126]] :v
+make "v lput [[100 96 92 88 84 82 86 82 82 86 82 84 88 92 96 100] [120 120 124 120 120 122 126 122 134 130 134 136 136 132 136 136]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+make "v lput [[104 98 92 94 96 102 104 104 102 106] [98 112 120 128 132 132 126 120 114 100]] :v
+make "v lput [[102 102 112 122 124 120 120 116 106 96 92 88] [132 136 148 160 174 170 174 162 152 142 130 118]] :v
+make "v lput [[78 70 80 86 78 76 84 86] [92 96 98 94 92 84 88 94]] :v
+make "v lput [[106 108 110 108 120 126 122 122 118 102 98] [90 86 88 94 98 84 88 80 88 76 80]] :v
+make "v lput [[86 96 108 112 104 94 82 76 72 74 68 70 66 70 68 72 86 96 92 84 74] [84 92 102 98 86 74 76 84 80 84 88 94 96 96 108 116 120 104 100 110 106]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+make "v lput [[82 86 100 110 120 130 128 132 126 128 130 128 132 128 130 124 108 92 86 82] [130 114 108 106 106 96 106 104 114 128 142 148 152 154 162 156 154 148 138 130]] :v
+make "v lput [[86 92 98 100 86 92 102 100] [130 136 138 128 130 120 118 128]] :v
+make "v lput [[108 114 120] [116 118 144]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+make "v lput [[34 34 36 36 34] [124 132 130 126 124]] :v
+make "v lput [[80 64 46 64 82 76 64 58] [142 136 146 156 140 136 146 140]] :v
+make "v lput [[80 128 132 132 126 84] [140 152 160 144 144 130]] :v
+make "v lput [[84 126 132 132 128 80] [126 110 110 92 102 116]] :v
+make "v lput [[80 86 80 64 58 46 42 30 26 30 42 46 42 46 52 46 42] [140 128 114 120 116 110 122 124 128 132 134 146 134 134 128 122 122]] :v
+make "v lput [[52 20 20 24 24 20 20] [128 128 124 126 130 132 128]] :v
+make "v lput [[74 70 70 64 64 70 70 74 74 80 80 74 74 58] [102 102 106 106 90 90 94 94 96 96 100 100 102 116]] :v
+make "v lput [[46 64 64 30 20 30 64 64 20] [110 102 100 102 98 94 96 98 98]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+make "v lput [[104 94 96 106] [98 124 126 100]] :v
+make "v lput [[102 92 102 110 102 102 112 122 124 120 120 116 106 96 92 88] [132 114 118 114 132 136 148 160 174 170 174 162 152 142 130 118]] :v
+make "v lput [[78 70 80 86 78 76 84 86] [92 96 98 94 92 84 88 94]] :v
+make "v lput [[106 108 110 108 120 126 122 122 118 102 98] [90 86 88 94 98 84 88 80 88 76 80]] :v
+make "v lput [[86 96 108 112 104 94 82 76 72 74 68 70 66 70 68 72 86 96 92 84 74] [84 92 102 98 86 74 76 84 80 84 88 94 96 96 108 116 120 104 100 110 106]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+make "v lput [[112 108 104 108 116 118 120 124 124 116 120 120 124] [74 74 70 62 66 74 82 82 74 66 70 62 66]] :v
+make "v lput [[124 120 120 124 128 128] [90 90 82 74 74 82]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+make "v lput [[30 40 40 36] [126 126 124 124]] :v
+make "v lput [[44 52 76 92 76 52 44] [150 166 164 150 136 134 150]] :v
+make "v lput [[80 128 132 132 126 84] [140 152 160 144 144 130]] :v
+make "v lput [[84 126 132 132 128 80] [126 110 110 92 102 116]] :v
+make "v lput [[80 86 80 64 58 46 42 30 26 30 42 46 42 46 52 46 42] [140 128 114 120 116 110 122 124 128 132 134 146 134 134 128 122 122]] :v
+make "v lput [[52 20 20 24 24 20 20] [128 128 124 126 130 132 128]] :v
+make "v lput [[74 70 70 64 64 70 70 74 74 80 80 74 74 58] [102 102 106 106 90 90 94 94 96 96 100 100 102 116]] :v
+make "v lput [[46 64 64 30 20 30 64 64 20] [110 102 100 102 98 94 96 98 98]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+make "v lput [[62 68 56] [68 88 100]] :v
+make "v lput [[74 70 76 74 72 64 74 86 86] [90 74 80 90 100 102 90 94 90]] :v
+make "v lput [[100 90 92 98 94 94 100] [80 86 100 108 98 86 80]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+make "v lput [[80 94 110 132 104 132 68 84 22 52 92 52 22 88 68 132 112 132 110 94 80] [124 114 120 112 78 48 72 32 88 114 128 142 168 224 184 208 178 144 136 142 132]] :v
+make "v lput [[132 124 110 100 92 100 110 124 132] [112 122 126 122 128 134 130 134 144]] :v
+make "v lput [[82 96 92 76 72 78 78 82 96 104 100] [122 106 92 86 78 84 76 84 88 102 116]] :v
+make "v lput [[22 26 18 24 30 38 46 42 32 18 32 38 32 18 32 42 54 42 46 42 46 38 30 24 18 26 22] [168 162 166 160 160 150 140 134 138 132 134 128 122 124 118 122 128 134 128 122 116 106 96 96 90 94 88]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+make "v lput [[64 72 64 78 64 58 54 50 46 40 42 28 28] [124 120 120 110 102 110 118 120 122 116 108 120 126]] :v
+make "v lput [[28 28 36 50 44 46 48 44] [130 136 146 148 136 132 134 136]] :v
+make "v lput [[48 54 116 132 130 120 90 132 72] [134 142 164 132 118 94 110 132 106]] :v
+make "v lput [[64 66 56 54 64] [102 100 94 96 102]] :v
+make "v lput [[66 68 74 76 90] [102 98 102 104 110]] :v
+make "v lput [[88 72] [112 120]] :v
+make "v lput [[62 20 52 64 60 114 80 68 62] [132 128 122 122 124 128 130 130 132]] :v
+make "v lput [[40 38 40 42 40 46 50 50 42 40 46] [130 128 124 126 130 128 128 126 126 124 126]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+make "v lput [[46 50 54 58 56 48 40 38 40 40 42 48 52 54 50 46] [98 100 98 92 86 82 86 90 94 92 88 86 88 92 98 98]] :v
+make "v lput [[104 108 112 116 114 106 98 96 98 98 100 106 110 112 108 104] [154 156 154 148 142 138 142 146 150 148 144 142 146 150 154 154]] :v
+make "v lput [[64 72 64 78 64 58 54 50 46 40 42 28 28] [124 120 120 110 102 110 118 120 122 116 108 120 126]] :v
+make "v lput [[28 28 36 50 44 46 48 44] [130 136 146 148 136 132 134 136]] :v
+make "v lput [[48 54 116 132 130 120 90 132 72] [134 142 164 132 118 94 110 132 106]] :v
+make "v lput [[64 66 56 54 64] [102 100 94 96 102]] :v
+make "v lput [[66 68 74 76 90] [102 98 102 104 110]] :v
+make "v lput [[88 72] [112 120]] :v
+make "v lput [[62 20 52 64 60 114 80 68 62] [132 128 122 122 124 128 130 130 132]] :v
+make "v lput [[40 38 40 42 40 46 50 50 42 40 46] [130 128 124 126 130 128 128 126 126 124 126]] :v
+make "dagg.fwdcre lput :v :dagg.fwdcre
+make "v []
+; END GENERATED DATA
+
+;==========================================================================
+; Object control blocks -- CD.ASM's OCB, as twelve parallel flat lists.
+;
+; The ROM has room for 72 (`OCBLND RMB OC.LEN*72`) and a GAME creates 65:
+; 63 from OMXTAB (ONCE.ASM:CINI40) and the two GAMDAT gives the player.
+; SIZE IT TO THE ROM'S 72 AND NOT TO THAT 65 (B100): DEMDAT is THREE
+; objects -- an iron sword, a pine torch and a leather shield -- so the
+; attract mode needs 66, and a table cut to the count one path happens to
+; stop at is a table the other path runs off the end of.
+;
+; `item` and `.setitem` are the only indexing this Logo has, so a list of
+; records would cost a second level of both on every field read -- the
+; same reasoning, and the same shape, as logo/games/asteroids' rock
+; state.
+;
+; The fields are CD.ASM's, minus P.OCPTR: the ROM threads the bag and each
+; creature's loot through that one link field, and here the bag is a plain
+; Logo list of OCB numbers. `dagg.floor` is the other half of it -- see
+; dagg.ofind.
+
+make "dagg.ocbmax 72
+
+; `fput`, not `lput`: `lput` copies the whole list to append one cell, so
+; building twelve 65-cell lists that way is an O(n^2) 26,000 cells of
+; garbage against a 32,752-cell pool -- with the mazes already in it, that
+; runs out of space on the eleventh list. Order does not matter for zeros.
+to dagg.zeros :n
+  local "out
+  make "out []
+  repeat :n [make "out fput 0 :out]
+  output :out
+end
+
+make "dagg.ocrow dagg.zeros :dagg.ocbmax
+make "dagg.occol dagg.zeros :dagg.ocbmax
+make "dagg.oclvl dagg.zeros :dagg.ocbmax
+make "dagg.ocown dagg.zeros :dagg.ocbmax
+make "dagg.ocx0 dagg.zeros :dagg.ocbmax
+make "dagg.ocx1 dagg.zeros :dagg.ocbmax
+make "dagg.ocx2 dagg.zeros :dagg.ocbmax
+make "dagg.octyp dagg.zeros :dagg.ocbmax
+make "dagg.occls dagg.zeros :dagg.ocbmax
+make "dagg.ocrev dagg.zeros :dagg.ocbmax
+make "dagg.ocmgo dagg.zeros :dagg.ocbmax
+make "dagg.ocpho dagg.zeros :dagg.ocbmax
+make "dagg.ocbptr 0
+
+; The type numbers this file names. They are ADJTAB rows, which is what
+; P.OCTYP holds -- see the generated dagg.adjtab.
+make "dagg.t.seer 4
+make "dagg.t.thews 5
+make "dagg.t.vision 7
+make "dagg.t.abye 8
+make "dagg.t.hale 9
+make "dagg.t.empty 23
+make "dagg.t.dead 24
+make "dagg.k.ring 1
+make "dagg.k.shield 3
+make "dagg.k.torch 5
+; PATT10's ring range: ENERGY, ICE, FIRE are the three that spend a charge
+; when swung, and GOLD is what the third swing leaves you with. FINAL (18)
+; is below the range and is not counted down -- the Ring of Ohm ends the
+; game (M5) rather than being used up.
+make "dagg.t.rn11 19
+make "dagg.t.rn12 21
+make "dagg.t.rn15 18
+make "dagg.t.rn20 22
+
+; OCBFIX, OBIRTH.ASM: copy ODBTAB's four bytes into P.OCCLS..P.OCPHO, then
+; XXXTAB's three special bytes IF this type has an entry. A type with no
+; entry leaves them ALONE rather than zeroing them, which is what lets
+; PINCAN transform a Vulcan ring into a Fire ring without spending its
+; three charges (P.OCXXX+0), because FIRE has no XXXTAB row.
+to dagg.ocbfil :i :typ
+  local "d local "x
+  make "d item (:typ + 1) :dagg.odb
+  .setitem :i :dagg.occls item 1 :d
+  .setitem :i :dagg.ocrev item 2 :d
+  .setitem :i :dagg.ocmgo item 3 :d
+  .setitem :i :dagg.ocpho item 4 :d
+  make "x item (:typ + 1) :dagg.xxx
+  if empty? :x [stop]
+  .setitem :i :dagg.ocx0 item 1 :x
+  .setitem :i :dagg.ocx1 item 2 :x
+  .setitem :i :dagg.ocx2 item 3 :x
+end
+
+; OBIRTX, OBIRTH.ASM. The second OCBFIL is the whole mechanic of REVEAL:
+; GENVAL dresses every new shield, sword and torch in the LEATHER, WOODEN
+; or PINE parameters while keeping its own reveal requirement, so an
+; unrevealed Mithril shield really does fight like a leather one until
+; PREVEA gives it its numbers back. Flasks, rings and scrolls are -1 in
+; GENVAL and keep theirs from birth -- you still cannot see what they are,
+; because OBJNAM hides the adjective, but they work.
+to dagg.obirth :typ :lvl
+  local "i local "g local "rev
+  make "i :dagg.ocbptr + 1
+  make "dagg.ocbptr :i
+  .setitem :i :dagg.octyp :typ
+  .setitem :i :dagg.oclvl :lvl
+  .setitem :i :dagg.ocown 0
+  .setitem :i :dagg.ocrow 0
+  .setitem :i :dagg.occol 0
+  dagg.ocbfil :i :typ
+  make "g item (1 + item :i :dagg.occls) :dagg.genval
+  if :g < 0 [output :i]
+  make "rev item :i :dagg.ocrev
+  dagg.ocbfil :i :g
+  .setitem :i :dagg.ocrev :rev
+  output :i
+end
+
+; CINI40/CINI44, ONCE.ASM: every object in the game is created once, at
+; power-on, and marked CREATURE-owned. NEWLVL.ASM:NLVL40 then hands them
+; round-robin to the living creatures of their level -- which is M4, so at
+; M3 they are created and then nothing ever picks them up. Nothing is
+; lying on the floor at the start of a game and that is the ROM's design
+; (design section 7.3): you get gear by killing things.
+;
+; The distribution walks DOWN from the object's first level and wraps, and
+; CINI44 allows a level 5 the dungeon does not have -- so a few objects
+; are unreachable in any game. Kept: design section 19, decision 4.
+to dagg.makeobjects
+  local "n local "lvl local "cnt local "i local "k
+  make "dagg.ocbptr 0
+  repeat count :dagg.omx [
+    make "n repcount - 1
+    make "lvl item 1 (item repcount :dagg.omx)
+    make "cnt item 2 (item repcount :dagg.omx)
+    make "i :lvl
+    repeat :cnt [
+      make "k dagg.obirth :n :i
+      .setitem :k :dagg.ocown (0 - 1)
+      make "i :i + 1
+      if :i > 5 [make "i :lvl]
+    ]
+  ]
+end
+
+; GAMDAT, COMDAT.ASM: a wooden sword and a pine torch, in that order, both
+; in the bag and both revealed -- which is where POBJWT's own `FDB 30+5`
+; comes from (25 + 10). GAME30 re-fills each OCB from its real type after
+; OBIRTH, undoing the GENVAL substitution, and then clears P.OCREV.
+make "dagg.gamdat [17 15]
+
+to dagg.givebag
+  local "i local "dat
+  make "dagg.bag []
+  make "dat :dagg.gamdat
+  foreach :dat [[typ]
+    make "i dagg.obirth :typ :dagg.level
+    .setitem :i :dagg.ocown 1
+    dagg.ocbfil :i :typ
+    .setitem :i :dagg.ocrev 0
+    make "dagg.bag lput :i :dagg.bag
+  ]
+end
+
+;==========================================================================
+; Hands, the bag and the floor.
+;
+; PLHAND/PRHAND hold an OCB number or 0 for empty, exactly as the ROM
+; holds a pointer or a null one. BAGPTR's linked list is a Logo list with
+; the head at the front, because PSTOW0 pushes there.
+;
+; `dagg.floor` is the ROM's OCB table read the way OFIND reads it. FNDOBJ
+; walks all 65 OCBs and OFIND then rejects the owned ones; at ten ranges a
+; redraw that is 650 walks of three `item`s each, which is tens of
+; milliseconds against a redraw budget of 100 (design section 12). So the
+; unowned objects are kept in their own list, in OCB order so that OFIND
+; still answers in the order the ROM answers in, and the walk is over the
+; two or three things actually lying on this floor.
+
+make "dagg.plhand 0
+make "dagg.prhand 0
+make "dagg.bag []
+make "dagg.floor []
+make "dagg.ptorch 0
+make "dagg.ofindp 0
+
+to dagg.hand :h
+  if :h = "l [output :dagg.plhand]
+  output :dagg.prhand
+end
+
+to dagg.sethand :h :i
+  ifelse :h = "l [make "dagg.plhand :i] [make "dagg.prhand :i]
+end
+
+; Kept ascending by OCB number: OFIND's answers are in table order and
+; PGET takes the first match, so a floor list in drop order would hand you
+; a different object than the ROM would.
+to dagg.floor.add :i
+  local "out local "done
+  make "out []
+  make "done "false
+  foreach :dagg.floor [[k]
+    if (and (not :done) (:i < :k)) [make "out lput :i :out  make "done "true]
+    make "out lput :k :out
+  ]
+  if not :done [make "out lput :i :out]
+  make "dagg.floor :out
+end
+
+to dagg.floor.del :i
+  local "out
+  make "out []
+  foreach :dagg.floor [[k] if not (:k = :i) [make "out lput :k :out]]
+  make "dagg.floor :out
+end
+
+to dagg.bag.del :i
+  local "out
+  make "out []
+  foreach :dagg.bag [[k] if not (:k = :i) [make "out lput :k :out]]
+  make "dagg.bag :out
+end
+
+; OFIND/FNDOBJ, COMCRE.ASM: a cursor rather than a list, because the two
+; callers that matter -- the cell walk and EXAMINE -- ask for one object at
+; a time and the cell walk is on the redraw path, where building a list
+; would allocate. OFINDF is the "rewind" flag; ours is the cursor itself.
+to dagg.ofind.rewind
+  make "dagg.ofindp 0
+end
+
+to dagg.ofind :row :col
+  local "i local "j
+  make "j :dagg.ofindp
+  repeat (count :dagg.floor) - :j [
+    make "j :j + 1
+    make "i item :j :dagg.floor
+    if (and (:dagg.level = item :i :dagg.oclvl)
+            (:row = item :i :dagg.ocrow)
+            (:col = item :i :dagg.occol)) [
+      make "dagg.ofindp :j
+      output :i
+    ]
+  ]
+  make "dagg.ofindp count :dagg.floor
+  output 0
+end
+
+; OBJNAM, STATUS.ASM. An unrevealed object gets its generic name only --
+; TORCH, not PINE TORCH -- which is the whole of the game's information
+; economy: you cannot tell a Solar torch from a Pine one until you have
+; the power to REVEAL it.
+to dagg.objnam :i
+  local "gen
+  if :i = 0 [output "EMPTY]
+  make "gen first item (1 + item :i :dagg.occls) :dagg.gentab
+  if not (0 = item :i :dagg.ocrev) [output :gen]
+  output (word first item (1 + item :i :dagg.octyp) :dagg.adjtab
+               char 32 :gen)
+end
+
+;==========================================================================
+; Creature control blocks -- CD.ASM's CCB, as parallel flat lists, the same
+; shape and for the same reason as the OCBs above.
+;
+; The ROM has room for 32 (`CCBLND RMB CC.LEN*32`) and CMTTAB never asks
+; for more than 31 (level 5), which leaves CREGEN exactly one slot.
+;
+; SEVEN of the CCB's fields are not here. Power, the two offense and two
+; defense percentages and the two delay times are CDBTAB's: CBIRTH copies
+; them into every CCB with `JSR COPY` and then nothing ever writes one --
+; DAMAGE only touches P.ATDAM. So they are read out of `dagg.cdb` by TYPE
+; (dagg.cc, below), which is seven fewer thirty-two-element lists to build
+; and to keep in step. P.CCOBJ's linked list is a Logo list of OCB numbers,
+; exactly as the bag is.
+
+make "dagg.ccbmax 32
+
+make "dagg.ccuse dagg.zeros :dagg.ccbmax
+make "dagg.cctyp dagg.zeros :dagg.ccbmax
+make "dagg.ccdir dagg.zeros :dagg.ccbmax
+make "dagg.ccrow dagg.zeros :dagg.ccbmax
+make "dagg.cccol dagg.zeros :dagg.ccbmax
+make "dagg.ccdam dagg.zeros :dagg.ccbmax
+make "dagg.cctim dagg.zeros :dagg.ccbmax
+; Zeros only until dagg.ccb.clear runs, which it does before any creature
+; is born: every entry is a LIST of OCB numbers from then on.
+make "dagg.ccobj dagg.zeros :dagg.ccbmax
+
+; A creature's seven constants, by CCB number -- 1 power, 2 magic offense,
+; 3 magic defense, 4 physical offense, 5 physical defense, 6 movement
+; delay, 7 attack delay. CD.ASM's CDB order, which is also P.ATxxx's, so
+; dagg.attack and dagg.damage read a creature and the player through the
+; same field numbers.
+to dagg.cc :i :field
+  output item :field (item (1 + item :i :dagg.cctyp) :dagg.cdb)
+end
+
+; P.TCTIM, CD.ASM: a creature's timer is a COUNTDOWN in tenths, not a due
+; time -- QUESCN decrements it once per queue scan and runs the task at
+; zero, and QUEADD stores the count straight. Q.TEN really is a tenth of a
+; second: COMMON.ASM's ROLTAB rolls the JIFFY counter over at 6 and the IRQ
+; is 1/60 s, so a spider's P.CCTMV of 23 is 2.3 seconds.
+;
+; STORING THE COUNTDOWN RATHER THAN A DEADLINE IS NOT A STYLE CHOICE, it is
+; the only affordable shape (B91). `.setitem` INTERNS every new number it
+; is given -- measured at 12 atoms and 3 nodes apiece -- and the atom table
+; is 32 KB that nothing frees. A `ticks`-based deadline is a brand-new
+; number every turn, thirty a second across a level, which is the whole
+; table in under two minutes. A countdown is a small integer in 1..62 and
+; the mazes have interned every one of those already, so it costs nothing
+; at all, for ever. Same rule as the occupancy grid above.
+;
+; :dagg.pace is this port's own, and a knob rather than a rule -- design
+; section 19. The ROM's delays are faithful and a real CoCo still could not
+; keep up with them: VECTOR costs ~195 us a pixel (section 6.4), so a
+; VIEWER redraw there is hundreds of milliseconds and the cooperative
+; scheduler ran creature tasks only in the gaps between redraws. We redraw
+; in 40-80 ms and meet every timer on time, which is faster than the game
+; anyone remembers. 1 is the raw table; 2 is what a Pico Plus 2 W settled
+; on beside the memory of the original, and is the default.
+;
+; IT IS THE MOVEMENT DELAY ONLY, and that is the ROM's own control flow
+; and not a balance patch (B105). A creature that WALKS redraws -- CWLK90
+; sets NEWLUK, and CMOV90 forces a PUPDAT for the step that lands on you
+; -- so movement is what the CoCo's redraw throttled. A creature already
+; standing on you does not: CMOV20 attacks and CMOV30 jumps PAST CMOV90's
+; PUPDAT straight to CMOV92, so the only screen work in an attack is
+; HUPDAT's status line. There was never a throttle on it to model.
+;
+; Pacing it anyway made the game unlosable, because recovery is not linear
+; in damage: HSLOW rides the heart (COMPLR.ASM returns HEARTR and Q.JIF)
+; and HUPDAT's heart accelerates as you are hurt, so a player at 150 of
+; 160 heals about 45 points a second where one at 35 heals two. A viper's
+; 35 a hit every 0.7 s outruns that curve and kills in six seconds; at
+; 1.4 s it never does, and you park just short of death for ever.
+make "dagg.pace 2
+
+to dagg.creature.delay :d
+  output :dagg.pace * :d
+end
+
+; CFIND, COMCRE.ASM, as a 32 x 32 occupancy grid rather than a walk over
+; the CCB table -- and this is not an optimisation, it is the milestone's
+; budget. A redraw asks CFIND thirty times (VIEW30 once a range, PDRAW
+; twice), and a walk is three `item`s over 32 entries each time, which is
+; tens of milliseconds of a 100 ms redraw (design section 12) spent on the
+; question "is anything here?" alone. Two `item`s answer it. The same
+; trade, for the same reason, as `dagg.floor` against OFIND's flat walk.
+;
+; It is exact rather than approximate because two live creatures can never
+; share a cell: CWALK asks CFIND before it moves and CBIRTH before it
+; places, so there is never a second answer to lose.
+;
+; It holds CCB numbers and only ever the numbers 0 to 32, which the mazes
+; have already interned -- `.setitem` interns each new number it is given,
+; and a grid of coordinates or of times would not be free the way this is.
+to dagg.grid
+  local "out
+  make "out []
+  repeat 32 [make "out fput (dagg.zeros 32) :out]
+  output :out
+end
+
+make "dagg.ccmap dagg.grid
+
+; MAP32's wrap, the same one dagg.cell does: PDRAW steps out of the cell
+; being drawn with no border check at all, so a peek off the edge of the
+; maze asks about row -1 and has to be answered rather than error.
+to dagg.cfind :row :col
+  local "r
+  make "r item ((modulo :row 32) + 1) :dagg.ccmap
+  output item ((modulo :col 32) + 1) :r
+end
+
+to dagg.ccput :row :col :i
+  local "r
+  make "r item ((modulo :row 32) + 1) :dagg.ccmap
+  .setitem ((modulo :col 32) + 1) :r :i
+end
+
+; NLVL20's "Armagedon!" -- the whole CCB table zeroed. The occupancy grid
+; is cleared through the creatures that are standing on it rather than
+; rebuilt, because rebuilding it is 1,024 fresh cells a level change and
+; nothing reclaims them until `recycle` is typed.
+to dagg.ccb.clear
+  local "i
+  repeat :dagg.ccbmax [
+    make "i repcount
+    if not (0 = item :i :dagg.ccuse) [
+      dagg.ccput (item :i :dagg.ccrow) (item :i :dagg.cccol) 0
+    ]
+    .setitem :i :dagg.ccuse 0
+    .setitem :i :dagg.ccobj []
+  ]
+end
+
+; CBIR00: the ROM walks the CCB table for a free entry and has no end
+; test, because CMTTAB and CREGEN together cannot ask for a 33rd. Ours
+; answers 0 and CBIRTH declines, which is the same thing said out loud.
+to dagg.ccfree
+  repeat :dagg.ccbmax [
+    if 0 = item repcount :dagg.ccuse [output repcount]
+  ]
+  output 0
+end
+
+; FNDCEL, COMCRE.ASM: any cell that is not solid rock, drawn from DGNGEN's
+; OWN generator -- `JSR RNDCEL`, the routine the carve is built out of,
+; running on the one 24-bit SEED the whole cartridge shares. It is not
+; re-seeded between the maze and the monsters, so where a creature is born
+; is a function of the level and of nothing else, and level one's twenty-four
+; are the same twenty-four cells in every game ever played. That is what
+; makes a seventeen-keystroke recorded demo possible at all, and this port
+; used Logo's `random` here instead (B104).
+to dagg.fndcel
+  dagg.rndcel
+  until [not (255 = dagg.cell :dagg.rr :dagg.rc)] [dagg.rndcel]
+  output list :dagg.rr :dagg.rc
+end
+
+; CBIRTH, COMCRE.ASM. CBIR20 keeps drawing cells until it finds one nobody
+; is standing on; the CCB is otherwise zero, so a new creature faces north
+; and carries nothing until NLVL40 hands it something.
+to dagg.cbirth :typ
+  local "i local "p
+  make "i dagg.ccfree
+  if :i = 0 [stop]
+  make "p dagg.fndcel
+  until [0 = dagg.cfind (item 1 :p) (item 2 :p)] [
+    make "p dagg.fndcel
+  ]
+  .setitem :i :dagg.ccuse 1
+  .setitem :i :dagg.cctyp :typ
+  .setitem :i :dagg.ccdir 0
+  .setitem :i :dagg.ccdam 0
+  .setitem :i :dagg.ccobj []
+  .setitem :i :dagg.ccrow (item 1 :p)
+  .setitem :i :dagg.cccol (item 2 :p)
+  dagg.ccput (item 1 :p) (item 2 :p) :i
+  .setitem :i :dagg.cctim dagg.creature.delay (dagg.cc :i 6)
+end
+
+; NLVL40, NEWLVL.ASM: every creature-owned object on this level goes to a
+; creature, round-robin, pushed at the head of that creature's list. This
+; is what puts the dungeon's loot on its monsters (design section 7.3),
+; and it is the whole reason nothing is lying on the floor at the start of
+; a game -- you get gear by killing things.
+;
+; The ROM's round-robin is a pointer that wraps and skips dead entries and
+; would spin forever on a level with no live creatures. Ours walks a list
+; of the live ones, which cannot; a level with none distributes nothing.
+to dagg.nlvl40
+  local "live local "n local "k local "c
+  make "live []
+  repeat :dagg.ccbmax [
+    if not (0 = item repcount :dagg.ccuse) [
+      make "live lput repcount :live
+    ]
+  ]
+  if empty? :live [stop]
+  make "n 0
+  repeat :dagg.ocbmax [
+    make "k repcount
+    if (and (:dagg.level = item :k :dagg.oclvl)
+            ((item :k :dagg.ocown) < 0)) [
+      make "n 1 + (modulo :n (count :live))
+      make "c item :n :live
+      .setitem :c :dagg.ccobj (fput :k (item :c :dagg.ccobj))
+    ]
+  ]
+end
+
+; CMXLND, NEWLVX: the ROM copies CMTTAB into RAM once at power-on and then
+; MUTATES it -- PATT40 decrements what you kill and CREGEN increments a
+; random type every five minutes -- so the count a level is rebuilt from
+; is not the count it was built from. `daggorath` is this port's power-on
+; (it is what re-runs CINI40's dagg.makeobjects), so the copy is made
+; there; `se :r []` is a fresh spine, which is what keeps the generated
+; :dagg.cmt intact for the next game.
+to dagg.cmx.reset
+  make "dagg.cmx []
+  foreach :dagg.cmt [[r] make "dagg.cmx lput (se :r []) :dagg.cmx]
+end
+
+; RAMDAT's own copy, at what is this port's power-on: `load`. `daggorath`
+; makes it again, because `daggorath` is also where CINI40's
+; dagg.makeobjects runs.
+dagg.cmx.reset
+
+; NEWLVX, NEWLVL.ASM: wipe the creatures, set the level's colours, and
+; give the new world life -- the most ferocious type FIRST (`LDA
+; #CTYPES-1`), which is the order CFIND and NLVL40 then answer in. The
+; maze is already carved (design section 7.2); VFTTAB and the level graph
+; are M5's.
+;
+; `repcount` is the INNERMOST repeat's, so the type has to be taken into a
+; local before the birth loop -- the same trap dagg.map.row records.
+to dagg.newlvl :level
+  local "row local "t local "n
+  dagg.ccb.clear
+  dagg.enter.level :level
+  make "row item (:level + 1) :dagg.cmx
+  repeat 12 [
+    make "t 12 - repcount
+    make "n item (:t + 1) :row
+    repeat :n [dagg.cbirth :t]
+  ]
+  dagg.nlvl40
+end
+
+;==========================================================================
+; DGNGEN.ASM -- the maze, carved on the board.
+;
+; The five mazes used to ship as data, one `make "rows lput [ ... ] :rows`
+; line a row.  That cost 7,905 cells -- a quarter of the pool -- and it is
+; more than a Pico 2 W has: `load` ran the arena out and reported
+; `Out of space` with 72 cells and 320 word-table bytes left (B94).
+;
+; Design section 7.2 rejected carving on the board, and was right about
+; the port it measured: RANDOM.ASM's RANDOX shifts a 24-bit register
+; eight times a byte, which is ~91 Logo statements -- 1.95 ms a byte on a
+; Pico 2 W at 300 MHz, and a level draws up to 2,235 of them.  Four and a
+; half seconds of RNG alone.
+;
+; But the register is LINEAR, so eight steps collapse.  After one byte
+; SEED+2 holds the old SEED+1 and SEED+1 the old SEED, and the new low
+; byte depends on the old SEED+1 and SEED+2 only -- and because the
+; feedback is a parity fold, that dependence splits into two halves:
+;
+;     new SEED = TA[old SEED+1] xor TB[old SEED+2]
+;
+; Two 256-entry tables, and a byte becomes five statements instead of
+; ninety-one: 150 us, so a whole level is 2.64 s at worst.  That goes
+; behind MISC.ASM's own "PREPARE!", which PCLI20 already prints one line
+; before it asks for the new level.
+;
+; Nothing here is a transcribed constant that could be wrong.  The tables
+; are built on the first carve by `dagg.slow8` -- the honest
+; shift-at-a-time ROM byte -- so they are derived from the original, not
+; copied from it.  The split itself was checked against that original over
+; all 65,536 pairs,
+; and the carve is pinned cell-for-cell to the 1982 dungeon by
+; `test_the_carve_reproduces_the_1982_dungeon`.
+;==========================================================================
+
+; RANDOM.ASM:RANDOX, one bit at a time.  Only `dagg.rtabs` calls this --
+; it is the definition the fast path is derived from, and the reason no
+; table in this file had to be trusted.
+to dagg.p8 :b
+  local "x
+  make "x bitxor :b (lshift :b -4)
+  make "x bitxor :x (lshift :x -2)
+  make "x bitxor :x (lshift :x -1)
+  output bitand :x 1
+end
+
+to dagg.slow8 :a0 :a1 :a2
+  local "f local "c0 local "c1
+  repeat 8 [
+    make "f dagg.p8 (bitand :a2 225)
+    make "c0 bitand (lshift :a0 -7) 1
+    make "c1 bitand (lshift :a1 -7) 1
+    make "a0 bitand ((lshift :a0 1) + :f) 255
+    make "a1 bitand ((lshift :a1 1) + :c0) 255
+    make "a2 bitand ((lshift :a2 1) + :c1) 255
+  ]
+  output :a0
+end
+
+; Empty until the first carve asks for them -- dagg.gen builds them, and
+; nothing else in the file draws before a level exists.  512 shift-at-a-time
+; draws is ~0.96 s on a Pico 2 W at 300 MHz, and `load` is not where a
+; player wants to spend it (see daggorath.once).
+make "dagg.rta []
+make "dagg.rtb []
+
+; TA[x] is the byte a register holding (0, x, 0) produces; TB[x] the one
+; (0, 0, x) produces.  `fput` and not `lput`: lput copies the whole list
+; each time, which is the O(n^2) build that ran a bounded heap out of
+; space before (see dagg.cell's note).
+to dagg.rtabs
+  make "dagg.rta []
+  make "dagg.rtb []
+  repeat 256 [
+    make "dagg.rta fput (dagg.slow8 0 (256 - repcount) 0) :dagg.rta
+    make "dagg.rtb fput (dagg.slow8 0 0 (256 - repcount)) :dagg.rtb
+  ]
+end
+
+to dagg.rnd
+  local "n
+  make "n (bitxor (item (:dagg.s1 + 1) :dagg.rta)
+                  (item (:dagg.s2 + 1) :dagg.rtb))
+  make "dagg.s2 :dagg.s1
+  make "dagg.s1 :dagg.s0
+  make "dagg.s0 :n
+  output :n
+end
+
+; RNDCEL: the COLUMN is drawn first and the row second -- getting that
+; backwards transposes every maze and carves a different dungeon (B83).
+;
+; It answers through two globals rather than a list because `list` is two
+; cells a call and MAKDOR asks ~245 times a level: 1,010 cells a
+; generation that nothing reclaims until `recycle`, which is the same
+; trap dagg.grid's comment names.
+to dagg.rndcel
+  make "dagg.rc bitand dagg.rnd 31
+  make "dagg.rr bitand dagg.rnd 31
+end
+
+; DGNGEN.ASM:LVLTAB.  Seven bytes, and each level's 3-byte SEED is a
+; sliding window at a ONE-byte stride (`LDX #LVLTAB / LDB LEVEL / ABX`),
+; so levels 2-5 each reuse two of the previous level's seed bytes.
+make "dagg.lvltab [115 199 93 151 243 19 135]
+; STPTAB, CRETUR.ASM, split into the two lookups the carve wants.
+make "dagg.stpr [-1 0 1 0]
+make "dagg.stpc [0 1 0 -1]
+; MSKTAB / DORTAB / SDRTAB, DGNGEN.ASM, by direction 0=N 1=E 2=S 3=W.
+make "dagg.msktab [3 12 48 192]
+make "dagg.dortab [1 4 16 64]
+make "dagg.sdrtab [2 8 32 128]
+
+; One grid, allocated once and carved in place for every level there
+; after.  Rebuilding it would be 1,024 fresh cells a CLIMB and nothing
+; reclaims them until `recycle` -- dagg.grid's comment again.  The values
+; written are 0..255, which the first carve interns and no later one
+; pays for, so a generation costs neither cells nor word table (B91).
+make "dagg.maze dagg.grid
+
+to dagg.mzfill
+  local "r
+  repeat 32 [
+    make "r item repcount :dagg.maze
+    repeat 32 [.setitem repcount :r 255]
+  ]
+end
+
+to dagg.mzraw :r :c
+  output item (:c + 1) (item (:r + 1) :dagg.maze)
+end
+
+to dagg.mzput :r :c :v
+  .setitem (:c + 1) (item (:r + 1) :dagg.maze) :v
+end
+
+; FRIEND's per-cell read: a cell outside 0..31 reads as $FF (BORDER).
+; This is NOT dagg.cell's wrap -- the carve has a real edge, the view
+; does not.
+to dagg.mzget :r :c
+  if :r < 0 [output 255]
+  if :r > 31 [output 255]
+  if :c < 0 [output 255]
+  if :c > 31 [output 255]
+  output dagg.mzraw :r :c
+end
+
+; DGNGEN's four BEQ DGEN10 checks: refuse a cell that would complete a
+; fully-carved 2x2 block, which is what keeps the dungeon corridors.
+to dagg.blocked :r :c
+  local "nw local "n local "ne local "w
+  local "e local "sw local "s local "se
+  make "nw dagg.mzget (:r - 1) (:c - 1)
+  make "n  dagg.mzget (:r - 1) :c
+  make "ne dagg.mzget (:r - 1) (:c + 1)
+  make "w  dagg.mzget :r (:c - 1)
+  make "e  dagg.mzget :r (:c + 1)
+  make "sw dagg.mzget (:r + 1) (:c - 1)
+  make "s  dagg.mzget (:r + 1) :c
+  make "se dagg.mzget (:r + 1) (:c + 1)
+  if and (:nw = 0) (and (:n = 0) (:w = 0)) [output "true]
+  if and (:n = 0) (and (:ne = 0) (:e = 0)) [output "true]
+  if and (:e = 0) (and (:se = 0) (:s = 0)) [output "true]
+  if and (:w = 0) (and (:sw = 0) (:s = 0)) [output "true]
+  output "false
+end
+
+; Phase I, one direction-and-distance run.  Distance is 1..8 and every
+; iteration that does not `stop` spends one, so `repeat 8` is the whole
+; run; each `stop` here is one of DGEN10's exits.
+to dagg.walkstep
+  local "dir local "dist local "sr local "sc local "nr local "nc
+  make "dir bitand dagg.rnd 3
+  make "dist (bitand dagg.rnd 7) + 1
+  make "sr item (:dir + 1) :dagg.stpr
+  make "sc item (:dir + 1) :dagg.stpc
+  repeat 8 [
+    make "nr :dagg.dr + :sr
+    make "nc :dagg.dc + :sc
+    if :nr < 0 [stop]
+    if :nr > 31 [stop]
+    if :nc < 0 [stop]
+    if :nc > 31 [stop]
+    ifelse 0 = dagg.mzraw :nr :nc [
+      ; DGEN20: an already-carved cell, walked through rather than cut.
+      make "dagg.dr :nr
+      make "dagg.dc :nc
+      make "dist :dist - 1
+      if :dist = 0 [stop]
+    ] [
+      if dagg.blocked :nr :nc [stop]
+      dagg.mzput :nr :nc 0
+      make "dagg.rem :dagg.rem - 1
+      if :dagg.rem = 0 [stop]
+      make "dagg.dr :nr
+      make "dagg.dc :nc
+      make "dist :dist - 1
+      if :dist = 0 [stop]
+    ]
+  ]
+end
+
+; 500 cells.  The worst level measured takes 571 runs to place them, so
+; 900 is a bound with room and not a guess at the answer.
+to dagg.walk
+  repeat 900 [
+    if :dagg.rem = 0 [stop]
+    dagg.walkstep
+  ]
+end
+
+; Phase II: wall every side of every carved cell that faces a virgin cell
+; or the grid edge.  This is what lets the view walk with no border check
+; at all -- see dagg.cell.
+to dagg.wallin
+  local "r local "c local "v local "bits
+  repeat 32 [
+    make "r repcount - 1
+    repeat 32 [
+      make "c repcount - 1
+      make "v dagg.mzraw :r :c
+      if not (:v = 255) [
+        make "bits 0
+        if 255 = dagg.mzget (:r - 1) :c [make "bits :bits + 3]
+        if 255 = dagg.mzget :r (:c + 1) [make "bits :bits + 12]
+        if 255 = dagg.mzget (:r + 1) :c [make "bits :bits + 48]
+        if 255 = dagg.mzget :r (:c - 1) [make "bits :bits + 192]
+        dagg.mzput :r :c (bitor :v :bits)
+      ]
+    ]
+  ]
+end
+
+; Phase III, MAKDOR.  MDOR10's retry rejects back to the CELL pick and
+; not just the direction: a cell whose sides are all already walls or
+; doors would spin for ever if only the direction were re-rolled.  The
+; worst level measured needs 249 attempts to place its 115 doors.
+to dagg.door :tab
+  local "row local "col local "d local "v
+  local "nr local "nc local "opp
+  repeat 400 [
+    dagg.rndcel
+    make "row :dagg.rr
+    make "col :dagg.rc
+    make "v dagg.mzraw :row :col
+    if not (:v = 255) [
+      make "d bitand dagg.rnd 3
+      if 0 = bitand :v (item (:d + 1) :dagg.msktab) [
+        dagg.mzput :row :col (bitor :v (item (:d + 1) :tab))
+        make "nr modulo (:row + (item (:d + 1) :dagg.stpr)) 32
+        make "nc modulo (:col + (item (:d + 1) :dagg.stpc)) 32
+        make "opp bitand (:d + 2) 3
+        dagg.mzput :nr :nc (bitor (dagg.mzraw :nr :nc)
+                                  (item (:opp + 1) :tab))
+        stop
+      ]
+    ]
+  ]
+end
+
+to dagg.doors
+  repeat 70 [dagg.door :dagg.dortab]
+  repeat 45 [dagg.door :dagg.sdrtab]
+end
+
+; Which level :dagg.maze currently holds, so that re-entering the level
+; you are already standing on is free.  RESTORE and `daggorath`'s own
+; entry to level one both ask for a level the maze may already be, and a
+; CLIMB is the only thing that has to pay.  Safe because nothing ever
+; writes to the maze after the carve: :dagg.maze has two readers
+; (dagg.cell and dagg.map.row) and no writer outside this section.
+make "dagg.mzlvl -1
+
+; CD.ASM's TIMBEG counters, through COMMON.ASM:CLK42's chain: TENTH rolls at
+; 10 into SECOND and SECOND at 60 into MINUTE (ROLTAB).  Only SECOND is ever
+; read -- DGEN90 spends it, and nothing else in the ROM touches it -- and it
+; is declared up here rather than beside the rest of the clock because
+; DGEN90 reads it on the carve, which is the first thing a game does.
+; dagg.tenth is what turns them.
+make "dagg.tenth.n 0
+make "dagg.second 0
+
+; The SEED as DGNGEN leaves it, kept beside the level the maze holds.  The
+; ROM re-carves on every entry and hands the running register straight on
+; to CBIRTH, so what the generator is holding when the doors are in is part
+; of the level, not a side effect of having just carved it: a CLIMB back to
+; a level we already have has to arrive at this state, or the creatures
+; would be born out of whatever the last carve happened to leave.
+make "dagg.mzs0 0
+make "dagg.mzs1 0
+make "dagg.mzs2 0
+
+; DGNGEN: the whole level, into :dagg.maze.  `:lvl` is 0-based.
+;
+; DGEN90 is the tail, and it is the ONLY thing standing between the maze and
+; the monsters: `LDB SECOND / SWI RANDOM / DECB / BNE`, the seconds counter
+; spent as draws.  On the entry every game makes -- COMINI has just zeroed
+; RAM and IRQSYN started the clock three instructions earlier -- that
+; counter is nought, which is why level one's creatures are the same in
+; every game and why `Levels/Levels.html` can print them on a map while
+; saying that "after that, creatures will be randomized on each new level".
+; A CLIMB minutes later spends whatever second it happens to be.
+;
+; The 6809's DECB/BNE is a post-test, so a literal reading of a zero counter
+; is 256 draws and not none -- and 256 draws do not produce the published
+; level one, while 0, 2, 4 and 6 all do.  The ROM's own comment on that
+; instruction says "use the jiffy counter" where the operand says SECOND, so
+; something in those two lines is not what it looks like.  The published map
+; is the only observation of the thing being modelled and it is what this
+; follows; the discrepancy is recorded in design section 7.2.
+to dagg.gen :lvl
+  if emptyp :dagg.rta [dagg.rtabs]
+  ifelse :dagg.mzlvl = :lvl [
+    make "dagg.s0 :dagg.mzs0
+    make "dagg.s1 :dagg.mzs1
+    make "dagg.s2 :dagg.mzs2
+  ] [
+    make "dagg.s0 item (:lvl + 1) :dagg.lvltab
+    make "dagg.s1 item (:lvl + 2) :dagg.lvltab
+    make "dagg.s2 item (:lvl + 3) :dagg.lvltab
+    dagg.mzfill
+    dagg.rndcel
+    make "dagg.dr :dagg.rr
+    make "dagg.dc :dagg.rc
+    make "dagg.rem 500
+    dagg.walk
+    dagg.wallin
+    dagg.doors
+    make "dagg.mzs0 :dagg.s0
+    make "dagg.mzs1 :dagg.s1
+    make "dagg.mzs2 :dagg.s2
+    make "dagg.mzlvl :lvl
+  ]
+  repeat :dagg.second [ignore dagg.rnd]
+end
+
+; The order-sensitive fold tests/test_daggorath.c pins the carve with.
+; Kept mod 65521 so it is exact in single-precision floats: the widest
+; intermediate is 65520 * 31 + 255, well inside 2^24.
+to dagg.mzsum
+  local "a local "r
+  make "a 0
+  repeat 32 [
+    make "r item repcount :dagg.maze
+    repeat 32 [make "a modulo ((:a * 31) + (item repcount :r)) 65521]
+  ]
+  output :a
+end
+
+;==========================================================================
+; The cell -- CD.ASM: 00 passage, 01 door, 10 secret door, 11 wall, packed
+; N E S W from the low bits up. `dagg.dir`/PDIR: 0=N 1=E 2=S 3=W.
+
+; MAP32, DGNGEN.ASM: unconditionally wraps row/col mod 32 -- the forward
+; view walks via STEP+MAP32 with no BORDER check at all (VIEWER.ASM never
+; calls STEPOK), relying on a real maze always walling its true edges
+; (Phase II). dagg.stepok is the separate, stricter check MOVE uses.
+; The maze is 32 rows of 32 cells (not flattened) -- building one flat
+; 1024-item list a level with `sentence`/`lput` in a loop is an O(n^2)
+; copy and was enough to run a bounded heap out of space; two `item`
+; lookups cost nothing this walk does not already pay.
+;
+; There is ONE maze and it is the level you are standing on: every caller
+; passed :dagg.level even when this took a level, and only the current
+; level is ever carved (see DGNGEN.ASM above), so the parameter is gone
+; rather than kept and ignored.
+to dagg.cell :row :col
+  output (item ((modulo :col 32) + 1)
+               (item ((modulo :row 32) + 1) :dagg.maze))
+end
+
+to dagg.side :cell :dir
+  output bitand (lshift :cell (0 - (:dir * 2))) 3
+end
+
+; STPTAB, CRETUR.ASM: N row-1, E col+1, S row+1, W col-1.
+to dagg.step.row :row :dir
+  if :dir = 0 [output :row - 1]
+  if :dir = 2 [output :row + 1]
+  output :row
+end
+
+to dagg.step.col :col :dir
+  if :dir = 1 [output :col + 1]
+  if :dir = 3 [output :col - 1]
+  output :col
+end
+
+; STEPOK, CRETUR.ASM: off-maze (BORDER) or into a $FF (not part of the
+; maze) cell is illegal. No wraparound -- a step that would need `mod 32`
+; to land back in 0..31 is exactly what BORDER rejects.
+to dagg.stepok :row :col
+  if :row < 0 [output false]
+  if :row > 31 [output false]
+  if :col < 0 [output false]
+  if :col > 31 [output false]
+  output not (255 = dagg.cell :row :col)
+end
+
+;==========================================================================
+; The transform -- design section 6.2, board-confirmed at M0
+; (tests/logo/p17m0): three constants a range, two multiplies and two
+; subtracts a point.
+;
+; `dagg.c`'s constant term is the turtle y the centroid (128, 76) lands on,
+; and so the y the view scales about: 40, which is device row 120, the
+; middle of the 240-row band. A full-scale view is 190 rows and therefore
+; spans rows 25..214 -- centred, with 25 blank rows above and 25 below, of
+; which the status line on row 23 (section 4.1) is the last ten.
+
+make "dagg.k   0
+make "dagg.kx0 0
+make "dagg.c   0
+
+to dagg.setscale :range :table
+  local "s
+  make "s (item (:range + 1) :table) / 128
+  make "dagg.k :s * 1.25
+  make "dagg.kx0 128 * :dagg.k
+  make "dagg.c 40 + (95 * :s)
+end
+
+; SETFAX, VCTLST.ASM (design section 8): outputs whether this range draws
+; at all, and sets the dash period as a side effect when it does.
+; `CMPA #-7 / BLE SFAD30` is total darkness at MINUS SEVEN, not past it.
+;
+; It reads MAGFLG first and clears it, so one call serves one vector list
+; and the next list is back on the regular channel -- which is why
+; `dagg.drawit` calls this per LIST rather than once per range the way M1
+; did. That costs a call per architectural face (about fifty a redraw)
+; and it is the only way a secret door can be lit by a magical torch while
+; the wall in front of it is not.
+to dagg.setfade :range
+  local "a
+  ifelse :dagg.magflg [
+    make "a :dagg.mlight
+    make "dagg.magflg "false
+  ] [
+    make "a :dagg.light
+  ]
+  make "a (:a - 7) - :range
+  if not (:a < 0) [setpendash 1  output true]
+  if not (:a > -7) [output false]
+  setpendash item ((0 - :a) + 1) :dagg.dash
+  output true
+end
+
+;==========================================================================
+; Drawing a vector list -- M0's winning candidate, `foreach` over the
+; parallel ys/xs lists `dagg.load` already split out.
+
+to dagg.draw.run :ys :xs
+  pu (setpos ((:dagg.k * item 1 :xs) - :dagg.kx0)
+             (:dagg.c - (:dagg.k * item 1 :ys))) pd
+  (foreach (bf :ys) (bf :xs) [[y x]
+    (setpos ((:dagg.k * :x) - :dagg.kx0) (:dagg.c - (:dagg.k * :y)))
+  ])
+  pu
+end
+
+to dagg.draw.runs :runs
+  foreach :runs [[run] dagg.draw.run (item 1 :run) (item 2 :run)]
+end
+
+; FLATAB's dispatch, SWCHAR.ASM: which=l/f/r, code=0 passage/1 door/
+; 2 secretdoor/3 wall, in the order the four lists were loaded.
+to dagg.side.runs :which :code
+  if :which = "l [output item (:code + 1) :dagg.left]
+  if :which = "f [output item (:code + 1) :dagg.forward]
+  output item (:code + 1) :dagg.right
+end
+
+; DRAWIT, VIEWER.ASM: set the lighting for THIS list, then draw it if the
+; light reaches. Every draw in the cell walk goes through here, because
+; SETFAX's magic-channel flag is per-list.
+to dagg.drawit :runs
+  if dagg.setfade :dagg.range [dagg.draw.runs :runs]
+end
+
+; VIEW22's fallthrough: a secret door draws its own list under the MAGIC
+; light and then the plain wall underneath it under the regular light
+; (design section 8.3) -- so a secret door is a wall until you carry a
+; magical torch, and the two lists are lit by two different numbers.
+to dagg.draw.side :which :code
+  if :code = 2 [
+    make "dagg.magflg "true
+    dagg.drawit dagg.side.runs :which 2
+    dagg.drawit dagg.side.runs :which 3
+    stop
+  ]
+  dagg.drawit dagg.side.runs :which :code
+end
+
+; VIEW52: every unowned object in the cell, drawn TWICE -- once with
+; MAGFLG set and once without, so an object shows if either channel
+; reaches it. `DEC MAGFLG / BSR DRAWIT / BSR DRAWIT` in the ROM, and
+; SETFAX clearing the flag on the first call is what makes the second one
+; the regular-light draw.
+;
+; FWDOBJ is indexed by CLASS, not type: one outline for every torch.
+to dagg.draw.objects :row :col
+  local "i local "runs
+  dagg.ofind.rewind
+  make "i dagg.ofind :row :col
+  until [:i = 0] [
+    make "runs item (1 + item :i :dagg.occls) :dagg.fobj
+    make "dagg.magflg "true
+    dagg.drawit :runs
+    dagg.drawit :runs
+    make "i dagg.ofind :row :col
+  ]
+end
+
+; VIEW30 and CMRDRW, VIEWER.ASM: the creature standing in this cell, drawn
+; under the MAGIC light if it has any magic offense at all -- scorpions,
+; wraiths, balrogs and both wizards (design section 10.1). A magical
+; creature in the dark is invisible unless your torch is magical too, and
+; section 8.3's two channels are the whole of why that is so.
+to dagg.draw.creature :row :col
+  local "y
+  make "y dagg.cfind :row :col
+  if :y = 0 [stop]
+  if not (0 = dagg.cc :y 2) [make "dagg.magflg "true]
+  dagg.drawit item (1 + item :y :dagg.cctyp) :dagg.fwdcre
+end
+
+; PDRAW, VIEWER.ASM -- the peek-a-boo, and the only thing in this game
+; that tells you about a cell you are not looking into. If the side of
+; this cell is an open PASSAGE (a door does not count, and neither does a
+; secret one) and something is standing in the cell beyond it, the MARK is
+; drawn -- the mark, not the creature, so you learn that something is
+; there and not what it is.
+to dagg.draw.peek :row :col :reldir :code :runs
+  local "d local "y
+  if not (:code = 0) [stop]
+  make "d modulo (:dagg.dir + :reldir) 4
+  make "y dagg.cfind (dagg.step.row :row :d) (dagg.step.col :col :d)
+  if :y = 0 [stop]
+  if not (0 = dagg.cc :y 2) [make "dagg.magflg "true]
+  dagg.drawit :runs
+end
+
+;==========================================================================
+; Vertical features -- COMCRE.ASM:VFIND/VSUB00 and VIEWER.ASM:VIEW40,
+; design section 7.5. M5's.
+
+; VFIND: the vertical feature at this cell, or -1 for none (the ROM
+; returns with N set on a miss). Search 1 is the way UP -- the previous
+; level's down-group, which is empty on level 1 (the ROM's leading -128)
+; -- and returns the code as it stands: 0 hole up, 1 ladder up. Search 2
+; is the way DOWN -- this level's own group -- and adds 2: 2 hole down,
+; 3 ladder down. A group entry is [kind row col] with kind 0 a hole and
+; 1 a ladder, COMCRE.ASM:VFTTAB's own bytes.
+to dagg.vfind :row :col
+  local "g local "i
+  if not (:dagg.level = 0) [
+    make "g item :dagg.level :dagg.vfttab
+    repeat count :g [
+      make "i item repcount :g
+      if (and ((item 2 :i) = :row) ((item 3 :i) = :col)) [output item 1 :i]
+    ]
+  ]
+  make "g item (:dagg.level + 1) :dagg.vfttab
+  repeat count :g [
+    make "i item repcount :g
+    if (and ((item 2 :i) = :row) ((item 3 :i) = :col)) [
+      output (item 1 :i) + 2
+    ]
+  ]
+  output -1
+end
+
+; VIEW40: the vertical feature in this cell -- FWDVER by the VF code --
+; or the plain ceiling line when there is none. It draws at every range,
+; because VFIND walks the cell the range stands on.
+to dagg.draw.vert :row :col
+  local "v
+  make "v dagg.vfind :row :col
+  ifelse :v = -1 [
+    dagg.drawit :dagg.celine
+  ] [
+    dagg.drawit item (:v + 1) :dagg.fwdver
+  ]
+end
+
+;==========================================================================
+; The cell walk -- VIEWER.ASM:VIEWER/VIEW10-VIEW60, design section 6.
+
+to dagg.redraw :table
+  local "row local "col local "cell
+  local "lcode local "rcode local "fcode
+  local "stop
+  clean
+  setpc :dagg.ink
+  make "row :dagg.row
+  make "col :dagg.col
+  make "stop false
+  repeat 10 [
+    if not :stop [
+      make "dagg.range repcount - 1
+      dagg.setscale :dagg.range :table
+      make "cell dagg.cell :row :col
+      make "lcode dagg.side :cell (modulo (:dagg.dir + 3) 4)
+      make "rcode dagg.side :cell (modulo (:dagg.dir + 1) 4)
+      make "fcode dagg.side :cell :dagg.dir
+      dagg.draw.side "l :lcode
+      dagg.draw.side "f :fcode
+      dagg.draw.side "r :rcode
+      dagg.draw.creature :row :col
+      dagg.draw.peek :row :col 3 :lcode :dagg.lpeek
+      dagg.draw.peek :row :col 1 :rcode :dagg.rpeek
+      dagg.draw.vert :row :col
+      dagg.draw.objects :row :col
+      ifelse :fcode = 0 [
+        make "row dagg.step.row :row :dagg.dir
+        make "col dagg.step.col :col :dagg.dir
+      ] [
+        make "stop true
+      ]
+    ]
+  ]
+  dagg.status
+end
+
+;==========================================================================
+; The status bar -- design section 4.1b/4.1c: it lives IN THE PICTURE, not
+; the text window (the CoCo original has no text mode at all, and `clean`
+; is what erases it) -- so this is `write`, not `setcursor`+`type` the way
+; battlezone/berzerk's HUD works. Do not "fix" this back to `setcursor`.
+;
+; STATUX, STATUS.ASM: the left hand's object at column 0, the right hand's
+; right-justified to the last column, the heart between them, and the whole
+; row drawn in the OPPOSITE polarity to the view above it -- which is the
+; three-argument `write` P18 M1 exists for. The CoCo justifies to columns 0
+; and 31 of 32; ours is 0 and 39 of 40, design section 4.1's identity.
+;
+; It is one 40-character string and one `write`, not two writes of the two
+; names, because STATUX inverts the whole status row and not just the cells
+; a glyph lands in: the spaces between the hands are part of the bar.
+;
+; The longest name in the game is fourteen characters (MITHRIL SHIELD,
+; LEATHER SHIELD), so two full hands are 28 of the 40 and the bar always
+; has room for the heart between them.
+;
+; It sits on the LAST of the band's 24 rows -- row 23, y = -75, pixel rows
+; 230..239 of the 240 -- so the bar is flush against the top of the text
+; area, the way row 152 of the CoCo's bitmap sits against its own four
+; text lines. The viewer above it ends at y = -53.75 (section 4.1), so
+; nothing it draws reaches down here.
+
+to dagg.spaces :n
+  local "s
+  make "s "
+  repeat :n [make "s word :s char 32]
+  output :s
+end
+
+to dagg.status.line
+  local "l local "r
+  make "l dagg.objnam :dagg.plhand
+  make "r dagg.objnam :dagg.prhand
+  output (word :l dagg.spaces (40 - ((count :l) + (count :r))) :r)
+end
+
+to dagg.status
+  pu (setpos -160 -75)
+  (write dagg.status.line :dagg.status.fg :dagg.status.bg)
+end
+
+;==========================================================================
+; Inverted levels -- NEWLVL.ASM:NLVL50 / design section 4.3: internal
+; level 0,2,4 (displayed 1,3,5) light-on-dark; internal 1,3 (displayed
+; 2,4) dark-on-light, with the status bar always the OPPOSITE polarity to
+; the view above it.
+
+; White is 254, not 255: reference appendix E -- slot 255 HOLDS the current
+; graphics background, so `setpc 255` paints in the background and draws a
+; picture you cannot see, and `setbg 255` is outside setbg's own 0..254
+; range and errors outright. B81.
+; NEWLVL: "a new dungeon is born around you".  The carve happens here and
+; not in dagg.newlvl because RESTORE re-enters a level too, and a save
+; that regenerates its maze from the level number does not have to carry
+; one.  2.64 s at worst, behind the "PREPARE!" PCLI20 prints first.
+; The polarity globals exist before there is a level to set them, because
+; ONCE.ASM:DEMO10 draws the crescent wizard and the welcome messages
+; BEFORE GAME20 calls NEWLVL. These are level one's -- the CoCo's own
+; un-inverted screen, which is what the demo fades in on.
+make "dagg.ink 254
+make "dagg.bg 0
+make "dagg.status.fg 0
+make "dagg.status.bg 254
+
+to dagg.enter.level :level
+  make "dagg.level :level
+  dagg.gen :level
+  ifelse (modulo :level 2) = 0 [
+    make "dagg.ink 254  make "dagg.bg 0
+    make "dagg.status.fg 0  make "dagg.status.bg 254
+  ] [
+    make "dagg.ink 0  make "dagg.bg 254
+    make "dagg.status.fg 254  make "dagg.status.bg 0
+  ]
+  setbg :dagg.bg
+  ; The heart is a turtle wearing an `fe` (own-pen-colour) costume, so its
+  ; polarity is one `setpc` on turtle 1 -- NLVL50 flips it with the bar.
+  ask 1 [setpc :dagg.status.fg]
+end
+
+;==========================================================================
+; TURN -- PTURN.ASM. A sweeping vertical stroke, drawn then erased, at
+; eight steps between two fixed bounds -- design section 6.4's "eight
+; strokes." TURN00 manually sets the scale to 128/128 (1:1, range 1's own
+; transform), so this reuses `dagg.setscale 1 :dagg.norscl` rather than
+; inventing a second transform.
+;
+; CoCo-specific inverse-video toggling (`COM VDGINV` between strokes) is
+; not reproduced pixel-for-pixel -- this draws each stroke, pauses, then
+; erases it with `pe`, which is this codebase's own eraser (gen_rocks.py's
+; own note: "`pe` still erases correctly"), not the ROM's polarity flip.
+;
+; TURN00 does FOUR things before the first stroke, and M1 did only the
+; first: set the scale to 1:1, set range 0's fade, ERASE THE CURRENT SCREEN
+; (`SWI ZFLIP`), and draw LINES -- two full-width horizontals at rows 16
+; and 136. The sweep plays on THAT picture, not over the view, and the
+; view for the new direction is built invisibly (PREVU/PUPSUB) and shown
+; afterwards. Drawing the sweep over the finished view instead means every
+; `pe` stroke gouges a full-height stripe out of it: long lines come back
+; with holes in them and short ones -- the distant ones -- disappear
+; outright.
+
+; LINES, PTURN.ASM: rows 16 and 136, the full 256 across, in the ys/xs run
+; form dagg.draw.run takes.
+make "dagg.turnlines [[[16 16] [0 255]] [[136 136] [0 255]]]
+
+to dagg.range8 :start :step
+  local "out
+  make "out []
+  repeat 8 [make "out lput (:start + ((repcount - 1) * :step)) :out]
+  output :out
+end
+
+; LRTU10 starts at 8 and adds 32 while the high byte is zero -- 8, 40, ...
+; 232, eight strokes. RLTU10 starts at 248 and subtracts 32 while the
+; result stays positive -- 248, 216, ... 24, also eight.
+;
+; `wait 48` was `wait 13` until a board said the sweep read too fast, and
+; the fifty cycles a point that number rested on were a guess that came out
+; three and a half times low. Counted rather than guessed, VECTOR's inner
+; loop (VECT30 through VECT60) is about **175** cycles a pixel: 44 for the
+; fade counter and the two clip tests, 28 to plot, 47 and 39 for the two
+; DDA increments, 8 for the loop, and 9 more for the scan-line move a
+; vertical stroke makes on every pixel. At 0.895 MHz -- and it IS 0.895,
+; because ONCE.ASM sets the SAM to D0.SAM = $2046 and bits R1 R0 of that
+; are 00, the slow rate -- that is 195 us a pixel.
+;
+; TURN00 sets Y0 = 17 and Y1 = 135, so a stroke is 118 pixels and one
+; VECTOR call is ~23 ms; and TURN10 is `BSR TURN12` falling into
+; `TURN12 JSR VECTOR`, which is TWO calls -- draw, then erase with VDGINV
+; flipped. So a stroke is ~46 ms and a sweep of eight is ~370 ms, with an
+; about-face twice that. The CoCo spends the time DRAWING, where we draw
+; instantly and wait, so the stroke stands still instead of wiping on and
+; off; what carries over is the period.
+;
+; TURN00 also checks that we are LOOKING FORWARD (`CMPU #VIEWER`) and does
+; nothing at all otherwise -- turning with the map or the inventory up
+; changes your direction and no more.
+;
+; And the sweep is subject to the light like everything else: TURN00 sets
+; range 0's fade and TURN10 draws through VECTOR, so in the dark VCTFAD is
+; $FF, VECTOR's FADCNT wraps and no point is ever plotted. A stroke here is
+; about 148 pixels, so `setpendash 255` is that same nothing.
+to dagg.turnsweep :dir
+  local "y0 local "y1 local "positions
+  if not (:dagg.dspmod = 0) [stop]
+  dagg.setscale 1 :dagg.norscl
+  if not dagg.setfade 0 [setpendash 255]
+  clean
+  setpc :dagg.ink
+  dagg.draw.runs :dagg.turnlines
+  make "y0 :dagg.c - (:dagg.k * 17)
+  make "y1 :dagg.c - (:dagg.k * 135)
+  ifelse :dir = "lr [
+    make "positions dagg.range8 8 32
+  ] [
+    make "positions dagg.range8 248 -32
+  ]
+  foreach :positions [[cocox]
+    local "x
+    make "x (:dagg.k * :cocox) - :dagg.kx0
+    pu (setpos :x :y0)
+    pd (setpos :x :y1)
+    refresh
+    wait 48
+    pe (setpos :x :y0)
+    pu
+  ]
+end
+
+;==========================================================================
+; The three display modes -- design section 4.2, CD.ASM's DSPMOD. All three
+; are graphics; the screen never changes mode.
+;
+;   0 VIEWER  the forward view          (dagg.redraw)
+;   1 MAPPER  the map a scroll shows    (dagg.mapper)
+;   2 EXAMIN  the inventory listing     (dagg.examin)
+;
+; DSPMOD is sticky, which is why LOOK is a command: EXAMINE puts the
+; listing up and every redraw after it redraws the LISTING until you LOOK.
+; The map is the exception -- HUMAN.ASM:HMAN10 takes it down on the first
+; keystroke after it went up, before that keystroke is even buffered.
+
+make "dagg.dspmod 0
+make "dagg.mapflg "false
+make "dagg.range 0
+
+; PUPDAX/PUPSUB, PUPDAT.ASM. PSUB10 is the two-channel sum of design
+; section 8.3: the player's own light plus the burning torch's, and there
+; is no third term. Nothing is drawn at all while unconscious.
+to dagg.pupdat :table
+  if :dagg.faint [stop]
+  dagg.setlight
+  if :dagg.dspmod = 1 [dagg.mapper  refresh  stop]
+  if :dagg.dspmod = 2 [dagg.examin  refresh  stop]
+  dagg.redraw :table
+  refresh
+end
+
+to dagg.setlight
+  make "dagg.light :dagg.prlite
+  make "dagg.mlight :dagg.prmlite
+  if :dagg.ptorch = 0 [stop]
+  make "dagg.light :dagg.light + item :dagg.ptorch :dagg.ocx1
+  make "dagg.mlight :dagg.mlight + item :dagg.ptorch :dagg.ocx2
+end
+
+; PTUR90 and PMOV90 both end `DEC UPDATE / SYNC` -- build the view for
+; where the player now is and put it on the screen. It is the LAST thing
+; a movement command does, after any animation, never before it.
+to dagg.show
+  dagg.pupdat :dagg.norscl
+end
+
+;==========================================================================
+; Text in the picture -- design section 4.1. The graphics band is a 40 x 24
+; character grid: `write` starts at the turtle's x and centres the cell on
+; its y, so column c is x = -160 + 8c and row r is y = 155 - 10r.
+;
+; The ROM lays EXAMINE out on a 32-column grid (TXTEXA is 32*19 characters)
+; and the ROWS carry over unchanged -- there are still nineteen of them.
+; The COLUMNS do not: every number EXAMIN uses is a fraction of its screen
+; width rather than a fixed offset, so they are recomputed for 40 rather
+; than left at 32 with eight columns of nothing down the right-hand side.
+
+to dagg.write.at :row :col :text
+  pu (setpos (-160 + (8 * :col)) (155 - (10 * :row)))
+  write :text
+end
+
+; PREPAR -- MISC.ASM:PREPAX. It is NOT a line in the command area: the
+; routine opens `JSR EXAMIO`, which is EXAMINE's own screen, so the
+; message REPLACES the view exactly as the EXAMINE listing does, and
+; `CLR TXBFLG` afterwards is what puts ordinary i/o back. PCLI20's own
+; INIVU then draws the new level over it.
+;
+; `LDD #32*9+12` is row 9, column 12 -- eight characters centred on 32
+; columns. Rows carry over and columns are recomputed for 40 (see above),
+; so that is row 9, column 16, the same arithmetic that turns
+; !CREATURE!'s 11 into 15.
+;
+; Reported from a Pico 2 W (B96): it was `pr [PREPARE!]`, which put it in
+; the input area and left the maze on the screen.
+to dagg.prepar
+  clean
+  setpc :dagg.ink
+  dagg.write.at 9 16 [PREPARE!]
+  refresh
+end
+
+;==========================================================================
+; EXAMINE -- PEXAM.ASM:EXAMIN. `clean` is EXAMIO's `SWI ZFLOP`: the listing
+; REPLACES the view rather than overlaying it, and stays up until LOOK.
+;
+; Two entries to a line. PRTOBJ advances the cursor by 16 and rounds down
+; to a multiple of 16, which on a 32-column screen and for names of
+; fourteen characters or fewer -- and fourteen is the longest in the game
+; -- is exactly "column 0, then half way across, then the next row." Half
+; way across is column 20 here, and 20 + 14 still fits.
+;
+; The separator is a rule of I.EXCL (CD.ASM) drawn the full width of the
+; screen -- 32 characters there, 40 here -- and both headers are CENTRED:
+; EXAMIN puts "IN THIS ROOM" at column 10 of 32 and "BACKPACK" at column
+; 12, which are (32 - 12) / 2 and (32 - 8) / 2. On 40 they are 14 and 16.
+
+make "dagg.exrow 0
+make "dagg.excol 0
+
+to dagg.prtobj :i :highlight
+  local "name
+  make "name dagg.objnam :i
+  pu (setpos (-160 + (8 * :dagg.excol)) (155 - (10 * :dagg.exrow)))
+  ifelse :highlight [(write :name :dagg.bg :dagg.ink)] [write :name]
+  ifelse :dagg.excol = 0 [
+    make "dagg.excol 20
+  ] [
+    make "dagg.excol 0
+    make "dagg.exrow :dagg.exrow + 1
+  ]
+end
+
+; EXAM20's `TST NEWLIN`: an odd number of entries leaves the cursor half
+; way along a line, and the next thing printed starts a fresh one.
+to dagg.exnewline
+  if :dagg.excol = 0 [stop]
+  make "dagg.excol 0
+  make "dagg.exrow :dagg.exrow + 1
+end
+
+to dagg.examin
+  local "i
+  clean
+  setpc :dagg.ink
+  make "dagg.exrow 0
+  make "dagg.excol 0
+  dagg.write.at 0 14 [IN THIS ROOM]
+  make "dagg.exrow 1
+  ; EXAM10's CFIND, and it names nothing: the ROM prints !CREATURE! and no
+  ; more, which is why the creature tables carry no words at all. Its
+  ; `LEAX 11,X` centres ten characters on 32 columns; on 40 that is 15.
+  if not (0 = dagg.cfind :dagg.row :dagg.col) [
+    dagg.write.at 1 15 [!CREATURE!]
+    make "dagg.exrow 2
+  ]
+  dagg.ofind.rewind
+  make "i dagg.ofind :dagg.row :dagg.col
+  until [:i = 0] [
+    dagg.prtobj :i "false
+    make "i dagg.ofind :dagg.row :dagg.col
+  ]
+  dagg.exnewline
+  dagg.write.at :dagg.exrow 0 dagg.exbar
+  make "dagg.exrow :dagg.exrow + 1
+  dagg.write.at :dagg.exrow 16 [BACKPACK]
+  make "dagg.exrow :dagg.exrow + 1
+  ; EXAM30 walks the bag from the head, and the BURNING torch is drawn in
+  ; inverse video (`COM P.TXINV,U`) -- which is the three-argument `write`
+  ; P18 M1 exists for, the same one the status bar uses.
+  foreach :dagg.bag [[k] dagg.prtobj :k (:k = :dagg.ptorch)]
+  dagg.status
+end
+
+to dagg.exbar
+  local "s
+  make "s "
+  repeat 40 [make "s word :s char 33]
+  output :s
+end
+
+;==========================================================================
+; The map -- MAPPER.ASM, design section 13.
+;
+; 32 x 32 cells, white where the cell cannot be occupied ($FF) and black
+; where it can. On the CoCo a cell is one byte wide and six scan lines
+; tall, which fills the whole 256 x 192 display -- the status line and the
+; text area included, which is why PUSE.ASM:USC210 turns the drawn heart
+; off before putting the map up. Ours is 10 x 7, so 320 x 224 at the top
+; of the band, which stops sixteen pixels short of the status row on row
+; 23. The status line goes anyway: MAPPER opens with `clean`, nothing
+; redraws the bar over a map, and USC210's `CLR HEARTF` is an `ht` here
+; rather than something the picture happens to cover.
+;
+; Drawn as ONE horizontal stroke per RUN of consecutive wall cells rather
+; than a stroke a cell: a real level is a couple of hundred strokes instead
+; of 1,024 fills. The scan underneath is still 1,024 cells, and it is a
+; `foreach` over each row list rather than 1,024 `item` calls, which is the
+; same choice M0 measured for the cell walk. The map is a screen you ask
+; for, not a redraw, so it is not on section 12's 100 ms budget.
+;
+; MAPPER writes raw $00/$FF and never reads VDGINV, so on the CoCo the map
+; is the one picture in the game that does not invert with the level. Ours
+; inverts with it -- rock in the level's ink, floor in its background --
+; because `clean` fills with the level's own background and a white flash
+; between two dark pictures is worse than the departure.
+
+to dagg.map.bar :y :c0 :c1
+  pu (setpos (-160 + (10 * :c0)) :y)
+  pd (setpos (-160 + (10 * (:c1 + 1))) :y)
+  pu
+end
+
+; `:c` and not `repcount`: repcount counts the innermost REPEAT, and
+; `foreach` is not one -- inside this loop it would answer `dagg.mapper`'s
+; own `repeat 32`, which is the row number, so every run would start and
+; end in the same place.
+to dagg.map.row :r
+  local "y local "run local "c
+  make "y (160 - (7 * :r)) - 3
+  make "run 0
+  make "c 0
+  foreach (item (:r + 1) :dagg.maze) [[cell]
+    make "c :c + 1
+    ifelse :cell = 255 [
+      if :run = 0 [make "run :c]
+    ] [
+      if not (:run = 0) [dagg.map.bar :y (:run - 1) (:c - 2)  make "run 0]
+    ]
+  ]
+  if not (:run = 0) [dagg.map.bar :y (:run - 1) 31]
+end
+
+; MARK4, MAPPER.ASM: four short rows inside the cell. The ROM's patterns
+; are a dot for an object and an X for you; the greys design section 13
+; imagined are M1a's palette, so these are shapes in the ink colour.
+to dagg.map.mark :r :c :what
+  local "x local "y
+  make "x (-160 + (10 * :c)) + 5
+  make "y (160 - (7 * :r)) - 3
+  if :what = "you [
+    pu (setpos (:x - 3) (:y - 2))  pd (setpos (:x + 3) (:y + 2))
+    pu (setpos (:x - 3) (:y + 2))  pd (setpos (:x + 3) (:y - 2))
+    pu
+    stop
+  ]
+  if :what = "cre [
+    pu (setpos :x (:y - 2))  pd (setpos :x (:y + 2))
+    pu (setpos (:x - 3) (:y - 1))  pd (setpos (:x - 3) (:y + 1))
+    pu (setpos (:x + 3) (:y - 1))  pd (setpos (:x + 3) (:y + 1))
+    pu
+    stop
+  ]
+  pu (setpos :x (:y - 2))  pd (setpos :x (:y + 2))  pu
+end
+
+to dagg.mapper
+  clean
+  setpc :dagg.ink
+  setpendash 1
+  setpensize 7
+  repeat 32 [dagg.map.row repcount - 1]
+  setpensize 1
+  ; MAPFLG: a Vision scroll shows walls only, a Seer scroll shows what is
+  ; on them -- MAPP30's objects and MAPP42's creatures, in that order.
+  ; Vertical features (MAPP60) are M5. Every live CCB is on this level,
+  ; because NEWLVX zeroes the table on the way in.
+  if :dagg.mapflg [
+    foreach :dagg.floor [[k]
+      if :dagg.level = item :k :dagg.oclvl [
+        dagg.map.mark (item :k :dagg.ocrow) (item :k :dagg.occol) "obj
+      ]
+    ]
+    repeat :dagg.ccbmax [
+      if not (0 = item repcount :dagg.ccuse) [
+        dagg.map.mark (item repcount :dagg.ccrow)
+          (item repcount :dagg.cccol) "cre
+      ]
+    ]
+  ]
+  dagg.map.mark :dagg.row :dagg.col "you
+end
+
+; PTURN parses its own second token off the line (design section 15's
+; parser is M2's, and this is its first customer): DIRTAB row 1 LEFT,
+; 2 RIGHT, 4 AROUND, and everything else -- including UP, DOWN, BACK and
+; a missing token -- is ERRCMD2.
+to dagg.turn
+  local "n
+  make "n dagg.parse dagg.gettok :dagg.dirtab
+  if :n = 1 [
+    make "dagg.dir modulo (:dagg.dir - 1) 4
+    dagg.turnsweep "lr
+    dagg.show
+    stop
+  ]
+  if :n = 2 [
+    make "dagg.dir modulo (:dagg.dir + 1) 4
+    dagg.turnsweep "rl
+    dagg.show
+    stop
+  ]
+  if :n = 4 [
+    make "dagg.dir modulo (:dagg.dir + 2) 4
+    dagg.turnsweep "rl
+    dagg.turnsweep "rl
+    dagg.show
+    stop
+  ]
+  dagg.cmderr
+end
+
+;==========================================================================
+; MOVE -- PTURN.ASM:PMOVE/PSTEP. Forward/backward draw a half-step frame
+; from the OLD cell before the position updates (PMOVE's own order: PUPDAT
+; at HLFSCL, then PSTEP, then the normal redraw) -- section 6.4's "one
+; intermediate frame before the step, then the step and the real frame."
+;
+; A blocked step (into a wall or off the maze) still redraws from the
+; unchanged position -- PSTEP always calls PUPSUB -- and it costs you both
+; ways: PMOV90's weight/8+3 is charged whether the step happened or not
+; (dagg.move.cost), and PSTEP plays A$THUD as it puts you back. It hurts to
+; walk into a wall, and the thud is the game saying so.
+;
+; THAT THUD WAS MISSING UNTIL M6 (B98). M4's roadmap entry says every sound
+; site in the game goes through one `dagg.sound`, and two of the ten did
+; not -- this one and PINCAN's ring -- because both are `SWI / FCB ISOUND`
+; runs with no `SOUND$` macro line above them to read past. M6 walks all
+; ten out of the ROM in a test rather than counting them by eye again.
+
+to dagg.move.forward
+  local "nrow local "ncol local "ok
+  make "nrow dagg.step.row :dagg.row :dagg.dir
+  make "ncol dagg.step.col :dagg.col :dagg.dir
+  make "ok dagg.stepok :nrow :ncol
+  if not :ok [dagg.sound :dagg.s.thud 255]
+  dagg.pupdat :dagg.hlfscl
+  if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
+  dagg.show
+end
+
+to dagg.move.backward
+  local "dir local "nrow local "ncol local "ok
+  make "dir modulo (:dagg.dir + 2) 4
+  make "nrow dagg.step.row :dagg.row :dir
+  make "ncol dagg.step.col :dagg.col :dir
+  make "ok dagg.stepok :nrow :ncol
+  if not :ok [dagg.sound :dagg.s.thud 255]
+  dagg.pupdat :dagg.bakscl
+  if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
+  dagg.show
+end
+
+; Sidestep: PMOV30/40 -- step, redraw, and only on SUCCESS play the
+; turn-style sweep (right step sweeps right-to-left, left step sweeps
+; left-to-right -- PTURN.ASM's own RLTURN/LRTURN choices).
+to dagg.move.side :reldir
+  local "dir local "nrow local "ncol local "ok
+  make "dir modulo (:dagg.dir + :reldir) 4
+  make "nrow dagg.step.row :dagg.row :dir
+  make "ncol dagg.step.col :dagg.col :dir
+  make "ok dagg.stepok :nrow :ncol
+  if not :ok [dagg.sound :dagg.s.thud 255]
+  if :ok [make "dagg.row :nrow  make "dagg.col :ncol]
+  if :ok [
+    ifelse :reldir = 1 [dagg.turnsweep "rl] [dagg.turnsweep "lr]
+  ]
+  dagg.show
+end
+
+; PMOVE, PTURN.ASM. A missing direction is forward (PARSER outputs 0 and
+; PMOVE's BLT/BGT both fall through), DIRTAB row 3 BACK is a step back,
+; rows 1 and 2 sidestep, and AROUND/UP/DOWN are ERRCMD2.
+;
+; PMOV90 charges the energy on every accepted MOVE, blocked or not, and
+; then calls HUPDAT -- so a corridor you cannot get out of still kills you.
+to dagg.move
+  local "n
+  make "n dagg.parse dagg.gettok :dagg.dirtab
+  if :n = 0 [dagg.move.forward  dagg.move.cost  stop]
+  if :n = 3 [dagg.move.backward  dagg.move.cost  stop]
+  if :n = 2 [dagg.move.side 1  dagg.move.cost  stop]
+  if :n = 1 [dagg.move.side 3  dagg.move.cost  stop]
+  dagg.cmderr
+end
+
+; PMOV90: (weight / 8) + 3, accumulated as damage. POBJWT starts at 35
+; (COMDAT.ASM's `FDB 30+5`) and only GET/DROP move it, so until M3 the
+; step costs a flat 7.
+to dagg.move.cost
+  make "dagg.pdam :dagg.pdam + (int (:dagg.objwt / 8)) + 3
+  dagg.hupdat
+end
+
+;==========================================================================
+; CLIMB -- PCLIMB.ASM, design section 7.5. M5's.
+;
+; VFIND either misses (no feature: CMDERR) or names the feature
+; (dagg.vfind). The direction comes from DIRTAB: UP is row 5, DOWN row 6,
+; and anything else -- including no direction at all, because PARSER
+; answers 0 for a null token and PCLIMB's BLE takes that to CMDERR with
+; the illegal ones -- is CMDERR too. CLIMB UP takes a ladder up (code 1)
+; and nothing else, not even a hole up; CLIMB DOWN takes anything with
+; BIT1 set, a hole or a ladder down (codes 2, 3).
+to dagg.climb
+  local "f local "n
+  make "f dagg.vfind :dagg.row :dagg.col
+  if :f = -1 [dagg.cmderr  stop]
+  make "n dagg.parse dagg.gettok :dagg.dirtab
+  if :n < 1 [dagg.cmderr  stop]
+  ifelse :n = 5 [
+    if not (:f = 1) [dagg.cmderr  stop]
+    make "f (0 - 1)
+  ] [
+    if not (:n = 6) [dagg.cmderr  stop]
+    if (bitand :f 2) = 0 [dagg.cmderr  stop]
+    make "f 1
+  ]
+  ; PCLI20: the level changes and a new dungeon is born around you -- at
+  ; the same row and column, because NEWLVL never touches PROW. INIVU is a
+  ; fresh view with the heart re-read; the prompt after it is dagg.enter's,
+  ; not this procedure's.
+  dagg.prepar
+  dagg.newlvl :dagg.level + :f
+  dagg.hupdat
+  dagg.show
+end
+
+;==========================================================================
+; The object commands -- PGET.ASM, PUSE.ASM, PREVEA.ASM, PINCAN.ASM,
+; PEXAM.ASM, PLOOK.ASM. Design section 15's M3.
+;
+; PARHND and PAROBJ, PARSER.ASM, are the two argument parsers all of them
+; share. PARHND takes the next token from DIRTAB and accepts only LEFT and
+; RIGHT -- BACK, AROUND, UP and DOWN all parse and are all rejected here.
+
+make "dagg.speflg "false
+make "dagg.objtyp 0
+make "dagg.objcls 0
+
+to dagg.parhnd
+  local "n
+  make "n dagg.parse dagg.gettok :dagg.dirtab
+  if :n = 2 [output "r]
+  if :n = 1 [output "l]
+  output "err
+end
+
+; PAROBJ: <generic>, or <adjective> <generic> with the two agreeing on
+; class. The specific form re-reads the SAME token -- POBJ10 calls PARSE0,
+; which is PARSER without the GETTOK -- so "PINE" is tried as a generic
+; first and only then as an adjective, and a bare "PINE" fails because the
+; generic that must follow it is missing. "PINE SWORD" fails on the class
+; comparison, which is why ADJTAB carries a class beside every word.
+to dagg.parobj
+  local "tok local "n
+  make "tok dagg.gettok
+  make "n dagg.parse :tok :dagg.gentab
+  if :n = 0 [output "false]
+  if :n > 0 [
+    make "dagg.speflg "false
+    make "dagg.objtyp :n - 1
+    make "dagg.objcls :n - 1
+    output "true
+  ]
+  make "dagg.speflg "true
+  make "n dagg.parse :tok :dagg.adjtab
+  if :n < 1 [output "false]
+  make "dagg.objtyp :n - 1
+  make "dagg.objcls item 2 (item :n :dagg.adjtab)
+  make "n dagg.parse dagg.gettok :dagg.gentab
+  if :n < 1 [output "false]
+  if not ((:n - 1) = :dagg.objcls) [output "false]
+  output "true
+end
+
+to dagg.objmatch :i
+  if :dagg.speflg [output :dagg.objtyp = item :i :dagg.octyp]
+  output :dagg.objcls = item :i :dagg.occls
+end
+
+; PGET20's loop: the first object on this floor that matches, in OCB
+; order, which for a generic name is "the first one of its class."
+to dagg.findfloor
+  local "i
+  dagg.ofind.rewind
+  make "i dagg.ofind :dagg.row :dagg.col
+  until [:i = 0] [
+    if dagg.objmatch :i [output :i]
+    make "i dagg.ofind :dagg.row :dagg.col
+  ]
+  output 0
+end
+
+to dagg.findbag
+  local "k
+  repeat count :dagg.bag [
+    make "k item repcount :dagg.bag
+    if dagg.objmatch :k [output :k]
+  ]
+  output 0
+end
+
+; WUPDAT, PGET.ASM: the weight changes, the heart rate follows it, and
+; then COMUPD redraws. Only GET and DROP move POBJWT -- STOW and PULL move
+; an object between a hand and the bag and you are carrying it either way.
+;
+; COMUPD is `SWI STATUS` then `SWI PUPDAT`; ours is just the redraw,
+; because design section 4.1b's status line is written INSIDE the redraw
+; (`clean` is the only eraser there is) and a separate STATUS would draw it
+; twice.
+to dagg.comupd
+  dagg.pupdat :dagg.norscl
+end
+
+to dagg.wupdat :delta
+  make "dagg.objwt :dagg.objwt + :delta
+  dagg.hupdat
+  dagg.comupd
+end
+
+to dagg.weight :i
+  output item (1 + item :i :dagg.occls) :dagg.objwgt
+end
+
+; PGET: GET <hand> <object>. The hand must be empty and the object must be
+; on the floor you are standing on.
+to dagg.get
+  local "h local "i
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  if not (0 = dagg.hand :h) [dagg.cmderr  stop]
+  if not dagg.parobj [dagg.cmderr  stop]
+  make "i dagg.findfloor
+  if :i = 0 [dagg.cmderr  stop]
+  dagg.sethand :h :i
+  .setitem :i :dagg.ocown 1
+  dagg.floor.del :i
+  dagg.wupdat dagg.weight :i
+end
+
+; PDROP: DROP <hand>. The object lands where you stand, on this level.
+;
+; PDROP does NOT clear PTORCH, and it does not have to: USE stows the
+; torch it lights, and PULL is the only way back out of the bag and clears
+; PTORCH when it takes it. A burning torch can never be in a hand.
+to dagg.drop
+  local "h local "i
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  make "i dagg.hand :h
+  if :i = 0 [dagg.cmderr  stop]
+  dagg.sethand :h 0
+  .setitem :i :dagg.ocown 0
+  .setitem :i :dagg.ocrow :dagg.row
+  .setitem :i :dagg.occol :dagg.col
+  .setitem :i :dagg.oclvl :dagg.level
+  dagg.floor.add :i
+  dagg.wupdat (0 - dagg.weight :i)
+end
+
+; PSTOW: STOW <hand>. PSTOW0 pushes at the head of the bag list, so the
+; last thing you stowed is the first thing EXAMINE lists and the first
+; thing a generic PULL finds.
+to dagg.stow
+  local "h local "i
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  make "i dagg.hand :h
+  if :i = 0 [dagg.cmderr  stop]
+  make "dagg.bag fput :i :dagg.bag
+  dagg.sethand :h 0
+  dagg.comupd
+end
+
+; PPULL: PULL <hand> <object>. Taking the burning torch back into a hand
+; puts it out (`CMPX PTORCH / STD PTORCH`), which is the only way to stop
+; a torch burning short of letting it die.
+to dagg.pull
+  local "h local "i
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  if not (0 = dagg.hand :h) [dagg.cmderr  stop]
+  if not dagg.parobj [dagg.cmderr  stop]
+  make "i dagg.findbag
+  if :i = 0 [dagg.cmderr  stop]
+  dagg.bag.del :i
+  dagg.sethand :h :i
+  if :i = :dagg.ptorch [make "dagg.ptorch 0]
+  dagg.comupd
+end
+
+; PUSE: USE <hand>. Every failure past the hand parse is SILENT -- PUSE24
+; is a bare RTS and not CMDERR -- so using something that does nothing
+; tells you nothing, which is how you find out what an unrevealed object
+; is without being told.
+;
+; The torch branch is on CLASS, so a DEAD torch lights too; it just has no
+; light in it. USETAB is on TYPE, and it holds five entries: three flasks
+; and two scrolls.
+to dagg.use
+  local "h local "i local "typ
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  make "i dagg.hand :h
+  if :i = 0 [stop]
+  make "typ item :i :dagg.octyp
+  if (item :i :dagg.occls) = :dagg.k.torch [
+    make "dagg.ptorch :i
+    make "dagg.bag fput :i :dagg.bag
+    dagg.sethand :h 0
+    dagg.pupdat :dagg.norscl
+    stop
+  ]
+  if :typ = :dagg.t.thews [
+    make "dagg.ppow :dagg.ppow + 1000
+    dagg.empty :i
+    stop
+  ]
+  if :typ = :dagg.t.hale [make "dagg.pdam 0  dagg.empty :i  stop]
+  if :typ = :dagg.t.abye [
+    ; SCAL16 is a radix-7 multiply, so `LDA #102` is 102/128 and not
+    ; 102/256 -- 80 % of your power, taken as damage.
+    make "dagg.pdam :dagg.pdam + (int ((:dagg.ppow * 102) / 128))
+    dagg.empty :i
+    stop
+  ]
+  if :typ = :dagg.t.seer [dagg.scroll :i "true  stop]
+  if :typ = :dagg.t.vision [dagg.scroll :i "false  stop]
+end
+
+; UFL900: only the TYPE changes, so the flask keeps the class and the
+; offense it was born with and becomes an EMPTY FLASK -- and empty flasks
+; are always revealed, which is the game admitting what you just drank.
+to dagg.empty :i
+  .setitem :i :dagg.octyp :dagg.t.empty
+  .setitem :i :dagg.ocrev 0
+  dagg.hupdat
+  dagg.comupd
+end
+
+; USC100/USC200. An UNREVEALED scroll sets MAPFLG and then does nothing at
+; all (`TST P.OCREV,U / BNE USC199`): a scroll you have not revealed is a
+; scroll that does not work. A revealed one puts the map up and stops the
+; heart being DRAWN while it goes on beating underneath (`CLR HEARTF`),
+; because on the CoCo the map covers the status line the heart lives in.
+to dagg.scroll :i :everything
+  make "dagg.mapflg :everything
+  if not (0 = item :i :dagg.ocrev) [stop]
+  make "dagg.heartf "false
+  ask 1 [ht]
+  make "dagg.dspmod 1
+  dagg.pupdat :dagg.norscl
+end
+
+; PREVEA: REVEAL <hand>. Twenty-five power for every point of the object's
+; reveal requirement, and the re-fill is the point of it -- OBIRTH dressed
+; this object in its generic's numbers and this is where it gets its own
+; back. Silent on every failure, like USE.
+to dagg.reveal
+  local "h local "i local "rev
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  make "i dagg.hand :h
+  if :i = 0 [stop]
+  make "rev item :i :dagg.ocrev
+  if :rev = 0 [stop]
+  if (25 * :rev) > :dagg.ppow [stop]
+  dagg.ocbfil :i (item :i :dagg.octyp)
+  .setitem :i :dagg.ocrev 0
+  dagg.comupd
+end
+
+; PINCAN: INCANT <word>. The one place in the parser that wants the WHOLE
+; word (FULFLG) rather than a prefix, and it checks BOTH hands -- PINCAN
+; calls PINC10 for the left hand and then falls through into it for the
+; right.
+;
+; A ring carries the type it becomes in P.OCXXX+1, and clearing that
+; afterwards is what stops you doing it twice. FIRE, ICE and ENERGY have
+; no XXXTAB row, so OCBFIL leaves P.OCXXX+0 alone and the ring keeps its
+; three charges. The Ring of Ohm ends the game (PINCAN.ASM:WINNER) and
+; that is M5's, with the wizards.
+to dagg.incant
+  local "n
+  make "n dagg.parse dagg.gettok :dagg.adjtab
+  if :n < 1 [stop]
+  if not :dagg.fulflg [stop]
+  make "dagg.objtyp :n - 1
+  dagg.incant.hand :dagg.plhand
+  dagg.incant.hand :dagg.prhand
+end
+
+to dagg.incant.hand :i
+  local "a
+  if :i = 0 [stop]
+  if not (:dagg.k.ring = item :i :dagg.occls) [stop]
+  make "a item :i :dagg.ocx1
+  if :a = 0 [stop]
+  if not (:a = :dagg.objtyp) [stop]
+  .setitem :i :dagg.octyp :a
+  dagg.ocbfil :i :a
+  .setitem :i :dagg.ocx1 0
+  dagg.sound (:dagg.s.obj + :dagg.k.ring) 255
+  dagg.comupd
+  ; PINCAN's last test: the OMEGA ring (T.RN15, FINAL) ends the game.
+  ; dagg.comupd runs first, because PINCAN shows the new ring (STATUS)
+  ; before it checks what the ring is.
+  if :a = :dagg.t.rn15 [dagg.winner]
+end
+
+; PEXAM and PLOOK, with INIVUX in front of the second: clear the text,
+; recompute the heart rate, force an immediate beat and turn the drawn
+; heart back on, then put the forward view up.
+to dagg.examine
+  make "dagg.dspmod 2
+  dagg.pupdat :dagg.norscl
+end
+
+to dagg.look
+  ct
+  dagg.hupdat
+  make "dagg.heart.due ticks
+  make "dagg.heartf "true
+  if not :dagg.over [ask 1 [st]]
+  make "dagg.dspmod 0
+  dagg.pupdat :dagg.norscl
+end
+
+;==========================================================================
+; Sound -- SOUNDS.ASM, and this is M6. SNDTAB is 23 entries: 0-11 one a
+; creature type, SNDOBJ (12) plus the object class for the six things you
+; can swing, then KLINK (18, you hit something), CLANK (19, something hit
+; you), THUD (20, you walked into a wall) and the two explosions (21, 22).
+; Every call site passes the ROM's own index and the ROM's own volume --
+; design section 9.3's attenuation, which is the game's sonar and is how
+; you know something is coming down the corridor before you can see it --
+; and what M6 adds is the generator behind the index.
+;
+; THE ROM HAS NO FREQUENCIES IN IT, only delay counts, so every number
+; below is counted out of the 6809 at the CoCo's own 0.895 MHz E clock.
+; Design section 9.2 gave the squeak period as 113 + 16X and IT IS
+; 135 + 16X: SNSQK2's second half is `CLRA / BRA SNSUB2` and the design
+; dropped SNSUB2's own `BSR SNOUT` (7 cycles), and the 15 cycles of
+; SNSQK1's loop -- BSR SNSQK2, LEAX, BNE -- are inside the period too,
+; because they run between the DAC going low and its going high again.
+; So a squeak is 1383 -> 5927 Hz, not the 1.4 -> 6.9 kHz that section
+; tabulates, and design section 9.2 is corrected with the code.
+;
+;   f  =  895000 / (135 + 16 X)          a squeak-family period
+;   f  =  895000 / (106 + 8 X)           a BOOMER noise sample
+;
+; AND NOTHING BLOCKS. The ROM's SOUNDS is synchronous -- it holds the 6809
+; until the effect is over and the IRQ keeps the heart beating underneath
+; it -- but a growl is 1.27 s and a viper's rattle fires whenever one
+; moves within sonar range, so blocking here would stop the scheduler for
+; a second at a time. Both of this interpreter's ways of making a noise
+; return at once: `sound` gates one note shaped by the voice's ADSR, and
+; `play` appends a note sequence to a voice's queue. So every effect is
+; one or the other, and design section 9.4's "call the scheduler between
+; the steps of a long effect" is not needed -- there are no steps to be
+; between. THAT IS ALSO M6'S ANSWER TO P18 M4: the sweeps did not come out
+; awkward, so the frequency glide is not asked for. What removes the
+; interleaving is the queue, and a glide would not have removed anything.
+;
+; VOICES, design section 9.1: 0 and 4 are the heartbeat and nothing else
+; ever touches them (a `sound` on a busy voice FLUSHES it, and the beat
+; must not be cuttable); 1 and 5 are tone A, 2 and 6 tone B, 3 and 7
+; noise. Both ears always get the same thing -- there is no panning, and
+; that is settled rather than deferred: a creature that announced which
+; side it was on would tell you something the CoCo did not.
+
+make "dagg.s.obj 12
+make "dagg.s.klk2 18
+make "dagg.s.klk3 19
+make "dagg.s.thud 20
+make "dagg.s.exp0 21
+make "dagg.s.exp1 22
+
+make "dagg.sndn -1
+make "dagg.sndvol 0
+
+; `play` spells a frequency as a note, so a sweep is rounded to semitones
+; -- worth at most 3 % of a hertz, inaudible in a squeak, and it is
+; logo/games/berzerk's own method. The RANGE is what costs something:
+; `play` reaches c1 (32.7 Hz) to b8 (7902) where `sound` reaches 20 to
+; 10000, and two effects are outside it -- BEOOP's bottom five steps at
+; 27.9 Hz and the rattle's 11.2 kHz noise clock. Both clamp, and both are
+; named where they happen.
+make "dagg.pcs [c cs d ds e f fs g gs a as b]
+
+to dagg.note :f
+  local "m local "o
+  make "m ln (:f / 440)
+  make "m round (69 + ((12 * :m) / 0.6931472))
+  if :m < 24 [make "m 24]
+  if :m > 119 [make "m 119]
+  make "o (int (:m / 12)) - 1
+  output word (item (1 + modulo :m 12) :dagg.pcs) :o
+end
+
+; SNSQK1, the squeak family: X counts DOWN from its start to 1 and each
+; step is one full square period of 135 + 16X cycles, so the pitch RISES
+; and the sweep spends most of its time at the bottom. SQUEAK starts X at
+; $20, MSQUEK at $40, MSQUEQ at $80 and WHOOP at $100; PHASER calls
+; MSQUEK ten times over and GLUGLG calls MSQUEQ four.
+;
+; The shortest note `play` will hold is 25 ms (l32 at t300, its fastest),
+; so a sweep becomes round(duration / 25 ms) notes and each one is the
+; frequency at the MIDDLE of the time it covers. SQUEAK is 14.3 ms and
+; comes out as ONE note -- it is shorter than a note, so the sweep in it
+; is lost and what is left is its time-median, 1864 Hz. The others have
+; room: PHASER 19 notes, GLUGLG 27, WHOOP 25.
+to dagg.sweep :x0 :reps
+  local "t local "n local "c local "i
+  local "x local "d local "f local "out
+  make "t (135 * :x0) + (8 * :x0 * (:x0 + 1))
+  make "t :reps * :t
+  make "n round (:t / 22375)
+  if :n < 1 [make "n 1]
+  make "out []  make "c 0  make "i 0
+  repeat :reps [
+    make "x :x0
+    until [:x < 1] [
+      make "c :c + 135 + (16 * :x)
+      make "d ((:i + 0.5) * :t) / :n
+      if and (:i < :n) (:c > :d) [
+        make "f 895000 / (135 + (16 * :x))
+        make "out fput (dagg.note :f) :out
+        make "i :i + 1
+      ]
+      make "x :x - 1
+    ]
+  ]
+  output reverse :out
+end
+
+; The eleven queued sequences, in the order :dagg.sndtab indexes them:
+; the four SNSQK1 sweeps, BEOOP, the three rattles and the three booms.
+; Each starts with a `v15` that dagg.sound overwrites in place.
+make "dagg.snds []
+make "dagg.snds lput (se [v15 t300 l32] dagg.sweep 32 1) :dagg.snds
+make "dagg.snds lput (se [v15 t300 l32] dagg.sweep 64 10) :dagg.snds
+make "dagg.snds lput (se [v15 t300 l32] dagg.sweep 128 4) :dagg.snds
+make "dagg.snds lput (se [v15 t300 l32] dagg.sweep 256 1) :dagg.snds
+
+; BEOOP is the one member of the family whose X RISES -- $500 to $800 in
+; steps of 48, so the pitch FALLS, 43.4 Hz to 27.9 over 16 periods and
+; 471 ms. At those frequencies a square wave is not a tone but sixteen
+; clicks slowing down, which is the "beoop". Its bottom five steps are
+; below c1 and clamp there: `play` has no note for 27.9 Hz, and no
+; speaker this machine owns would separate them if it had.
+make "q [v15 t300 l32 f1 e1 e1 ds1 d1]
+make "q se :q [d1 cs1 cs1 c1 c1 c1 c1]
+make "q se :q [c1 c1 c1 c1]
+make "dagg.snds lput :q :dagg.snds
+
+; RATTLE/PSSST/PSSHT: 192 noise samples of 80 cycles (17.2 ms) and then
+; SNWT1K's 36.6 ms of silence, N times over. THE ROM'S COMMENT SAYS
+; "rattle count + 1" AND THE CODE DOES NOT: `STA SNDLAY` and then a
+; `DEC`/`BNE` do-while runs the loaded value exactly, so RATTLE is 10
+; bursts, PSSST 2 and PSSHT 1 -- not the 3 and 2 design section 9.2 read
+; off that comment, which read the same way would have made RATTLE
+; eleven. The nearest `play` can spell is 25 ms on and 25 off: 20 pulses
+; a second against the ROM's 18.6. The noise clock is 11.2 kHz, and b8
+; (7902) is the highest note there is.
+make "q [v15 t300 l32 b8 r b8 r b8 r]
+make "q se :q [b8 r b8 r b8 r b8 r b8 r]
+make "q se :q [b8 r b8 r]
+make "dagg.snds lput :q :dagg.snds
+
+make "dagg.snds lput [v15 t300 l32 b8 r b8 r] :dagg.snds
+make "dagg.snds lput [v15 t300 l32 b8 r] :dagg.snds
+
+; BOOMER, and the data is SWCHAR.ASM's: THUDD is $0080/$0001 and BANGD
+; $0050/$0005, with a third pair at THUDD+4 ($0050/$0004) that only
+; KABOOM reaches (`LEAU 4,U` after the first boom). X is the wait between
+; noise samples and it rises by 2 until it hits $0150, so the noise clock
+; FALLS -- 792 Hz to 322 for a THUD, 1200 to 322 for the other two -- and
+; Y is how many samples are taken at each X, which is what makes a BANG
+; five times longer than a THUD. 229 ms, 1263 ms, and KABOOM is a THUD,
+; then SNWT1K's pause, then the third pair: 1276 ms in all.
+make "dagg.snds lput [v15 t300 l16 e5 b4 gs4 fs4 e4] :dagg.snds
+
+make "q [v15 t300 l16 cs6 as5 g5 fs5 e5]
+make "q se :q [ds5 d5 cs5 c5 b4 as4 as4]
+make "q se :q [a4 gs4 gs4 g4 g4 fs4 fs4]
+make "q se :q [f4 f4 f4 e4 e4 e4]
+make "dagg.snds lput :q :dagg.snds
+
+make "q [v15 t300 l16 e5 b4 gs4 fs4 e4 r]
+make "q se :q [c6 a5 fs5 e5 ds5 cs5 c5]
+make "q se :q [b4 as4 a4 a4 gs4 g4 g4]
+make "q se :q [fs4 fs4 f4 f4 e4 e4]
+make "dagg.snds lput :q :dagg.snds
+
+; SNDTAB itself, one row an entry, and the row says which of four shapes
+; the effect is and what its numbers are:
+;
+;   [1 k p]            queue :dagg.snds's kth list on pair p (1 = the
+;                      tone voices 1 and 5, 3 = the noise voices)
+;   [3 nf env dur tf]  noise at nf through env, and a tone at tf beside
+;                      it when tf is not zero -- KLINK's "high pitched
+;                      tone mixed with white noise"
+;   [4 f1 f2 env]      two de-tuned tones through a decay. CSETUP's own
+;                      pair of bytes are loop counts, and a pass of
+;                      SNCLK2 is 16 cycles plus SNCLK3's 110 charged to
+;                      whichever counter ran out, so f = 895000/(2 F T)
+;   [7]                BDLBDL, the one effect built per call
+;
+; The envelopes are the ROM's envelope generator read as ADSR. SNENVS
+; walks from 0 up by SNENVD (attack) or from $FFFF down by it (decay),
+; one step a sample, so a step count times a sample period IS an attack
+; or a release in milliseconds:
+;
+;   GROWL/GRAWL/SNARL  SNENVD $300/$200/$100 -> 86/128/256 attack steps
+;                      of 2.34 ms = 201/299/598 ms, then a common $40
+;                      decay of 1023 steps of 1.05 ms = 1070 ms. The
+;                      noise clock is 428 Hz through the attack (SNWAIT
+;                      $F0) and 956 through the decay ($60); one voice
+;                      has one clock, and the decay is six sevenths of
+;                      the sound, so it is the decay's.
+;   WHOOSH             $80 attack, 512 steps of 0.161 ms = 82 ms, falling
+;                      through into CHUCK's $A0 decay, 409 steps = 65 ms
+;   CHUCK              that decay entered on its own -- a torch lights
+;                      with no attack at all
+;   KLINK              $60 decay, 682 steps of 0.157 ms = 107 ms, with a
+;                      tone at half the sample rate: 3174 Hz
+;   CLANG/KKLANK/      $60 decay again, but the step rate is set by the
+;   KLANK/CLANK        two frequencies, so the SAME envelope runs 420,
+;                      258, 600 and 177 ms
+make "q [[1 1 1] [1 6 3] [3 956 [201 0 15 1070] 202 0]]
+make "q se :q [[1 5 1] [4 134 434 [0 0 15 600]]]
+make "q se :q [[3 956 [299 0 15 1070] 300 0]]
+make "q se :q [[1 7 3] [4 350 971 [0 0 15 258]]]
+make "q se :q [[1 8 3]]
+make "q se :q [[3 956 [598 0 15 1070] 599 0]]
+make "q se :q [[7] [7] [1 3 1] [1 2 1] [1 4 1]]
+make "q se :q [[4 215 598 [0 0 15 420]]]
+make "q se :q [[3 6215 [82 0 15 65] 83 0]]
+make "q se :q [[3 6348 [0 0 15 65] 1 0]]
+make "q se :q [[3 6348 [0 0 15 107] 1 3174]]
+make "q se :q [[4 509 1413 [0 0 15 177]]]
+make "q se :q [[1 9 3] [1 10 3] [1 11 3]]
+make "dagg.sndtab :q
+make "q []
+
+; The sixteen `v` words, interned once at load so that setting a volume
+; never allocates. See dagg.sound.
+make "dagg.vols [v0 v1 v2 v3 v4 v5 v6 v7]
+make "dagg.vols se :dagg.vols [v8 v9 v10 v11]
+make "dagg.vols se :dagg.vols [v12 v13 v14 v15]
+
+; Building the tables above spends a few hundred cells on the copies `se`
+; and `lput` make, and the pool has no automatic collection -- so the one
+; sweep in the file that is not dagg.enter's is here, where the cost was
+; incurred and where nothing is playing yet.
+recycle
+
+; SOUNDX: square waves, because a DAC toggled between two values is one;
+; white noise, because SNOISE is a 16-bit LCG read as a sample; and no
+; envelope at all on the queued effects, because SNVOL is a constant
+; through any one sound and there is nothing between on and off.
+;
+; The heartbeat is the one thing in this file with no ROM number behind
+; it, and it cannot have one: COMMON.ASM:CLK30 does `LDB P.PIIOB,X /
+; EORB #BIT1 / STB P.PIIOB,X`, flipping a SINGLE BIT once a beat, so the
+; CoCo's heartbeat has no frequency, no duration and no volume -- it is
+; one edge, and the thump is the speaker's own answer to it. Ours has to
+; choose all three (design section 9.4 asks for "a short low thump with a
+; percussive envelope"), and these are the three.
+to dagg.setup.sound
+  setwave [0 4 1 5 2 6] "square
+  setwave [3 7] "white
+  setenv [0 4] [0 25 0 60]
+  setenv [1 5 2 6 3 7] [0 0 15 0]
+end
+
+; SOUNDX, whose dispatch is `JSR [A,X]` on SNDTAB. `SNOUT` multiplies
+; every sample by SNVOL, so the volume scales the whole effect: 0-255
+; there is 0-15 here, and a `v` control word in front of a queued list
+; does to it what SNVOL does to a bit-banged one.
+;
+; THAT `v` WORD IS WRITTEN IN PLACE and never consed, which is B91's
+; lesson applied where B91 was found. A creature's approach sound carries
+; the ROM's `255 - 31 * range`, so the volume is different nearly every
+; time, and `fput`ting it onto the list is one cell A SOUND in the part
+; of the game that runs for ever. So every queued list starts life with a
+; `v15` placeholder that `.setitem` overwrites, and the sixteen words it
+; is overwritten with were interned at load by :dagg.vols.
+;
+; A NEW SOUND ALWAYS WINS, which the ROM never had to decide -- SOUNDS
+; blocks, so nothing can arrive while something is playing. The three
+; rests are what a flush is here: `sound` on a voice discards whatever it
+; had queued. Voices 0 and 4 are not among them.
+to dagg.sound :n :vol
+  local "r local "g local "v local "l
+  make "dagg.sndn :n
+  make "dagg.sndvol :vol
+  make "v int (:vol / 17)
+  (sound [1 5] 0 1 0)
+  (sound [2 6] 0 1 0)
+  (sound [3 7] 0 1 0)
+  make "r item (:n + 1) :dagg.sndtab
+  make "g item 1 :r
+  if :g = 1 [
+    make "l item (item 2 :r) :dagg.snds
+    .setitem 1 :l (item (:v + 1) :dagg.vols)
+    setenv [1 5 3 7] [0 0 15 0]
+    ifelse (item 3 :r) = 1 [(play [1 5] :l)] [(play [3 7] :l)]
+    stop
+  ]
+  if :g = 3 [
+    setenv [3 7] (item 3 :r)
+    (sound [3 7] (item 2 :r) (item 4 :r) :v)
+    if (item 5 :r) > 0 [
+      setenv [1 5] (item 3 :r)
+      (sound [1 5] (item 5 :r) (item 4 :r) :v)
+    ]
+    stop
+  ]
+  if :g = 4 [
+    setenv [1 5] (item 4 :r)
+    setenv [2 6] (item 4 :r)
+    (sound [1 5] (item 2 :r) 1 :v)
+    (sound [2 6] (item 3 :r) 1 :v)
+    stop
+  ]
+  dagg.bdlbdl (item (:v + 1) :dagg.vols)
+end
+
+; BDLBDL: eight squeaks whose starting X is SNOISE's own random byte
+; shifted right and forced non-zero, so 1 to 127 -- and then it FALLS
+; INTO KABOOM. It is the only effect here that is built rather than
+; looked up, because the eight are different every time; it spends a
+; couple of hundred cells a call and a game hears it once per wizard.
+;
+; The squeaks and the explosion are on different voices where the ROM had
+; them one after the other on the same DAC, so the explosion is queued
+; behind as many 25 ms rests as the squeaks took notes.
+to dagg.bdlbdl :v
+  local "l local "r
+  make "l []
+  repeat 8 [make "l se :l dagg.sweep (1 + random 127) 1]
+  ; `fput`, not `lput`: the rests are all the same rest, so order does
+  ; not matter, and appending forty of them one at a time copies the
+  ; whole list forty times -- which is M3's own finding about the OCB
+  ; lists, and it ran a test out of space before this line was changed.
+  make "r []
+  repeat count :l [make "r fput "r :r]
+  make "r se [t300 l32] :r
+  setenv [1 5 3 7] [0 0 15 0]
+  (play [1 5] se (se :v [t300 l32]) :l)
+  make "l item 11 :dagg.snds
+  .setitem 1 :l :v
+  (play [3 7] se :r :l)
+end
+
+;==========================================================================
+; Combat -- PATTK.ASM, and it is the same arithmetic in both directions.
+; The only asymmetry in this game's combat is the darkness rule, and that
+; one is the player's alone.
+
+; SCAL16, PATTK.ASM: a 16-bit number through a RADIX-7 percentage, which is
+; a byte with its binary point after the top bit -- so 128 is 1.0 and 255
+; is very nearly 2. The ROM's two multiplies, an add and a shift come to
+; floor(x * a / 128) exactly, and the largest this game can ask for is
+; 32767 * 255 / 128 = 65,285, which is why the 16-bit result it stores can
+; never overflow.
+to dagg.scal16 :x :a
+  output int ((:x * :a) / 128)
+end
+
+; ATTACK, PATTK.ASM: count how many times the attacker's power goes into
+; FOUR times what the defender has left, stopping at fifteen. The index
+; runs the other way, so a defender that is nearly dead gives 15 and a
+; bonus of +120 -- 97 % -- and one fifteen times your size gives 0 and
+; -75, which is 21 %. Those two are design section 10.3's own end points.
+;
+; The ROM's loop is 16-bit unsigned and this one is signed, which differs
+; only for a defender whose damage already exceeds its power -- and that
+; defender is dead: DAMAGE says so to its caller and both callers act on it
+; before anything can attack again.
+to dagg.attack :pow :dpow :ddam
+  local "d local "t
+  make "d 4 * (:dpow - :ddam)
+  make "t 15
+  until [or (:t = 0) (:d < :pow)] [
+    make "d :d - :pow
+    make "t :t - 1
+  ]
+  ifelse :t < 3 [
+    make "t 0 - (25 * (3 - :t))
+  ] [
+    make "t 10 * (:t - 3)
+  ]
+  output ((dagg.rnd) + :t) > 126
+end
+
+; DAMAGE, PATTK.ASM: the attacker's power through its own offense
+; percentage and then through the defender's own filter, once on the magic
+; channel and once on the physical, both accumulated. Outputs the
+; defender's new damage; the caller compares that against the power,
+; because that comparison is all `BHI` was.
+to dagg.damage :pow :mgo :pho :mgd :phd :dam
+  local "d
+  make "d :dam + dagg.scal16 (dagg.scal16 :pow :mgo) :mgd
+  output :d + dagg.scal16 (dagg.scal16 :pow :pho) :phd
+end
+
+; SHIELD, CRETUR.ASM: the player's own filters are 128/128 and a shield in
+; EITHER hand replaces both of them with its own pair if the pair is lower
+; -- the ROM compares the two bytes as one 16-bit number, so the magic and
+; the physical filter win or lose together and the better hand takes both.
+to dagg.shield :i :best
+  local "x
+  if :i = 0 [output :best]
+  if not (:dagg.k.shield = item :i :dagg.occls) [output :best]
+  make "x (256 * (item :i :dagg.ocx0)) + (item :i :dagg.ocx1)
+  if :x < :best [output :x]
+  output :best
+end
+
+; PATT30-PATT42: everything the creature was carrying lands where it
+; stood, the level's own count of that type goes down (so the dungeon does
+; not hand it back when you come round again), and you take an eighth of
+; its power. `LDA #$7F` pegs the total near 32K by writing only the HIGH
+; byte and leaving the low one alone, which is the ROM's own
+; "approximately 32K" and is transcribed rather than tidied.
+;
+; Killing either wizard is M5's -- type 10 ends the game's first half
+; (PATTK.ASM:ENDGAM strips you and drops you on level 4 with a 200-unit
+; weight penalty) and type 11 is the ring riddle. The loot above already
+; dropped before either runs, which is PATT30's own order.
+to dagg.cdeath :y
+  local "r local "c local "row local "t
+  make "r item :y :dagg.ccrow
+  make "c item :y :dagg.cccol
+  foreach (item :y :dagg.ccobj) [[k]
+    .setitem :k :dagg.ocown 0
+    .setitem :k :dagg.ocrow :r
+    .setitem :k :dagg.occol :c
+    dagg.floor.add :k
+  ]
+  .setitem :y :dagg.ccobj []
+  make "row item (:dagg.level + 1) :dagg.cmx
+  make "t 1 + item :y :dagg.cctyp
+  .setitem :t :row ((item :t :row) - 1)
+  .setitem :y :dagg.ccuse 0
+  dagg.ccput :r :c 0
+  dagg.show
+  dagg.sound :dagg.s.exp0 255
+  make "dagg.ppow :dagg.ppow + (int ((dagg.cc :y 1) / 8))
+  if :dagg.ppow > 32767 [
+    make "dagg.ppow 32512 + (modulo :dagg.ppow 256)
+  ]
+  if (item :y :dagg.cctyp) = 10 [dagg.endgam  stop]
+  if (item :y :dagg.cctyp) = 11 [dagg.riddle  stop]
+end
+
+;==========================================================================
+; The levels and the endgame -- design section 7.5 and PATTK/PINCAN.
+; M5's.
+;
+; WIZIX/WIZOX, MISC.ASM, reduced: the full 32-step fade with its buzzing
+; noise is design section 16's first expendable set piece -- a mechanic
+; it is not, and the first thing to go if RAM binds. What carries over
+; is what the game needs: the wizard drawn full-bright at range 1's own
+; scale (WIZIX's own $8080), an explosion behind him (WIZI20/WIZOX's
+; A$EXP1), and the cleared screen the speeches are printed on. The heart
+; keeps beating through it where the ROM stops it; a set piece, not a
+; mechanic either way.
+to dagg.show.wizard :runs
+  dagg.setscale 1 :dagg.norscl
+  clean
+  setpc :dagg.ink
+  dagg.draw.runs :runs
+  refresh
+  dagg.sound :dagg.s.exp1 255
+end
+
+; ENDGAM, PATTK.ASM: killing the plain wizard ends the game's first half.
+; His two speeches (decoded in scripts/gen_daggorath.py, which asserts
+; every byte -- the game keeps the words and drops the ROM's 32-column
+; centering, the same reason EXAMINE's columns are recomputed for 40),
+; a WAIT, and then the strip: the torch is the only thing
+; left in the bag, everything else is gone, and POBJWT goes to 200 flat.
+; What was in your hands stays in your hands -- EGAM10 only re-links the
+; bag. Level 4 (index 3) is born around you and FNDCEL picks a random
+; cell of it for you; the direction does not change, because NEWLVL
+; never touches it. WIZOUT is an explosion and INIVU is dagg.look.
+; WAITX is 81 jiffies -- 1.35 seconds, and `wait` here is milliseconds.
+to dagg.endgam
+  local "cell
+  dagg.show.wizard item 12 :dagg.fwdcre
+  dagg.endgam.speeches
+  wait 1350
+  ifelse :dagg.ptorch = 0 [make "dagg.bag []] [
+    make "dagg.bag (list :dagg.ptorch)
+    .setitem :dagg.ptorch :dagg.ocown 1
+  ]
+  dagg.endgam.discard
+  make "dagg.floor []
+  make "dagg.objwt 200
+  dagg.newlvl 3
+  make "cell dagg.fndcel
+  make "dagg.row item 1 :cell
+  make "dagg.col item 2 :cell
+  dagg.look
+end
+
+; His two speeches, factored out so a host test can read them: dagg.look
+; at the end of dagg.endgam clears the text window (INIVUX's own CLRPRI),
+; so by the time the procedure returns there is nothing to assert on.
+; M6 SPOKE THEM TOO and M7 took the voice back out -- design section 9.5.
+; The cartridge printed these four lines and said nothing, and a board
+; playing the game said so. The words are what carries over; the voice
+; was ours.
+to dagg.endgam.speeches
+  local "a local "b
+  make "a [ENOUGH! I TIRE OF THIS PLAY...]
+  make "b [PREPARE TO MEET THY DOOM!!!]
+  pr []
+  pr :a
+  pr :b
+end
+
+; Everything the strip takes: every OCB that is neither in a hand nor
+; the torch. They are marked discarded (-2: owned by nobody and on no
+; floor) rather than unowned, so nothing later -- a creature death, a
+; restore -- reads them back onto a floor. The creatures' own loot
+; chains go with them, for the same reason: the next thing a creature
+; dies holding must be something this half of the game gave it.
+to dagg.endgam.discard
+  local "keep local "i
+  make "keep (list :dagg.plhand :dagg.prhand :dagg.ptorch)
+  repeat :dagg.ocbmax [
+    make "i repcount
+    if not member? :i :keep [.setitem :i :dagg.ocown (0 - 2)]
+  ]
+  repeat :dagg.ccbmax [.setitem repcount :dagg.ccobj []]
+end
+
+; The ring riddle's other half, PATTK.ASM: killing the crescent wizard
+; does not end the game -- saying the Ring of Ohm's name does (dagg.winner
+; below). What it does is stop the world: FRZFLG goes down and every
+; creature spends its turn rescheduling (CRETUR.ASM:CMOV12 is JMP CMOV90)
+; until something thaws it, which is nothing in this ROM. And it turns
+; the lights on: PRLITE goes to $0713, seven regular and nineteen magic
+; (design section 8.3) -- the only scene in the game you can see without
+; a torch. The third half is the OCBPTR truncation: every object but OCB
+; #1 is gone, made explicit the way dagg.endgam.discard makes ENDGAM's
+; strip explicit, because our floor list would otherwise resurrect them.
+; INIVU is dagg.look.
+to dagg.riddle
+  local "o
+  make "dagg.frzflg "true
+  make "dagg.prlite 7
+  make "dagg.prmlite 19
+  ; OCBPTR truncation is dagg.endgam.discard with nothing kept: clear the
+  ; hands and the torch first so the keep list is all zeroes (no OCB is
+  ; ever 0), remember OCB 1's standing, discard, and put it back.
+  make "dagg.plhand 0
+  make "dagg.prhand 0
+  make "dagg.ptorch 0
+  make "o item 1 :dagg.ocown
+  dagg.endgam.discard
+  .setitem 1 :dagg.ocown :o
+  make "dagg.bag []
+  make "dagg.floor []
+  dagg.look
+end
+
+; WINNER, PINCAN.ASM: saying the Ring of Ohm's name with it in either
+; hand. The star wizard fades in (WIZ2 -- D4.ASM's one list in no
+; creature table, generated beside FWDCRE for exactly this), his two
+; speeches print, and the game is over. The ROM sits in BRA * with the
+; victory on the screen; ours sets dagg.over, which walks out through
+; dagg.play and daggorath.quit and puts the screen back -- a Logo game
+; has to let go, the same reason dagg.key owns ESC.
+to dagg.winner
+  dagg.show.wizard :dagg.wiz2
+  dagg.winner.speeches
+  make "dagg.over "true
+end
+
+; Factored out beside dagg.endgam.speeches, for the same reason: the
+; words outlive the procedure that prints them nowhere else.
+to dagg.winner.speeches
+  local "a local "b
+  make "a [BEHOLD! DESTINY AWAITS THE HAND]
+  make "b [OF A NEW WIZARD...]
+  pr []
+  pr :a
+  pr :b
+end
+
+; PATT10's ring counter: ENERGY, ICE and FIRE spend a charge a swing and
+; turn into a GOLD ring -- worthless, one unit of weight, and the ROM's
+; own little joke -- when the third one goes. The Ring of Ohm (FINAL) and
+; GOLD itself are outside the range and are never counted down.
+to dagg.pattk.ring :i :typ
+  local "n
+  if :i = 0 [stop]
+  if :typ < :dagg.t.rn11 [stop]
+  if :typ > :dagg.t.rn12 [stop]
+  make "n (item :i :dagg.ocx0) - 1
+  .setitem :i :dagg.ocx0 :n
+  if not (:n = 0) [stop]
+  .setitem :i :dagg.octyp :dagg.t.rn20
+  dagg.ocbfil :i :dagg.t.rn20
+  .setitem :i :dagg.ocrev 0
+end
+
+; PATT20-PATT24: a ring is guaranteed to hit; anything else has to roll,
+; and then has to survive the dark. PATT22 throws away three swings in
+; four when you have no torch or a dead one -- the light is a weapon, and
+; a torch is called DEAD five minutes before it stops giving light
+; (COMPLR.ASM:BURNER), so you fight blind while the corridor is still lit.
+to dagg.pattk.swing :cls :mgo :pho
+  local "y local "hit local "t local "dam
+  make "y dagg.cfind :dagg.row :dagg.col
+  if :y = 0 [stop]
+  if not (:cls = :dagg.k.ring) [
+    make "hit dagg.attack :dagg.ppow (dagg.cc :y 1) (item :y :dagg.ccdam)
+    if not :hit [stop]
+    make "t 0
+    if not (:dagg.ptorch = 0) [make "t item :dagg.ptorch :dagg.octyp]
+    if (or (:dagg.ptorch = 0) (:t = :dagg.t.dead)) [
+      if not (0 = bitand dagg.rnd 3) [stop]
+    ]
+  ]
+  ; PATT24 is a sound AND an OUTSTI, and M4 ported only the sound: three
+  ; exclamation marks where the echoed line stopped, exactly where CMDERR
+  ; puts its two question marks. Until M6 gives a swing a noise it is the
+  ; ONLY thing that tells a hit from a miss -- a creature you have not
+  ; killed yet looks identical either way -- so a board could not tell that
+  ; ATTACK worked at all. B88.
+  dagg.sound :dagg.s.klk2 255
+  type (word char 33 char 33 char 33)
+  make "dam item :y :dagg.ccdam
+  make "dam dagg.damage :dagg.ppow :mgo :pho (dagg.cc :y 3) (dagg.cc :y 5) :dam
+  .setitem :y :dagg.ccdam :dam
+  if :dam < (dagg.cc :y 1) [stop]
+  dagg.cdeath :y
+end
+
+; PATTK: ATTACK LEFT / ATTACK RIGHT. An empty hand is EMPHND (COMDAT.ASM)
+; -- a sword noise, no magic offense and five physical, which is a fist.
+;
+; The swing costs you an eighth of the total offense of whatever you are
+; swinging, as a percentage of your own power, whether or not there is
+; anything here to swing at. That is why the Elvish sword costs eight
+; times what the wooden one does, and it is the whole economy of the game
+; in one line.
+to dagg.pattk
+  local "h local "i local "mgo local "pho local "cls local "typ
+  local "cost
+  make "h dagg.parhnd
+  if :h = "err [dagg.cmderr  stop]
+  make "i dagg.hand :h
+  make "mgo 0
+  make "pho 5
+  make "cls 4
+  make "typ -1
+  if not (:i = 0) [
+    make "mgo item :i :dagg.ocmgo
+    make "pho item :i :dagg.ocpho
+    make "cls item :i :dagg.occls
+    make "typ item :i :dagg.octyp
+  ]
+  make "cost dagg.scal16 :dagg.ppow (int ((:mgo + :pho) / 8))
+  make "dagg.pdam :dagg.pdam + :cost
+  dagg.sound (:dagg.s.obj + :cls) 255
+  dagg.pattk.ring :i :typ
+  dagg.pattk.swing :cls :mgo :pho
+  dagg.hupdat
+end
+
+;==========================================================================
+; Creature movement -- CRETUR.ASM, and the ORDER of it is the game's
+; difficulty: gather, then attack, then close, then wander. Dropping an
+; object at a creature's feet really does buy you a turn.
+
+; MOVTAB, CRETUR.ASM. Seven bytes, so that all four preference sequences
+; are windows into the one table: forward-left-right, left-right-forward,
+; forward-right-left, right-left-forward.
+make "dagg.movtab [0 3 1 0 1 3 0]
+
+; CWALK, CRETUR.ASM: try a relative change of direction. It fails on a
+; wall, on the edge of the maze and on another creature, and on success it
+; is also where design section 9.3's sonar lives -- a creature is HEARD
+; when it moves within eight cells one way and two the other, half the
+; time, at a volume of 255 - 31 times the larger distance.
+;
+; The bigger of the two differences goes into A and the smaller into B
+; (CWLK12's EXG), and a range past either gate skips the screen update as
+; well as the sound: something you cannot hear does not redraw the view.
+to dagg.cwalk :y :rel
+  local "d local "r local "c local "a local "b local "s
+  make "d modulo ((item :y :dagg.ccdir) + :rel) 4
+  make "r dagg.step.row (item :y :dagg.ccrow) :d
+  make "c dagg.step.col (item :y :dagg.cccol) :d
+  if not dagg.stepok :r :c [output "false]
+  if not (0 = dagg.cfind :r :c) [output "false]
+  dagg.ccput (item :y :dagg.ccrow) (item :y :dagg.cccol) 0
+  .setitem :y :dagg.ccrow :r
+  .setitem :y :dagg.cccol :c
+  .setitem :y :dagg.ccdir :d
+  dagg.ccput :r :c :y
+  make "a abs (:r - :dagg.row)
+  make "b abs (:c - :dagg.col)
+  if :b > :a [make "s :a  make "a :b  make "b :s]
+  if :a > 8 [output "true]
+  if :b > 2 [output "true]
+  ; `BITA #BIT0` -- half the time, and the same random byte the ROM has
+  ; already drawn does not get reused here: CWLK20 draws its own.
+  if 1 = bitand dagg.rnd 1 [
+    dagg.sound (item :y :dagg.cctyp) (255 - (31 * :a))
+  ]
+  make "dagg.newluk "true
+  output "true
+end
+
+; CMOV62: step from the creature toward the player one cell at a time
+; until a wall stops it or the player is reached. STEPOK is the same one
+; MOVE uses -- off the maze or into rock -- and it does not test the wall
+; bits at all, so a creature can see you through a door it cannot open.
+; The bound is the maze's own width; the ROM's loop has none because a
+; real maze is walled at its edges.
+to dagg.cansee :row :col :dir
+  local "r local "c
+  make "r :row
+  make "c :col
+  repeat 32 [
+    make "r dagg.step.row :r :dir
+    make "c dagg.step.col :c :dir
+    if not dagg.stepok :r :c [output "false]
+    if (and (:r = :dagg.row) (:c = :dagg.col)) [output "true]
+  ]
+  output "false
+end
+
+; CMOV90, CRETUR.ASM: reschedule at the movement delay -- unless the
+; creature is standing on the player, in which case CMOV90 falls straight
+; into CMOV92 and the ATTACK delay is used instead. So something that
+; walks onto you speeds up before it has hit you once, and it forces the
+; redraw rather than waiting for LUKNEW to notice.
+;
+; Q.TEN really is tenths of a second: COMMON.ASM's ROLTAB rolls the JIFFY
+; counter over at 6 and the IRQ is 1/60 s, so QUESCN scans the tenth queue
+; every 100 ms and QUEADD stores the count straight.
+;
+; `ticks` and not `:dagg.now`, which is the tick's own start: the ROM
+; re-queues a TCB in the SCHEDuler AFTER the routine returns, so a
+; creature's next delay is counted from when its turn ENDED. That matters
+; on the path below, where a creature standing on the player redraws
+; before it reschedules -- the redraw is part of its turn and the ROM
+; charges it for it. `dagg.hslow` already reads the clock this way.
+;
+; The movement delay goes through `dagg.creature.delay`, where :dagg.pace
+; is applied; the attack delay CMOV92 substitutes here does not, because
+; the attack was never the thing a CoCo throttled (see the knob).
+to dagg.cmov90 :y
+  if (and (:dagg.row = item :y :dagg.ccrow)
+          (:dagg.col = item :y :dagg.cccol)) [
+    dagg.show
+    make "dagg.newluk "false
+    .setitem :y :dagg.cctim dagg.cc :y 7
+    stop
+  ]
+  .setitem :y :dagg.cctim dagg.creature.delay (dagg.cc :y 6)
+end
+
+; CMOV20, CRETUR.ASM: the creature's attack, through the same ATTACK and
+; DAMAGE the player's swing goes through. Both hands are checked for a
+; shield and the better pair wins; 32896 is $8080, the unshielded 128/128.
+to dagg.cattack :y
+  local "f local "g local "p local "hit local "d
+  dagg.sound (item :y :dagg.cctyp) 255
+  make "f dagg.shield :dagg.plhand 32896
+  make "f dagg.shield :dagg.prhand :f
+  make "p dagg.cc :y 1
+  make "hit dagg.attack :p :dagg.ppow :dagg.pdam
+  if :hit [
+    dagg.sound :dagg.s.klk3 255
+    make "g int (:f / 256)
+    make "f modulo :f 256
+    make "d dagg.damage :p (dagg.cc :y 2) (dagg.cc :y 4) :g :f :dagg.pdam
+    make "dagg.pdam :d
+  ]
+  dagg.hupdat
+  .setitem :y :dagg.cctim dagg.cc :y 7
+end
+
+; CMOVE, CRETUR.ASM -- one creature's whole turn.
+;
+; The ROM opens with `TST FRZFLG`, which is the crescent wizard's ring
+; riddle stopping the world (PATTK.ASM's own `DEC FRZFLG`). A frozen
+; creature does nothing but reschedule (CMOV12 is JMP CMOV90) -- it does
+; not pick up, attack, close or wander. dagg.riddle is the only thing
+; that sets it, and nothing clears it.
+to dagg.cmove :y
+  local "typ local "i local "r local "c local "dir local "base local "ok
+  if :dagg.frzflg [dagg.cmov90 :y  stop]
+  make "typ item :y :dagg.cctyp
+  make "r item :y :dagg.ccrow
+  make "c item :y :dagg.cccol
+  ; CMOV10: a scorpion (6) and both wizards (10, 11) walk past treasure.
+  ; Everything else picks up one object a turn and does nothing else with
+  ; that turn -- which is the delay you are buying when you drop something.
+  if not (or (:typ = 6) (:typ > 9)) [
+    dagg.ofind.rewind
+    make "i dagg.ofind :r :c
+    if not (:i = 0) [
+      .setitem :y :dagg.ccobj (fput :i (item :y :dagg.ccobj))
+      .setitem :i :dagg.ocown (0 - 1)
+      dagg.floor.del :i
+      dagg.show
+      dagg.cmov90 :y
+      stop
+    ]
+  ]
+  ; CMOV20: standing on the player is an attack and nothing else.
+  if (and (:r = :dagg.row) (:c = :dagg.col)) [
+    dagg.cattack :y
+    stop
+  ]
+  ; CMOV50/CMOV52: in line with the player, and able to see down the line?
+  ; Then face him and take one step forward.
+  make "dir -1
+  if :r = :dagg.row [
+    make "dir 3
+    if (:c - :dagg.col) < 0 [make "dir 1]
+  ]
+  if (and (:dir < 0) (:c = :dagg.col)) [
+    make "dir 0
+    if (:r - :dagg.row) < 0 [make "dir 2]
+  ]
+  if :dir > -1 [
+    if dagg.cansee :r :c :dir [
+      .setitem :y :dagg.ccdir :dir
+      ignore dagg.cwalk :y 0
+      dagg.cmov90 :y
+      stop
+    ]
+  ]
+  ; CMOV70: the preference walk, and ONE random byte does both jobs. Its
+  ; top bit picks left-before-right or right-before-left; its bottom two
+  ; bits give the quarter of the time a turn is tried BEFORE going
+  ; forward, which is the `LEAX 1,X` the ROM calls magic.
+  make "i dagg.rnd
+  make "base 0
+  if :i < 128 [make "base 3]
+  if 0 = (modulo :i 4) [make "base :base + 1]
+  make "ok "false
+  repeat 3 [
+    if not :ok [
+      make "ok dagg.cwalk :y (item (:base + repcount) :dagg.movtab)
+    ]
+  ]
+  ; CMOV78: and if none of the three worked, back out. Whether that works
+  ; is not asked.
+  if not :ok [ignore dagg.cwalk :y 2]
+  dagg.cmov90 :y
+end
+
+; QUESCN on the TENTH queue (COMMON.ASM), which is where every creature's
+; TCB lives. Once every 100 ms, decrement each live creature's countdown
+; and run the ones that reach zero -- and `dagg.cmove` puts a fresh count
+; back, exactly as the ROM re-queues the TCB it just ran.
+;
+; The due time advances by 100 from ITSELF and not from now, so a tenth
+; missed while the game was busy is made up on the ticks after it. That is
+; the IRQ's own behaviour: the queues keep counting while a task runs, and
+; a creature that came due during a long redraw takes its turn immediately
+; after it rather than losing it.
+;
+; CLK42's timer chain rides here too, because this IS the TENTH queue: ten
+; passes make a second and ROLTAB rolls the second at sixty. DGEN90 is the
+; only thing in the ROM that ever reads that counter.
+to dagg.tenth
+  local "i local "n
+  make "dagg.tenth.due :dagg.tenth.due + 100
+  make "dagg.tenth.n modulo (:dagg.tenth.n + 1) 10
+  if 0 = :dagg.tenth.n [make "dagg.second modulo (:dagg.second + 1) 60]
+  repeat :dagg.ccbmax [
+    make "i repcount
+    if not (0 = item :i :dagg.ccuse) [
+      make "n (item :i :dagg.cctim) - 1
+      .setitem :i :dagg.cctim :n
+      if :n < 1 [dagg.cmove :i]
+    ]
+  ]
+end
+
+; CREGEN, COMCRE.ASM: every five minutes, if this level holds fewer than
+; 32 creatures, allow one more of a random type in 2..9. It increments the
+; MATRIX and not the dungeon, so the creature appears the next time you
+; walk into the level -- subtle, cheap, and exactly why coming back up is
+; a bad idea.
+to dagg.cregen
+  local "row local "n local "t
+  make "dagg.cregen.due :dagg.now + 300000
+  make "row item (:dagg.level + 1) :dagg.cmx
+  make "n 0
+  foreach :row [[v] make "n :n + :v]
+  if not (:n < 32) [stop]
+  make "t 2 + bitand dagg.rnd 7
+  .setitem (:t + 1) :row ((item (:t + 1) :row) + 1)
+end
+
+;==========================================================================
+; The player -- COMDAT.ASM's ONCE-only init block and ONCE.ASM:GAME10.
+;
+; PPOW is stored there as `FCB $17,160` and GAME10's `CLR PPOW` clears the
+; high byte before a real game, so the player starts at 160 power. POBJWT
+; is `FDB 30+5`.
+
+make "dagg.ppow 160
+make "dagg.pdam 0
+make "dagg.objwt 35
+make "dagg.heartr 46
+make "dagg.faint "false
+make "dagg.olight 8
+make "dagg.hearts "false
+make "dagg.heartf "true
+make "dagg.over "false
+make "dagg.dead "false
+
+;==========================================================================
+; The heart -- design section 4.1a: turtle 1 wearing one of two costumes,
+; because the compositor draws turtles OVER the picture and the redraw's
+; `clean` therefore never has to repair it. It is the fastest-moving thing
+; in the game (twenty times a second at the faint threshold) and it must
+; cost nothing.
+;
+; The two glyph pairs are SWCHAR.ASM:SPCTAB's small and large hearts,
+; I.SHL/I.SHR and I.LHL/I.LHR, transcribed as one 16-bit row mask a scan
+; line -- the CoCo draws each as two 8-pixel character cells side by side,
+; which is 16 pixels, and our own status cell is 8 wide by 10 tall, so the
+; pair lands on exactly two cells here too. Eight rows because that is
+; putsh's minimum dimension (the ROM's glyph is seven).
+;
+;        small                     large
+;   ................    0   ................       0
+;   ........#.#.....  160   .......##.##....     432
+;   .......#####....  496   ......#######...    1016
+;   .......#####....  496   ......#######...    1016
+;   ........###.....  224   .......#####....     496
+;   .........#......   64   ........###.....     224
+;   ................    0   .........#......      64
+;   ................    0   ................       0
+
+make "dagg.heart.small [0 160 496 496 224 64 0 0]
+make "dagg.heart.large [0 432 1016 1016 496 224 64 0]
+
+; `fe` is "the wearing turtle's own pen colour" and `ff` is transparent, so
+; one pair of costumes serves both polarities of design section 4.3 -- the
+; level flip is a `setpc` on turtle 1, not a second pair of shapes.
+to dagg.shrow :mask
+  local "s
+  make "s item (1 + bitand (lshift :mask -15) 1) [ff fe]
+  repeat 15 [
+    make "s word :s
+      item (1 + bitand (lshift :mask (repcount - 15)) 1) [ff fe]
+  ]
+  output :s
+end
+
+to dagg.putheart :slot :rows
+  local "out
+  make "out []
+  foreach :rows [[m] make "out lput dagg.shrow :m :out]
+  putsh :slot :out
+end
+
+; Centred between the two hand names, on the same character row the status
+; line is written to (row 23, the bottom of the band): turtle x 0 is device
+; column 160, which is columns 19 and 20 of the forty.
+to dagg.setup.heart
+  dagg.putheart 1 :dagg.heart.small
+  dagg.putheart 2 :dagg.heart.large
+  make "dagg.hearts "false
+  make "dagg.heartf "true
+  ask 1 [
+    setrot "fixed
+    pu (setpos 0 -75)
+    setpc :dagg.status.fg
+    setsh 1
+    st
+  ]
+end
+
+; CLK30, COMMON.ASM: count HEARTC down a jiffy at a time and, at zero,
+; reload it from HEARTR and toggle the glyph. Scheduling the next beat is
+; the same thing without the countdown, and it is what section 5 asks for.
+;
+; `COM HEARTS` toggles rather than cycling small-large-small, so the drawn
+; period is two beats. HEARTF is cleared while a scroll puts the map up
+; (PUSE.ASM:USC210) -- the beat carries on, the picture of it stops.
+;
+; THE BEAT ITSELF IS ONE EDGE -- see dagg.setup.sound. It sounds whether
+; or not the glyph is drawn, because HEARTF stops the PICTURE of the beat
+; and not the beat, and it is on voices 0 and 4, which nothing else in
+; this file ever touches: `sound` on a busy voice flushes it, and the
+; beat must not be cuttable (design section 9.1).
+to dagg.beat
+  make "dagg.heart.due :dagg.now + (:dagg.heartr * 16.667)
+  make "dagg.hearts not :dagg.hearts
+  (sound [0 4] 55 30 10)
+  if :dagg.heartf [
+    ifelse :dagg.hearts [ask 1 [setsh 2]] [ask 1 [setsh 1]]
+    refresh
+  ]
+end
+
+;==========================================================================
+; HUPDAT -- HUPDAT.ASM:HUPDAX, the heart rate, fainting, waking and death.
+;
+; The comment in the ROM reads J = (P * 64) / (P + 2D) - 19, and the code
+; does NOT compute that. HUPD20 divides by repeated subtraction and bumps
+; the count BEFORE testing for the borrow, so the subtraction that goes
+; negative is counted too: J = floor(64P / (P + 2D)) + 1 - 19. At the start
+; (P 160, D 0) that is 46 jiffies -- 766 ms, 78 beats a minute -- where
+; design section 9.4's paraphrase of the ROM's own comment says 45, 750 ms
+; and 80. The ROM is the authority (design section 1), so this is 46.
+to dagg.hupdat
+  make "dagg.heartr ((int ((64 * :dagg.ppow)
+                           / (:dagg.ppow + (2 * :dagg.pdam)))) + 1) - 19
+  ifelse :dagg.faint [
+    if :dagg.heartr > 4 [dagg.faint.up]
+  ] [
+    if not (:dagg.heartr > 3) [dagg.faint.down]
+  ]
+  if :dagg.pdam > :dagg.ppow [dagg.death]
+end
+
+; HUPD30: the light is walked down one step at a time with a full redraw at
+; each until the screen is black, then the keyboard buffer is thrown away.
+; The beat keeps time through it -- that is what the CoCo's IRQ did for
+; free while the game task blocked, and it is why `dagg.heart.tick` is
+; separate from `dagg.tick` (design section 9.4).
+to dagg.faint.down
+  ct
+  make "dagg.olight :dagg.light
+  until [not (:dagg.light > -8)] [
+    make "dagg.mlight :dagg.mlight - 1
+    dagg.redraw :dagg.norscl
+    refresh
+    dagg.heart.tick
+    make "dagg.light :dagg.light - 1
+  ]
+  clean
+  refresh
+  make "dagg.faint "true
+  until [not key?] [ignore rc]
+end
+
+; HUPD42, and it walks back one step FURTHER than it walked down: the ROM
+; increments and then tests `CMPA OLIGHT / BLE`, so it leaves at OLIGHT + 1.
+; That is the ROM's arithmetic, not a transcription slip.
+to dagg.faint.up
+  until [:dagg.light > :dagg.olight] [
+    dagg.redraw :dagg.norscl
+    refresh
+    dagg.heart.tick
+    make "dagg.mlight :dagg.mlight + 1
+    make "dagg.light :dagg.light + 1
+  ]
+  make "dagg.faint "false
+  dagg.prompt
+end
+
+; DEATH: the wizard fades in, the status line goes, and the ROM sits in
+; `BRA *` until a keystroke restarts the game. WIZ1's vector list is M4's
+; creature data, so what M2 owns is the bar going, the message arriving,
+; and the loop ending.
+;
+; DEATH's last three instructions are `CLR FAINT / DEC AUTFLG / BRA *`, and
+; the ROM's own comment on the first two is "force GAME restart on char":
+; FAINT goes because CLK50 will not look at the keyboard while it is set,
+; AUTFLG comes on because the abort that ends the attract mode is the same
+; abort that starts the next game, and then the machine spins with no task
+; running. That is one flag here, `dagg.dead`, because dagg.play owns the
+; abort and does the holding. PINCAN.ASM:WINNER is the control: its `BRA *`
+; has neither instruction in front of it, which is why a win freezes where
+; a death goes round (B103).
+to dagg.death
+  local "a
+  make "a [YET ANOTHER DOES NOT RETURN...]
+  make "dagg.over "true
+  make "dagg.dead "true
+  make "dagg.faint "false
+  make "dagg.heartf "false
+  ask 1 [ht]
+  pr []
+  type char 32
+  pr :a
+end
+
+;==========================================================================
+; The scheduler -- design section 5. The ROM's CLOCK IRQ drives five queues
+; and a ready list; ours is one pass over the timers that exist, each a
+; global holding the `ticks` value it is next due at. `ticks` is
+; milliseconds and monotonic; a jiffy is 16.667 ms.
+;
+; All five of the ROM's system tasks exist now (COMDAT.ASM:TCBDAT):
+; PLAYER is `dagg.play`'s own poll, HSLOW recovers damage, BURNER burns the
+; torch once a minute, LUKNEW redraws twice a second when something has
+; asked for it, and CREGEN restocks the level every five. The creatures
+; themselves are a sixth pass, over the CCB table rather than over one
+; timer -- the ROM gives each of them a TCB of its own.
+;
+; `dagg.heart.tick` is deliberately separate: it is the IRQ's half of the
+; work, the half a long blocking effect has to keep calling.
+
+make "dagg.now 0
+make "dagg.heart.due 0
+make "dagg.hslow.due 0
+make "dagg.burner.due 0
+make "dagg.luknew.due 0
+make "dagg.tenth.due 0
+make "dagg.cregen.due 0
+make "dagg.newluk "false
+make "dagg.frzflg "false
+
+to dagg.heart.tick
+  make "dagg.now ticks
+  if not (:dagg.now < :dagg.heart.due) [dagg.beat]
+end
+
+to dagg.tick
+  dagg.heart.tick
+  if not (:dagg.now < :dagg.tenth.due) [dagg.tenth]
+  if not (:dagg.now < :dagg.hslow.due) [dagg.hslow]
+  if not (:dagg.now < :dagg.luknew.due) [dagg.luknew]
+  if not (:dagg.now < :dagg.burner.due) [dagg.burner]
+  if not (:dagg.now < :dagg.cregen.due) [dagg.cregen]
+end
+
+; BURNER, COMPLR.ASM: once a minute, one off the torch's timer -- and the
+; torch is called DEAD at five minutes to go, not at zero (`CMPA #5 /
+; BGT`), so a fifteen-minute Pine torch is dead after ten and a
+; sixty-minute Solar one after fifty-five.
+;
+; It goes on burning after that, though. The only thing that stops BURNER
+; is a timer of ZERO, and each light value is clamped DOWN to the timer as
+; it falls -- so a torch dims before it dies (a Solar torch's regular light
+; is 13 and starts falling with thirteen minutes left) and then dwindles
+; from 5 to nothing over the five minutes it spends called dead.
+;
+; It asks for a redraw whether or not there was a torch to burn -- BURN99's
+; `DEC NEWLUK` is on every path out.
+to dagg.burner
+  local "i local "t
+  make "dagg.burner.due :dagg.now + 60000
+  make "dagg.newluk "true
+  make "i :dagg.ptorch
+  if :i = 0 [stop]
+  make "t item :i :dagg.ocx0
+  if :t = 0 [stop]
+  make "t :t - 1
+  .setitem :i :dagg.ocx0 :t
+  if not (:t > 5) [
+    .setitem :i :dagg.octyp :dagg.t.dead
+    .setitem :i :dagg.ocrev 0
+  ]
+  if :t < item :i :dagg.ocx1 [.setitem :i :dagg.ocx1 :t]
+  if :t < item :i :dagg.ocx2 [.setitem :i :dagg.ocx2 :t]
+end
+
+; LUKNEW, COMPLR.ASM: twice a second, redraw if anything asked for one --
+; and unconditionally while the MAP is up, because the map is the one
+; screen that shows things that move without you.
+to dagg.luknew
+  make "dagg.luknew.due :dagg.now + 500
+  if (or :dagg.newluk (:dagg.dspmod = 1)) [
+    make "dagg.newluk "false
+    dagg.pupdat :dagg.norscl
+  ]
+end
+
+; HSLOW, COMPLR.ASM: recover a 64th of the damage and reschedule HEARTR
+; jiffies out, so recovery runs at the heart's own rate and is slowest
+; exactly when you are most hurt. ASRD6 shifts a NEGATED damage right six
+; places, which floors a negative number, so the ROM recovers
+; ceil(damage / 64) -- one point of damage still heals. The reschedule
+; reads HEARTR after HUPDAT, not before.
+to dagg.hslow
+  make "dagg.pdam :dagg.pdam - (int ((:dagg.pdam + 63) / 64))
+  if :dagg.pdam < 0 [make "dagg.pdam 0]
+  dagg.hupdat
+  make "dagg.hslow.due ticks + (:dagg.heartr * 16.667)
+end
+
+;==========================================================================
+; ZSAVE/ZLOAD -- PZTAPE.ASM and COMMON.ASM:SAVE/LOAD. M5's.
+;
+; The ROM saves RAM wholesale (DP.BEG to MM.END) to cassette and reads it
+; back the same way; a Logo game saves its own state instead. dagg.snapshot
+; builds the save as a list of run-able lines -- every line numbers and
+; bare words only, so `print` and `readlist` carry them unchanged --
+; dagg.restore runs such lines back into the live game, and dagg.zsave /
+; dagg.zload are the thin file wrappers around the two. The host tests
+; cover snapshot and restore; the wrappers need a card and are a board's.
+;
+; What is stored: the level and position, the player (power, damage,
+; weight, both lights, both hands, the torch, frozen), the bag and the
+; floor, all twelve OCB lists, the seven flat CCB lists plus each
+; creature's loot, and the creature matrix. What is NOT stored is derived
+; or transient and is rebuilt by dagg.snap.done: the occupancy grid (from
+; the CCB positions, the way dagg.newlvl builds it), the scheduler's due
+; times (re-anchored to now, the way daggorath enters them), the display
+; mode (back to the viewer), the fade and map flags, the sound site and
+; the line buffer. Nothing stored interns on restore except game values
+; a long session meets anyway; B91's leak was thirty new numbers a second
+; for ever, and a save is a few dozen numbers once.
+;
+; The file goes on /sd, because B65 breaks writes past 256 bytes on the
+; internal filesystem and a save is thousands. With no card the open
+; fails loudly and says so, which is the whole of the gate's "says so".
+
+; The twelve OCB fields, in chunk/tail numbering -- the READ half.
+; The WRITE half reuses these: `.setitem :pos (dagg.snap.ocb :f) :val`
+; mutates the live list in place, so restoring a save appends nothing
+; and a save costs its lines and nothing else (a warm redraw's own rule:
+; the pool has no automatic collection, only `recycle`, so garbage is
+; permanent until someone sweeps).
+to dagg.snap.ocb :f
+  if :f = 1 [output :dagg.ocrow]
+  if :f = 2 [output :dagg.occol]
+  if :f = 3 [output :dagg.oclvl]
+  if :f = 4 [output :dagg.ocown]
+  if :f = 5 [output :dagg.ocx0]
+  if :f = 6 [output :dagg.ocx1]
+  if :f = 7 [output :dagg.ocx2]
+  if :f = 8 [output :dagg.octyp]
+  if :f = 9 [output :dagg.occls]
+  if :f = 10 [output :dagg.ocrev]
+  if :f = 11 [output :dagg.ocmgo]
+  output :dagg.ocpho
+end
+
+; The seven flat CCB fields, in cchunk/ctail numbering. Same shape.
+to dagg.snap.ccb :f
+  if :f = 1 [output :dagg.ccuse]
+  if :f = 2 [output :dagg.cctyp]
+  if :f = 3 [output :dagg.ccrow]
+  if :f = 4 [output :dagg.cccol]
+  if :f = 5 [output :dagg.ccdir]
+  if :f = 6 [output :dagg.ccdam]
+  output :dagg.cctim
+end
+
+; The save, as a list of lines. Every line is flat numbers and bare
+; words, so `print` and `readlist` carry them unchanged, and every long
+; field goes out in full eight-number chunks with its base -- plus a
+; one-number tail line where 65 is not a multiple of 8 -- so no line is
+; ever near any length limit and no arity is ever exceeded.
+;
+; `fput`, not `lput`: the save is some two hundred lines and `lput`
+; copies the whole list to append one cell, so building it that way is
+; an O(n^2) twenty thousand cells of garbage against a pool with four
+; thousand free in it -- M3's own trap in dagg.zeros, found again here
+; the first time a snapshot ran. `reverse` at the end is the prepend-loop
+; copy P2 built it as, the cheapest possible. The chunk lines read
+; their eight values with nested `item` calls for two related reasons:
+; an eight-list temporary built with `lput` is 36 cells of garbage a
+; chunk (seven thousand a save), and eight nested calls to a *user*
+; procedure in one expression do not evaluate at all -- the interpreter
+; loses the name halfway through (B90's family; `item` is a primitive
+; and nests fine).
+
+; One chunk line -- field :f, eight values at :base + 1 through :base + 8.
+; A procedure of its own because the eight nested `item` calls do not
+; evaluate inside a doubly-nested loop: the interpreter loses a variable
+; halfway through the line (B90's family -- eight nested *primitive*
+; calls are fine on their own and fine singly-nested, but not under two
+; loops in one body). One call a chunk costs nothing; a save is not a
+; frame.
+to dagg.snap.line.ocb :f :base :vals
+  output (sentence [dagg.snap.chunk] :f :base (item (:base + 1) :vals) (item (:base + 2) :vals) (item (:base + 3) :vals) (item (:base + 4) :vals) (item (:base + 5) :vals) (item (:base + 6) :vals) (item (:base + 7) :vals) (item (:base + 8) :vals))
+end
+
+to dagg.snap.line.ccb :f :base :vals
+  output (sentence [dagg.snap.cchunk] :f :base (item (:base + 1) :vals) (item (:base + 2) :vals) (item (:base + 3) :vals) (item (:base + 4) :vals) (item (:base + 5) :vals) (item (:base + 6) :vals) (item (:base + 7) :vals) (item (:base + 8) :vals))
+end
+
+to dagg.snapshot
+  local "out local "f local "n local "vals local "base
+  make "out []
+  make "out fput (sentence [dagg.snap.begin] :dagg.level) :out
+  make "out fput (sentence [dagg.snap.scalars] :dagg.row :dagg.col :dagg.dir :dagg.ppow :dagg.pdam :dagg.objwt :dagg.prlite :dagg.prmlite :dagg.plhand :dagg.prhand :dagg.ptorch :dagg.frzflg) :out
+  foreach :dagg.bag [[k] make "out fput (sentence [dagg.snap.bag] :k) :out]
+  foreach :dagg.floor [[k] make "out fput (sentence [dagg.snap.floor] :k) :out]
+  repeat 12 [
+    make "f repcount
+    make "vals dagg.snap.ocb :f
+    make "out fput (dagg.snap.line.ocb :f 0 :vals) :out
+    repeat 7 [
+      make "base repcount * 8
+      make "out fput (dagg.snap.line.ocb :f :base :vals) :out
+    ]
+    make "out fput (sentence [dagg.snap.tail] :f 65 (item 65 :vals)) :out
+  ]
+  repeat 7 [
+    make "f repcount
+    make "vals dagg.snap.ccb :f
+    make "out fput (dagg.snap.line.ccb :f 0 :vals) :out
+    repeat 3 [
+      make "base repcount * 8
+      make "out fput (dagg.snap.line.ccb :f :base :vals) :out
+    ]
+  ]
+  repeat :dagg.ccbmax [
+    make "n repcount
+    foreach (item :n :dagg.ccobj) [[k]
+      make "out fput (sentence [dagg.snap.ccobj] :n :k) :out
+    ]
+  ]
+  foreach :dagg.cmx [[row] make "out fput (sentence [dagg.snap.cmxrow] :row) :out]
+  make "out fput [dagg.snap.done] :out
+  output reverse :out
+end
+
+
+
+; The restore half: one procedure per line shape. dagg.snap.begin takes
+; the saved level and clears every accumulator; dagg.snap.done rebuilds
+; everything the save does not store and puts the view back up.
+to dagg.snap.begin :level
+  local "i
+  make "dagg.level :level
+  ; The grid is cleared through the creatures standing on it -- the live
+  ; CCB positions below are still the OLD ones here, because the chunks
+  ; have not run yet. dagg.ccb.clear's own pattern, and for its reason:
+  ; rebuilding the grid is 1,024 fresh cells. The OCB/CCB fields are not
+  ; touched at all: they are fixed-size (65/32, sized once at load) and
+  ; the chunks write them back in place.
+  repeat :dagg.ccbmax [
+    make "i repcount
+    if not (0 = item :i :dagg.ccuse) [
+      dagg.ccput (item :i :dagg.ccrow) (item :i :dagg.cccol) 0
+    ]
+    .setitem :i :dagg.ccobj []
+  ]
+  make "dagg.bag []
+  make "dagg.floor []
+  make "dagg.cmx []
+end
+
+to dagg.snap.scalars :row :col :dir :ppow :pdam :objwt :prlite :prmlite :plhand :prhand :ptorch :frz
+  make "dagg.row :row
+  make "dagg.col :col
+  make "dagg.dir :dir
+  make "dagg.ppow :ppow
+  make "dagg.pdam :pdam
+  make "dagg.objwt :objwt
+  make "dagg.prlite :prlite
+  make "dagg.prmlite :prmlite
+  make "dagg.plhand :plhand
+  make "dagg.prhand :prhand
+  make "dagg.ptorch :ptorch
+  ifelse :frz = "true [make "dagg.frzflg "true] [make "dagg.frzflg "false]
+end
+
+; `fput`, not `lput`: the bag arrives in order and `lput` copies the
+; spine per item (triangular garbage); `dagg.snap.done` reverses both
+; lists back once, which is one copy each no matter how long they are.
+to dagg.snap.bag :k
+  make "dagg.bag fput :k :dagg.bag
+end
+
+to dagg.snap.floor :k
+  make "dagg.floor fput :k :dagg.floor
+end
+
+; Eight values into OCB field :f at :base + 1 through :base + 8 --
+; `.setitem` mutates the sized list in place, so a chunk costs nothing
+; beyond its line. The field comes back through the READ accessor, which
+; is the same nodes the global holds.
+to dagg.snap.chunk :f :base :a :b :c :d :e :g :h :i
+  .setitem (:base + 1) (dagg.snap.ocb :f) :a
+  .setitem (:base + 2) (dagg.snap.ocb :f) :b
+  .setitem (:base + 3) (dagg.snap.ocb :f) :c
+  .setitem (:base + 4) (dagg.snap.ocb :f) :d
+  .setitem (:base + 5) (dagg.snap.ocb :f) :e
+  .setitem (:base + 6) (dagg.snap.ocb :f) :g
+  .setitem (:base + 7) (dagg.snap.ocb :f) :h
+  .setitem (:base + 8) (dagg.snap.ocb :f) :i
+end
+
+; The one-number tail where 65 is not a multiple of 8.
+to dagg.snap.tail :f :pos :val
+  .setitem :pos (dagg.snap.ocb :f) :val
+end
+
+to dagg.snap.cchunk :f :base :a :b :c :d :e :g :h :i
+  .setitem (:base + 1) (dagg.snap.ccb :f) :a
+  .setitem (:base + 2) (dagg.snap.ccb :f) :b
+  .setitem (:base + 3) (dagg.snap.ccb :f) :c
+  .setitem (:base + 4) (dagg.snap.ccb :f) :d
+  .setitem (:base + 5) (dagg.snap.ccb :f) :e
+  .setitem (:base + 6) (dagg.snap.ccb :f) :g
+  .setitem (:base + 7) (dagg.snap.ccb :f) :h
+  .setitem (:base + 8) (dagg.snap.ccb :f) :i
+end
+
+to dagg.snap.ccobj :y :k
+  .setitem :y :dagg.ccobj (fput :k (item :y :dagg.ccobj))
+end
+
+to dagg.snap.cmxrow :a :b :c :d :e :g :h :i :j :k :l :m
+  make "dagg.cmx lput (list :a :b :c :d :e :g :h :i :j :k :l :m) :dagg.cmx
+end
+
+
+; The commit: the grid from the CCB positions, the due times re-anchored
+; to now, the transient state back to its entry values, and the view.
+; dagg.look recomputes the heart, redraws and re-prompts through
+; dagg.enter -- this is COMMON.ASM:LOAD90's INIVU and PROMPT.
+to dagg.snap.done
+  local "i
+  make "dagg.bag reverse :dagg.bag
+  make "dagg.floor reverse :dagg.floor
+  repeat :dagg.ccbmax [
+    make "i repcount
+    if not (0 = item :i :dagg.ccuse) [
+      dagg.ccput (item :i :dagg.ccrow) (item :i :dagg.cccol) :i
+    ]
+  ]
+  make "dagg.dspmod 0
+  make "dagg.magflg "false
+  make "dagg.mapflg "false
+  make "dagg.faint "false
+  make "dagg.over "false
+  make "dagg.sndn -1
+  make "dagg.sndvol 0
+  make "dagg.linbuf []
+  make "dagg.tokens []
+  make "dagg.linptr 1
+  dagg.enter.level :dagg.level
+  dagg.hupdat
+  make "dagg.now ticks
+  make "dagg.heart.due ticks
+  make "dagg.hslow.due ticks + (:dagg.heartr * 16.667)
+  make "dagg.luknew.due ticks + 500
+  make "dagg.burner.due ticks + 60000
+  make "dagg.tenth.due ticks + 100
+  make "dagg.cregen.due ticks + 300000
+  dagg.look
+end
+
+; Run a whole save back, line by line -- the in-memory half of ZLOAD,
+; and what the host tests cover.
+to dagg.restore :snap
+  foreach :snap [[line] run :line]
+end
+
+; PZTAPE.ASM:FILNAM: the save name is the next token, its characters
+; joined into a word. An empty name is CMDERR, the way a null token is
+; everywhere else in the parser.
+to dagg.snap.name
+  local "tok local "name
+  make "tok dagg.gettok
+  if empty? :tok [output []]
+  make "name "
+  foreach :tok [[c] make "name word :name :c]
+  output word "/sd/ :name
+end
+
+; ZSAVE: snapshot to /sd/<name>. erasefile first, because open-then-write
+; does not truncate and a shorter save over a longer one would leave the
+; old tail behind. A missing card fails loudly at the open, which is the
+; gate's "says so".
+to dagg.zsave
+  local "name local "snap
+  make "name dagg.snap.name
+  if empty? :name [dagg.cmderr  stop]
+  catch "error [erasefile :name]
+  make "snap dagg.snapshot
+  open :name
+  setwrite :name
+  foreach :snap [[line] print :line]
+  setwrite []
+  close :name
+  ; The save above is abandoned and its two thousand cells are garbage;
+  ; the pool has no automatic collection, so a save that never sweeps
+  ; is a save that cannot be repeated. This is not a frame -- one sweep
+  ; on a file command is nothing.
+  recycle
+end
+
+; ZLOAD: read every line first and close the file, then run them -- so a
+; tape error (ROM: LBNE $A027, restart the world) lands before a single
+; line of state has moved rather than in the middle of it.
+to dagg.zload
+  local "name local "lines local "line
+  make "name dagg.snap.name
+  if empty? :name [dagg.cmderr  stop]
+  open :name
+  setread :name
+  make "lines []
+  make "line readlist
+  until [empty? :line] [
+    make "lines fput :line :lines
+    make "line readlist
+  ]
+  setread []
+  close :name
+  dagg.restore reverse :lines
+  recycle
+end
+
+;==========================================================================
+; The parser -- PARSER.ASM and TOKEN.ASM.
+;
+; A token matches a table entry when it is a PREFIX of that entry's word
+; (PARS12 stops comparing when the token runs out), and two matches are an
+; error rather than a preference (PARS20's `TST PARFLG / BNE PARS90`). So
+; M is MOVE and Z is neither ZLOAD nor ZSAVE. The four-letter names in
+; DTABAS.ASM's CMDXXX macro -- ATTK, INCN, REVE -- are assembler symbols
+; and are NOT what the parser matches: CMDTAB holds the full words, and
+; ATTK is not a prefix of ATTACK.
+;
+; FULFLG is set when the token is the whole word, which is what INCANT
+; needs (M3) and nothing else looks at.
+
+make "dagg.fulflg "false
+
+to dagg.prefix? :tok :cmd
+  if (count :tok) > (count :cmd) [output "false]
+  repeat count :tok [
+    if not ((item repcount :tok) = (item repcount :cmd)) [output "false]
+  ]
+  output "true
+end
+
+; PARSER's own three answers: 0 for a null token (PARS92 stores D = 0),
+; -1 for no match or two matches (PARS90 stores NEGONE), otherwise the
+; entry's 1-based row. Callers test `BLE` where a null token is illegal and
+; `BLT` where it is not, which is exactly `:n < 1` against `:n < 0`.
+to dagg.parse :tok :table
+  local "hit local "cmd
+  make "dagg.fulflg "false
+  if empty? :tok [output 0]
+  make "hit 0
+  repeat count :table [
+    make "cmd first item repcount :table
+    if dagg.prefix? :tok :cmd [
+      if :hit > 0 [make "dagg.fulflg "false  output -1]
+      make "hit repcount
+      if (count :tok) = (count :cmd) [make "dagg.fulflg "true]
+    ]
+  ]
+  if :hit = 0 [output -1]
+  output :hit
+end
+
+; CMDTAB and DISPAT, TOKEN.ASM/DTABAS.ASM, in the ROM's own order and
+; paired with the instruction that runs each -- design section 14's third
+; rule, one `run` over a table row rather than fifteen procedures.
+; It arrives in seven statements because `load` runs a file a LINE at a
+; time, so a list literal that spans lines is not a thing this dialect can
+; be given; seven `se`s that run once at load read better than one
+; 320-character line.
+make "dagg.cmdtab [[ATTACK [dagg.pattk]] [CLIMB [dagg.climb]] [DROP [dagg.drop]]]
+make "dagg.cmdtab se :dagg.cmdtab [[EXAMINE [dagg.examine]] [GET [dagg.get]]]
+make "dagg.cmdtab se :dagg.cmdtab [[INCANT [dagg.incant]] [LOOK [dagg.look]]]
+make "dagg.cmdtab se :dagg.cmdtab [[MOVE [dagg.move]] [PULL [dagg.pull]]]
+make "dagg.cmdtab se :dagg.cmdtab [[REVEAL [dagg.reveal]] [STOW [dagg.stow]]]
+make "dagg.cmdtab se :dagg.cmdtab [[TURN [dagg.turn]] [USE [dagg.use]]]
+make "dagg.cmdtab se :dagg.cmdtab [[ZLOAD [dagg.zload]] [ZSAVE [dagg.zsave]]]
+
+; DIRTAB. The string T.BAK labels is BACK, not BACKWARD -- the CoCo manual
+; prints MOVE BACKWARD and the table does not hold it, so that spelling
+; fails the prefix test and MOVE BACK, MOVE BA and MOVE B all pass it.
+make "dagg.dirtab [[LEFT] [RIGHT] [BACK] [AROUND] [UP] [DOWN]]
+
+;==========================================================================
+; The line buffer and the tokens.
+;
+; LINBUF is 32 characters and HMAN20 falls into the carriage-return path
+; when it fills, so a 32-character line submits itself. It is held here as
+; a list of one-character words rather than as one growing word: a word
+; interns, and a keystroke at a time would put every prefix of every line
+; ever typed into the word table.
+
+make "dagg.sp char 32
+make "dagg.linbuf []
+make "dagg.tokens []
+make "dagg.linptr 1
+
+; GETTOK, PARSER.ASM: leading spaces are eaten and runs of them separate,
+; which is what splitting on non-empty runs does.
+to dagg.split :chars
+  local "out local "tok
+  make "out []
+  make "tok []
+  foreach :chars [[c]
+    ifelse :c = :dagg.sp [
+      if not empty? :tok [make "out lput :tok :out  make "tok []]
+    ] [
+      make "tok lput :c :tok
+    ]
+  ]
+  if not empty? :tok [make "out lput :tok :out]
+  output :out
+end
+
+to dagg.gettok
+  if :dagg.linptr > count :dagg.tokens [output []]
+  make "dagg.linptr :dagg.linptr + 1
+  output item (:dagg.linptr - 1) :dagg.tokens
+end
+
+;==========================================================================
+; The text window -- design section 4.1c. The one thing that changes
+; BETWEEN pictures rather than with them is the command line, so lines 24
+; to 31 carry the messages and the prompt and nothing else. The status line
+; is in the picture (see dagg.status) and does not live here.
+
+; PROMPT, MISC.ASM. M$PROM1 is `FCB I.CR,I.DOT` and falls straight into
+; M$CURS -- one $FF-terminated string, so the prompt is FOUR characters:
+; newline, period, underline, backspace.
+;
+; The game has to draw that cursor itself, and an earlier version of this
+; comment said it did not: "our text window has a real cursor." It has one,
+; and this game never reaches it. `screen_txt_enable_cursor` is turned on
+; only inside devices/picocalc/input.c's line reader, and `dagg.play` polls
+; with `key?`/`rc` and never enters it (design section 4.1c -- this is a
+; typing game that must not block). So there was no cursor at all. B87.
+;
+; THE ROM'S BYTES DO NOT TRANSCRIBE, because the two backspaces are not the
+; same backspace. I.BS on a CoCo moves the cursor and nothing else, so
+; M$CURS can draw an underline and step back over it and leave it standing.
+; Ours (screen.c:screen_txt_putc) is DESTRUCTIVE -- it steps back and clears
+; the cell it lands on -- so a `char 8` after the underline would rub it
+; out. What carries over is the effect and not the sequence: draw the
+; underline and leave the cursor PAST it, then let whatever comes next back
+; over it, which erases it for free.
+;
+;   prompt      newline, '.', underline
+;   a character backspace (rubs out the underline), the character, underline
+;   a backspace backspace, backspace, underline
+;   carriage    backspace                                   (HMAN30's CLRA)
+;
+; which is M$PROM1, M$CURS, M$ERAS and HMAN30 in that order, each doing what
+; it does on a CoCo.
+
+; I.BAR ($1C) is the CoCo's underline; ours is ASCII 95.
+to dagg.cursor
+  type char 95
+end
+
+to dagg.prompt
+  pr []
+  type char 46
+  dagg.cursor
+end
+
+; CMDERR, PARSER.ASM: two I.QUES, printed where the echoed line stopped,
+; and the rest of the line thrown away (HMAN70 resets LINPTR).
+to dagg.cmderr
+  type word char 63 char 63
+end
+
+; Every command has its handler now -- CLIMB, ZLOAD and ZSAVE were the
+; last three and landed at M5 (ATTACK's went at M4). The table is complete
+; because the PARSER's ambiguity rule depends on it -- Z has to be
+; ambiguous and M has to not be.
+
+;==========================================================================
+; HUMAN -- HUMAN.ASM:PLAY10/HUMAN. Echo the character, buffer it, handle
+; backspace, and on carriage return parse and dispatch.
+
+; PLAY10's ASCII-to-internal conversion: carriage return and backspace get
+; their own codes, A-Z survive as themselves, and everything else becomes a
+; space (the `CLRB` fallthrough). ESC is this port's one addition, because
+; the ROM's death loop is `BRA *` and a Logo game has to let go.
+to dagg.key :c
+  local "a
+  make "a ascii :c
+  if :a = 27 [output "esc]
+  if :a = 13 [output "cr]
+  if :a = 10 [output "cr]
+  if :a = 8 [output "bs]
+  if :a = 127 [output "bs]
+  make "c uppercase :c
+  make "a ascii :c
+  if and (:a > 64) (:a < 91) [output :c]
+  output char 32
+end
+
+to dagg.human :c
+  if :c = "esc [make "dagg.over "true  stop]
+  if :dagg.faint [stop]
+  ; HMAN10: the map comes down on the FIRST keystroke after it went up,
+  ; before that keystroke is buffered -- which is what design section 13's
+  ; "the map stays up until your next command" actually is. HEARTF is the
+  ; flag, because the map is what turned it off.
+  if (and (not :dagg.over) (not :dagg.heartf)) [dagg.look  dagg.prompt]
+  ; M$ERAS: the cursor goes, then the character, then the cursor comes back
+  ; where the character was.
+  if :c = "bs [
+    if empty? :dagg.linbuf [stop]
+    make "dagg.linbuf bl :dagg.linbuf
+    type char 8
+    type char 8
+    dagg.cursor
+    stop
+  ]
+  if :c = "cr [dagg.enter  stop]
+  ; HMAN20 echoes and then prints M$CURS. The leading backspace is what
+  ; rubs the old cursor out, which on a CoCo the underline did not need.
+  type char 8
+  type :c
+  dagg.cursor
+  make "dagg.linbuf lput :c :dagg.linbuf
+  if (count :dagg.linbuf) = 32 [dagg.enter]
+end
+
+; HMAN30/HMAN50/HMAN70: terminate the buffer, reset the pointer, dispatch
+; on the first token, then prompt -- unless we are unconscious, in which
+; case there is no prompt to give.
+; The two characters this opens with are HMAN30's `CLRA / SWI OUTCHR`, and
+; the character it clears A to is not a control code: `I.SP EQU $00`
+; (CD.ASM) is the SPACE. So the ROM writes a space OVER the cursor and
+; advances, and everything a command prints is separated from the line you
+; typed by exactly one column -- `.ATTACK LEFT !!!`, not `.ATTACK
+; LEFT!!!`. Ours has the cursor past the underline rather than on it (see
+; dagg.prompt), so the same effect is a destructive backspace onto the
+; underline and then the space.
+;
+; The `recycle` after the dispatch is B97's. The pool has no automatic
+; collection, so every cell a command spent is still spent when the next
+; one starts, and a Pico 2 W has ~3,900 free to play in -- fifty commands
+; of the hundred a TURN costs. This is the one moment in the game that is
+; BETWEEN turns rather than in one: the command has finished, the screen
+; already shows its result, and the player has not typed the next
+; character yet. A sweep is ~4 ms (roadmap P13 M3) against a heart that
+; beats every few hundred.
+;
+; HMAN70 is the last test: no prompt while the map is up either -- there
+; is nowhere to put one, and the next keystroke takes the map down anyway.
+to dagg.enter
+  type char 8
+  type char 32
+  make "dagg.tokens dagg.split :dagg.linbuf
+  make "dagg.linbuf []
+  make "dagg.linptr 1
+  dagg.dispatch
+  recycle
+  if :dagg.over [stop]
+  if :dagg.faint [stop]
+  if not :dagg.heartf [stop]
+  dagg.prompt
+end
+
+to dagg.dispatch
+  local "n
+  make "n dagg.parse dagg.gettok :dagg.cmdtab
+  if :n = 0 [stop]
+  if :n < 0 [dagg.cmderr  stop]
+  run item 2 (item :n :dagg.cmdtab)
+end
+
+;==========================================================================
+; The game loop -- design section 5. Input is polled and never blocked on:
+; `readchar` would stop the world and `pollkeys` discards the characters,
+; and this is a typing game.
+;
+; The tail is DEATH's `BRA *`: after a death the screen HOLDS rather than
+; flashing past, and the key that ends it is `LDX #GAME` -- another game.
+; That is what `dagg.again` carries, and it is the one thing left asking
+; for a second pass now that the attract mode is gone. ESC is this port's
+; own door, for the reason dagg.key already owns it: the ROM's restart has
+; nowhere to go but another game, and a Logo program has to give the
+; console back.
+
+; DEATH's `DEC AUTFLG`, which the ROM's own comment calls "force GAME
+; restart on char": the pass that just ended asking for another one.
+make "dagg.again "false
+
+to dagg.play
+  local "c
+  until [:dagg.over] [
+    dagg.tick
+    if key? [dagg.human dagg.key rc]
+  ]
+  if :dagg.dead [
+    refresh
+    until [key?] []
+    make "c dagg.key rc
+    while [key?] [ignore rc]
+    if not (:c = "esc) [make "dagg.again "true]
+  ]
+end
+
+;==========================================================================
+; `hw.setcpu "fast` + restore -- logo/games/battlezone's own pattern,
+; reused verbatim (the mechanics are already solved in this tree; design
+; section 12.1 names this file's `restore.clock` as the model).
+
+to clock
+  make "cpu.was "unknown
+  catch "error [make "cpu.was hw.cpu]
+  make "cpu.at :cpu.was
+  catch "error [hw.setcpu "fast]
+  catch "error [make "cpu.at hw.cpu]
+  output "fast = :cpu.at
+end
+
+to restore.clock
+  if "unknown = :cpu.was [stop]
+  if :cpu.was = :cpu.at [stop]
+  catch "error [hw.setcpu :cpu.was]
+end
+
+;==========================================================================
+; Entry points. No `erall` here -- that is the operator's job before
+; `load`, same convention as tests/logo/p17m0's own header.
+;
+; `daggorath` is ONCE.ASM:GAME -- COMINI through SCHED, and then the loop
+; the ROM builds out of DEATH's restart. The cartridge's other entry was
+; DEMO, four instructions above it; the attract mode behind it is gone
+; (design section 16), so GAME is the only way in.
+
+to daggorath
+  dagg.cartridge
+end
+
+; The loop itself. Of the three things in the ROM that ask for another
+; pass -- CLK50's `LDX #GAME / STX 10,S`, PLAY20's `JMP DEMO` and DEATH's
+; "force GAME restart on char" -- the first two were the attract mode's
+; and the third is a player's, so a death is what keeps the loop.
+to dagg.cartridge
+  ; `clock` saves the speed it FOUND, so it runs once around the whole
+  ; loop and not once a pass -- a second call would find the fast clock it
+  ; set itself and `restore.clock` would have nothing to give back.
+  ignore clock
+  make "dagg.again "true
+  until [not :dagg.again] [
+    make "dagg.again "false
+    ; CINI10 zeroes $0200-$4000 on EVERY entry through COMINI. This is
+    ; that: the pass that just ended left a dungeon, 66 OCBs and a
+    ; creature table behind it, and the pool has no automatic collection.
+    ; One sweep between games is nothing.
+    recycle
+    daggorath.once
+  ]
+  daggorath.quit
+end
+
+; ONCE.ASM:GAME10 -- `LDD #$100B / STD PROW` -- row 16, column 11, facing
+; north, which is where docs/DungeonsOfDaggorath/Levels/level1.svg draws the
+; player's blue dot. COMDAT.ASM's RAMDAT holds `FCB 12 / FCB 22`, which
+; GAME10 overwrites and which is not a carved cell of level one.
+;
+; GAME50 makes the initial view, fakes the prompt and falls into the
+; scheduler, which is the last three statements here.
+;
+; PREPARE! goes up before the world is built and not just before a CLIMB.
+; This is the game's slow moment: the RNG tables (~0.96 s on a Pico 2 W)
+; and level one's carve (2.64 s at worst) both happen below, and they used
+; to happen at `load`, where the player is reading a file listing and has
+; nothing to get ready for. PCLI20 prints the same message one line before
+; it asks for a new level, and GAME20's NEWLVL is a new level.
+to daggorath.once
+  make "dagg.row 16  make "dagg.col 11  make "dagg.dir 0
+  make "dagg.ppow 160  make "dagg.pdam 0  make "dagg.objwt 35
+  make "dagg.prlite 0  make "dagg.prmlite 0
+  make "dagg.light 0  make "dagg.mlight 0  make "dagg.olight 0
+  make "dagg.magflg "false  make "dagg.mapflg "false
+  make "dagg.faint "false  make "dagg.over "false
+  make "dagg.dead "false
+  make "dagg.tenth.n 0  make "dagg.second 0
+  make "dagg.linbuf []  make "dagg.tokens []  make "dagg.linptr 1
+  make "dagg.plhand 0  make "dagg.prhand 0  make "dagg.ptorch 0
+  make "dagg.bag []  make "dagg.floor []
+  make "dagg.dspmod 0
+  make "dagg.frzflg "false
+  make "dagg.sndn -1  make "dagg.sndvol 0
+  splitscreen
+  window
+  ct
+  ht
+  setrefresh "manual
+  make "dagg.now ticks
+  dagg.setup.sound
+  make "dagg.level 0
+  dagg.prepar
+  ; CINI40, then GAME20's NEWLVL, then GAME30, and that order is the game:
+  ; the whole dungeon's loot exists before the level does, NLVL40 hands it
+  ; to the creatures it has just given birth to, and only THEN does the
+  ; player get his wooden sword and pine torch -- which is why they are
+  ; the last two OCBs and why nothing else is ever on the floor. POBJWT's
+  ; 35 above is those two (25 + 10), which is COMDAT.ASM's `FDB 30+5`.
+  dagg.makeobjects
+  dagg.cmx.reset
+  dagg.newlvl :dagg.level
+  dagg.givebag
+  dagg.setup.heart
+  dagg.hupdat
+  make "dagg.heart.due ticks
+  make "dagg.hslow.due ticks + (:dagg.heartr * 16.667)
+  make "dagg.luknew.due ticks + 500
+  make "dagg.burner.due ticks + 60000
+  make "dagg.tenth.due ticks + 100
+  make "dagg.cregen.due ticks + 300000
+  dagg.pupdat :dagg.norscl
+  dagg.prompt
+  ; B101, and it is B97's argument one moment earlier. Building a pass
+  ; costs ~2,700 atoms of pure garbage -- 1,900 of them the two heart
+  ; costumes, whose hex rows are long words that `putsh` has already
+  ; copied into the device -- and NOTHING swept between that and the
+  ; player's first command. `dagg.enter` sweeps after a command; there was
+  ; no sweep before the first one. This is the same "between turns rather
+  ; than in one" moment: the view is up, the prompt is drawn, and nobody
+  ; has typed yet.
+  recycle
+  dagg.play
+end
+
+to daggorath.quit
+  restore.clock
+  stopsound
+  ask 1 [ht  setsh 0]
+  setrefresh "auto
+  setpendash 1
+  setpc 254
+  st
+  textscreen
+end

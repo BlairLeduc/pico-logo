@@ -105,7 +105,7 @@ Companion documents (everything in `docs/`):
 | Non-blocking `wifi.start` + `wifi.status` | done | Landed 2026-07-21; a startup file reaches the prompt immediately and a `when [wifi?] [network.ntp ...]` demon does the follow-up. Independent of P6 — `launch-design.md` never cited WiFi as a motivating case |
 | HTTP server (`http.listen`, `when [http.request?]`, `http.respond`, file transfer) | done | M0–M5 implemented, merged to `main` (#108, 2026-07-16): mDNS + `wifi.hostname`/`wifi.sethostname`, TCP server ops, demon-driven pump/parser, handler surface + `http.element`, `webturtle` example, file transfer. Browser + mDNS hardware-validated; `curl -T` upload validation pending. Design: [P7](#p7--http-server-implemented) |
 | Key state for games (`pollkeys`, `keydown?`, `keyhit?`) | done | Landed 2026-08-14, out of B28's keyboard work. `readchar` is a buffered character **stream** at the southbridge's typing cadence — nothing for 300 ms after a press, then one repeat per 100 ms, queued — and a frame loop reading one character a frame consumes slower than the firmware produces, so the backlog grows and the game acts on input the player has already finished giving. One character a frame also means two keys can never be held at once, a constraint all three shipped games had to design around (`asteroids` §Input). The FIFO already carries what a game wants: every entry names a key code and a state, so a press sets a bit and a release clears it, and the game reads a **level** instead of replaying history. `keyboard_poll_keys()` drains the FIFO into a 256-bit down bitmap plus a press-edge latch (64 bytes total) and discards the characters the same events buffered, so no backlog can rebuild; `keydown?`/`keyhit?` are then pure memory reads, and a frame costs one visit to the 10 kHz bus however many controls it checks. `keyhit?` latches only a press that finds the key up, so the firmware's repeats do not read as auto-fire, and it catches a tap too short to still be down at the poll. NULL-able hardware ops, so boards without key releases (the host) simply output `false`. **Asteroids is converted**: every branch of `poll.input` used to end in `stop` because only one control could act per frame, and steering, thrust and fire are independent `if`s now — level (`keydown?`) for the controls that hold, edge (`keyhit?`) for pause, quit, hyperspace and the trigger, which also ends a held `p` toggling the pause ten times a second. `play.level` takes a baseline `pollkeys` so the press that leaves the attract screen is not delivered to the first frame as a hit. **All four games are converted**; Galaxian and Invaders share one `poll.input` shape and both gained move-and-fire-together. Turtle Trails needed it for a different reason: its `while [key?]` drain never built a backlog, but a character stream cannot tell *held* from *pressed*, so a direction held through several junctions was latched once and, after `try.turn` spent it, the next junction saw an empty latch with the key still down. Its latch is set from `(or (keydown? c) (keyhit? c))` — `keydown?` for the held direction, `keyhit?` for a flick shorter than a frame, which the character queue did catch because the press was queued rather than sampled — and each half has a test that fails without it. `poll.input` there had no coverage at all before this (every steering test writes `:a.next` directly), so it gained six tests. Space Invaders' design doc had named this exact change in its own limitations table — "`readchar` gives presses, not held-key state; a held-key device query would smooth this but is out of scope" — so §9 there is now closed rather than open. Menus, attract screens and name entry stay on `readchar`, which is the right shape for them. **The load-bearing assumption is confirmed on hardware** (2026-08-14, Pico Plus 2 W): the whole design rests on the southbridge reporting `RELEASED` for ordinary keys and not only for modifiers — which is all the driver handled before this change, and therefore all the source could prove — and the host tests cannot settle it, since they drive a FIFO this project wrote. `tests/logo/keystate` runs the real bus; DOWN followed the finger and released cleanly, and HIT appeared once per press rather than once per firmware repeat. It stays in the tree as the regression check for any future driver change |
-| Arrays (`array`/`setitem`) | deferred; re-asked by [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M3, **gated on [P17](#p17--dungeons-of-daggorath-design-first) M0** | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need. **[P13](#p13--battlezone-design-first) looked like that need and measured out as not being it** (design §13 L2): `item` costs ~16 µs fixed plus ~0.73 µs an element on a board, so a 3D frame's 44 walks over lists of 8–32 cost ~1.1 ms and arrays would return ~0.7 of it. The pre-P10-M5 figure of "~115 µs for a twelve-element walk" that P11 §12 quotes no longer holds — the interpreter got much faster underneath it. Arrays become this game's lever only if its model tables grow past ~64 entries. **P13 M0 confirmed it on a board** (2026-08-23): `draw.box` reads forty `item`s and they are 0.72 ms of a measured 3.82 ms box -- 19 % -- but the cost is the ~16 us *fixed* charge of an `item` call and not the walk, because the lists are four elements long. O(1) indexing removes the part that is already almost nothing |
+| Arrays (`array`/`setitem`) | deferred; re-asked by [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M3, **gated on [P17](#p17--dungeons-of-daggorath-design-first) M0 — M0 did not ask for it** | O(1) indexing; needs a new object kind (likely blob-backed). Wait for demonstrated need. **[P13](#p13--battlezone-design-first) looked like that need and measured out as not being it** (design §13 L2): `item` costs ~16 µs fixed plus ~0.73 µs an element on a board, so a 3D frame's 44 walks over lists of 8–32 cost ~1.1 ms and arrays would return ~0.7 of it. The pre-P10-M5 figure of "~115 µs for a twelve-element walk" that P11 §12 quotes no longer holds — the interpreter got much faster underneath it. Arrays become this game's lever only if its model tables grow past ~64 entries. **P13 M0 confirmed it on a board** (2026-08-23): `draw.box` reads forty `item`s and they are 0.72 ms of a measured 3.82 ms box -- 19 % -- but the cost is the ~16 us *fixed* charge of an `item` call and not the walk, because the lists are four elements long. O(1) indexing removes the part that is already almost nothing. **P17 M0 confirmed on a Pico Plus 2 W** (2026-09-02): the winning list walk (`foreach`) drew a 184-point worst-case scene in 53.2 ms at 300 MHz against a 100 ms gate, with zero `nodes`/`atoms` allocated over 1,000 warm walks — the list walk was never the bottleneck arrays would have addressed, so P18 M3 stays deferred |
 | Atom reclamation / `erall` soft reset | done / deferred | Atom reclamation landed 2026-07-23; `erall` soft reset remains deferred. See `memory-reclamation-design.md` |
 | Tile maps + smooth scrolling (accelerated tile games) | **removed 2026-08-28, see [P14](#p14--the-vector-direction-removing-tiles-and-the-sprite-games-plan-first)**; was: bake half done, scrolling half open | Design drafted 2026-07-29 ([`tilemap-scrolling-design.md`](tilemap-scrolling-design.md)); M0 measured 2026-08-01 and the gate **failed** — the interpreter, not the wire, was the bottleneck, which opened [P10](#p10--interpreter-throughput) and split the item (§3.4). **The bake half shipped**: `newtiles`/`snaptile`/`newmap`/`settile`/`tile`/`stampmap`/`stamptile` over `core/tilemap.c` (M1+M2, hardware-accepted 2026-08-02), and M3 revamped Turtle Trails in place — the board is the C map and `draw.board` is a `stampmap`, replacing a **5,916 ms** pen-carved build with a **7.6 ms** bake. Two findings came out of it: **B11** (`dot` ignored the pen size on the PicoCalc — the blank maze was that, not the tile system), and that **the C map does not move the frame**, contradicting §3.4's and P10 §7's expectation that it would close Trails. **The scrolling half's gate was measured 2026-08-04** (§13.6–§13.7), on one board before and after, settling the Plus-2-W-vs-Pico-2 mismatch §13.5 flagged: the frame is **73.6 → 42.55 ms (1.73×)** and the body **73.35 → 40.15**, essentially at the 40 ms gate. But **the gate omitted the present it was meant to leave room for** — a scroll dirties the whole viewport, so a scrolled frame is 61–66 ms and the real budget is a body under 14–19 ms. So **M4 is unblocked only for a new, simpler scroller** sized to that (~300–400 statements, ~540 under §15's half-rate lever), and **M5 (Checkpoint Run) is closed** at ~150 ms against a ~19 ms need. Whether to design such a game is the open question. All boards, tiered capacity. See [P9](#p9--tile-maps-and-smooth-scrolling-design-first) |
 | Interpreter throughput (games hit their frame budgets) | done; `pico2` joined the tiering 2026-08-23 and **confirmed it with a control group** -- 1.65x on the frame, both controls unmoved | Opened 2026-08-01 by P9's failed M0 gate, design drafted ([`interpreter-throughput-design.md`](interpreter-throughput-design.md)): the display was never the bottleneck — both shipped games run at ~9 fps and ~4 fps against a designed 25, and ~48 % of interpreter runtime is spent re-deriving facts that cannot change (word class re-lexed every evaluation, names resolved by `strncasecmp` every call). Memoise them on the interned atom. Target: Turtle Trails' `play.frame` under 40 ms, from 87.3 ms. M0–M3 done 2026-08-01, M4 declined. M1 (word class) delivered all of it on hardware — Trails 87.3 → **73.4 ms**, Checkpoint Run 258.6 → **232.6 ms**. M2 (name binding) flattened the workspace-scan cliff (**128.3 → 24.0 µs** per call) and returned 9 KB of SRAM, but moved neither game and regressed the profiled loop 1.64× on the board. **§1's 40 ms is not met**, and P9's C map — named here as what would close Trails — landed on 2026-08-02 and moved the frame by 0.2 ms (73.4 → 73.6). That expectation is **disproved** (P9 design §13.4): it misread P9 M0, which measured `step.bugs` at 59 % of a frame rather than the `tile.at` walk inside it. **M5 profiled the frame on 2026-08-02 (design §11.1) and found one.** There is no hot spot — 791 operations on the board against 787 predicted from the host, every slot proportional to its statement count — but a `make "x (:x + 1)` costs **102.5 µs against a procedure call's 24 µs, 4.3×, where the host ratio is 2.5×**. Calls scale host→board at 75×, a `make` with arithmetic at 129×. M2 made calls cheap; the statement itself is what is left, and the hot slots are almost nothing but `make` statements. The uncached piece inside it is **variable resolution**, which §3.2/§7 set aside as dynamically scoped — a reason it cannot use M2's mechanism, not a reason it must stay slow. Before M5, the target had no named lever, and M4 and the bytecode body — the only candidates then left — had both been rejected partly on the strength of the disproved claim. **M5 (design §11) is therefore to re-profile before choosing**: `tests/logo/p10prof` splits a frame into its thirteen parts on a board and reports each in *operations* as well as milliseconds, so "no hot spot exists" is a result the profile can actually return. **It returned exactly that, and the answer was the flash.** The board:host ratios were 60× for a bare loop and 67× for a call against 132× for an arithmetic statement and 212× for the parenthesised-call path -- the RP2350 executes the interpreter from flash through a 16 KB XIP cache, and the code entered once per statement pays for it. Four tiers of `__not_in_flash_func` (design §11.2–§11.6) took the frame **81.0 → 47.0 ms, 1.72×, for 13.6 KB of SRAM**, `sync` flat at 1.6-1.8 ms throughout as the control. Returns halved every tier — 1.24×, 1.23×, 1.105×, 1.024× — so the tiering is done. **§1's 40 ms is still not met**, by 1.17×, but it is now a game-side number: `step.bugs` and `place.all` are 65 % of the frame and are nothing but statements. Enabled on the `pico2w` and `pico+2w` presets. See [P10](#p10--interpreter-throughput) |
@@ -116,6 +116,7 @@ Companion documents (everything in `docs/`):
 | Item | Status | Notes |
 |---|---|---|
 | `MAX_PROCEDURES` 128 → 192 | done | Landed 2026-09-02 as [P18](#p18--interpreter-work-for-dungeons-of-daggorath) M0. `logo/games/battlezone` defines exactly 128 and the ceiling has been hit repeatedly; overflow drops the **last** `to` in the file and points nowhere near the cause. Unlike `MAX_GLOBAL_VARIABLES` there is **no representation ceiling** — procedure indices are `int`, not a `uint8_t` hash slot — so this is a pure budget decision and revisitable. ~80 B a slot (64 of them `params[MAX_PROC_PARAMS]`), so 192 is +5 KB of `.bss`, about +1 SRAM point. The table is also the one name table with **no index**: `find_procedure_index_n` is a linear scan, where `find_global` has been a hash since [P10](#p10--interpreter-throughput) M3 — **and it does not matter, which was confirmed rather than assumed** (see M0). **Measured cost, both directions, all three boards**: exactly 5,120 B of `.bss` each (64 slots x an 80-byte `UserProcedure`), taking RAM from 89.34/86.82/91.73 % to **90.31/87.80/92.71 %** — +0.97 points, against the predicted ~+1. All three link. **`repl_init` reached on a Pico Plus 2 W 2026-09-02**, which is the binding board: at 92.71 % it has the least headroom of the three. `tests/logo/p18` reads the ceiling back on a board the only way a program can, by filling the table until `define` fails |
+| Automatic collection on allocation failure | todo | The interpreter has a collector and never runs it: `mem_gc_sweep` is reached from exactly one place in the tree, `prim_recycle`, so `Out of space` is reported with the arena full of garbage nobody swept. Opened by [B97](bugs.md), where a Pico 2 W died mid-game with `(pr nodes atoms)` at **0 0** and a typed `recycle` handed back 3,000 cells. See [Automatic collection](#automatic-collection-on-allocation-failure) |
 | LittleFS internal filesystem (root `/`) + `/sd` FAT32 mount | done | Landed 2026-06-29 (PR #83), before this roadmap existed; listed for completeness. Design: [`littlefs-filesystem-design.md`](littlefs-filesystem-design.md) |
 | On-chip temperature sensor (`hw.temperature`), `battery` renamed to `hw.battery` | done | Landed 2026-08-20 (user request). The first of a `hw.` family for reading the board itself, so `battery` was renamed with it — a breaking change taken deliberately while the surface is two primitives wide. The part-to-part difference the request flagged is real and the SDK already hides it: the sensor is ADC input 4 on the RP2350A (Pico 2, Pico 2 W) and input 8 on the RP2350B (Pico Plus 2 W), and `ADC_TEMPERATURE_CHANNEL_NUM` is `NUM_ADC_CHANNELS - 1`, which the board header sizes from `PICO_RP2350A` — so **no board conditional appears in this tree**, and the two disassemblies prove it resolved: the AINSEL write is `0x4000` on a `pico2` build and `0x8000` on a `pico+2w` one. The conversion is the datasheet's (§12.4.6) and is the same on both parts. Two things the sensor's own accuracy decided: the read **averages 16 conversions** (~0.24 C per LSB, noisy at that, ~32 us for the burst), and the primitive **rounds to a tenth** — the sensor is uncalibrated and reads the die rather than the room, so six significant digits of ADC noise would be a false precision the manual then has to walk back. A board with no sensor nulls the op and the primitive errors rather than inventing a reading, which is what the host build does. **RAM unchanged to the byte** on all three boards (`pico+2w` 478,532, 91.27 %); the cost is flash. 47 tests in `test_primitives_hardware.c`. **Hardware-accepted 2026-08-21 on both a Pico 2 W and a Pico Plus 2 W** — which is the whole of the gate, since the two boards are the two parts and the channel is the one thing no host test can reach. `tests/logo/hwtemp` stays in the tree as the check: it does not assert that a number came back, because a wrong channel returns a floating GPIO and that reads as a plausible number — it loads the processor for thirty seconds and requires the reading to **rise**, which only a sensor wired to the die does |
 | On-board status LED (`hw.light?`, `hw.setlight`) | done | Landed 2026-08-21 (user request). The second of the `hw.` family, and the same shape of problem as `hw.temperature`: **the pin differs on every board and the SDK already hides it.** On a Pico 2 the LED is `PICO_DEFAULT_LED_PIN` (GPIO 25) and a `gpio_put` reaches it; on a Pico 2 W and a Pico Plus 2 W there is **no such pin at all** — it is `CYW43_WL_GPIO_LED_PIN`, WL_GPIO 0 on the wireless module. That used to be hand-written special-case code; SDK 2.1's `pico_status_led` is the abstraction, so **no board conditional appears in this tree** and the disassemblies prove it resolved: `picocalc_set_status_led` is `movs r3, #25` plus the single-cycle-IO write in a `pico2` build and `bl cyw43_gpio_set` in a `pico2w` one. **The design decision the hardware forced** is that on a W board the LED is on the far side of the cyw43 driver, so lighting it **powers the radio** — the first `hw.setlight` costs the firmware upload, about a second — and there is no alternative, since the LED is physically on that chip. The driver is brought up through the existing `ensure_wifi_initialized` rather than by `status_led_init()`, which would build a *second* `async_context` and init the driver twice; `status_led_init_with_context(cyw43_arch_async_context())` keeps one context, one driver and one flag for both features. `hw.light?` **reads the pin** rather than remembering what was written, so on a W board it is a round trip through the module. A board with no LED nulls the ops and both primitives error rather than answering `false`, which would read as "the LED is off". **SRAM costs 72 bytes on the W boards** — `status_led_owned_context`, the context `pico_status_led` would have built for itself, dead in this build but in the same TU as the path that is used — and 4 bytes on a `pico2`; the rest (~1.2–1.9 KB) is flash. 13 tests in `test_primitives_hardware.c` (60 in the file), 80/80 green. **Hardware-accepted 2026-08-21 on both W boards**, a Pico 2 W and a Pico Plus 2 W, via `tests/logo/hwlight` — all four checks, which is the whole of the cyw43 half of the gate. That gate is two things no host test can reach: a human confirming the light actually *moved* (a driven pin that is not wired looks exactly like a pass from inside Logo), and the **two WiFi orderings** — LED then WiFi, WiFi then LED — which is the double-init this arrangement exists to prevent. **What is still unrun is a `pico2` build**, the GPIO 25 path and the only one that goes through `status_led_init()` rather than the with-context form. It is the trivial half and the disassembly shows it resolving to pin 25, but nothing has yet watched that LED light |
@@ -622,6 +623,70 @@ still there to surprise the next one.
   rather than returning into a body that no longer exists.
 - **Reference:** a `## .reset` section under Workspace Management, cross-linked
   from `erall` and `recycle`, spelling out exactly what survives.
+
+### Automatic collection on allocation failure
+
+**Goal:** an allocation that cannot be served should collect and retry before it
+reports `Out of space`. Today it does not, and the consequence is not academic:
+a board runs out with thousands of cells of garbage in the arena, and the only
+thing that reclaims them is a human typing `recycle`.
+
+**What is actually there.** The collector works and is well tested
+(`tests/test_memory.c`). What is missing is any caller. `mem_gc`/`mem_gc_sweep`
+is invoked from **one** place in the whole tree — `prim_recycle`
+(`core/primitives_workspace.c`) — and `alloc_cell` simply returns 0 on
+exhaustion (`core/memory.c`), which every caller turns into `ERR_OUT_OF_SPACE`.
+`mem_atom` does the same with `NODE_NIL` when the word region is full. So every
+long-running Logo program has to sweep itself: berzerk and battlezone do it on a
+once-a-second beat, `daggorath` does it after each command dispatch
+([B97](bugs.md)), and a program whose author did not know to is a program with
+a fuse on it.
+
+**Why it is not a two-line change, and this is the whole of the item.** *The
+root set is assembled by the caller, not by the collector.* `prim_recycle` names
+all seven root sources by hand — `var_gc_mark_all`, `proc_gc_mark_all`,
+`prop_gc_mark_all`, `frame_gc_mark_all`, `op_stack_gc_mark`,
+`token_source_gc_mark`, `demons_gc_mark_all` — and it can only do that because
+it is a primitive holding an `Evaluator *`. `memory.c` has no such handle, so a
+collection triggered from inside `alloc_cell` cannot find the roots without
+either an upward dependency or a registered mark callback. **The registered
+callback is the right shape**: one `mem_gc_set_root_marker()` installed at
+`repl_init`, so `memory.c` still knows nothing about evaluators.
+
+*And the roots that are not in that list are the dangerous ones.* A primitive
+half way through building a list holds `Node`s (and `Value`s, which contain
+them) in **C locals** that nothing marks. Collect underneath it and those cells
+are swept while still in use. The mechanism for this exists —
+`MemGcRootScope` / `mem_gc_roots_push` / `mem_gc_mark_transient_roots` — but it
+is used at **seven** call sites (`eval.c`, `eval_expr.c` ×2,
+`primitives_list_processing.c` ×3) against **~220 allocation calls across 32
+files**. Every one of those that holds a live `Node` across a subsequent
+allocation has to be rooted first. That audit *is* the work; the trigger itself
+is a few lines.
+
+- **The failure mode is silent corruption, not a crash**, which is why this is
+  a design-first item rather than an afternoon. A missed root frees a cell that
+  is still referenced and the damage surfaces later, somewhere else, as a
+  wrong answer.
+- **So the gate is a stress mode, not a benchmark.** A debug build option that
+  collects on **every** allocation turns a missed root from a rare corruption
+  into a deterministic failure on the first test that walks that path — and the
+  existing suite (87 binaries) becomes the audit. Ship the stress mode *first*
+  and fix what it finds; the on-failure trigger is what lands afterwards.
+- **No heuristic, no nursery, no scheduling.** Collect only when an allocation
+  actually fails, and retry once. A sweep is ~4 ms on a board ([P13](#p13--battlezone-design-first)
+  M3) and exhaustion is rare, so there is nothing to tune and nothing that can
+  surprise a frame loop — a game that never runs out never pays.
+- **`recycle` stays**, and stays useful: it becomes the way to sweep *before* a
+  known-expensive stretch rather than the only way to sweep at all. The
+  hand-placed sweeps in the games stay too — they are cheaper than hitting the
+  wall, and they keep working unchanged.
+- **What this does not fix:** [B94](bugs.md), where a Pico 2 W could not `load`
+  the file at all. There was no garbage to reclaim at that point; that is a
+  program too big for the board, and it stays that.
+- **Reference:** `recycle`'s section gains a sentence saying the interpreter now
+  collects on its own when it has to, and that `recycle` is a hint rather than a
+  requirement.
 
 ### P10 — Interpreter throughput
 
@@ -2441,8 +2506,1053 @@ the game is not started.
 
 ### P17 — Dungeons of Daggorath (design first)
 
-Status: **design drafted 2026-09-02, gated on its own M0 measurement.** See
-[`daggorath-design.md`](daggorath-design.md).
+Status: **design drafted 2026-09-02; M0 confirmed on a Pico Plus 2 W,
+2026-09-02 — gate PASSES at 53.2 ms against the 100 ms budget; M1 written the
+same day and confirmed on hardware 2026-09-03, after three bugs that the host
+had recorded as done; M2 written and confirmed on a Pico Plus 2 W 2026-09-03,
+a run that found two more M1 bugs in the turn animation ([B84](bugs.md),
+[B85](bugs.md)); M3 written and confirmed on a Pico Plus 2 W the same day
+over four board runs, 103 tests — the first milestone here to come up right on
+a board the first time, and the only defect those runs found was M2's missing
+command-line cursor ([B87](bugs.md)); M4 written 2026-09-03, 141 tests, host
+only — no board has seen a creature yet; M5 and M6 written and **M6
+confirmed on a Pico Plus 2 W 2026-09-05, which leaves the game complete**
+at 174 tests, 184 procedures of 192 and 7,423 free cells — that run found
+the mixer bug that had silenced every percussive note ([B99](bugs.md)).
+M7 written 2026-09-06 with **four board runs**, 176 tests: it set out to
+make the attract mode the cartridge's front door the way `ONCE.ASM` opens on
+`DEMO`, and it **ended by removing the attract mode** ([B108](bugs.md)) when
+the third run showed the demo still does not replay the 1982 recording and
+the measurement said what closing that would cost. The milestone's return is
+the six defects it found on the way, all but one of which outlived it — the
+OCB table had no
+room for DEMDAT's third object ([B100](bugs.md)), no sweep stood between
+building a pass and its first command ([B101](bugs.md)), the demo was dealt
+a real game's power and died in seconds ([B102](bugs.md)), a death let
+go of the cartridge instead of restarting it ([B103](bugs.md)), the
+creatures were placed by Logo's `random` instead of DGNGEN's own generator,
+which §7.2 had said was faithful ([B104](bugs.md)), and then every
+*run-time* roll turned out to be on that same wrong generator, so the world
+a recorded demo was recorded against was a different world every time it was
+built ([B106](bugs.md)).**
+M8 moved the 3.6 s of RNG tables and level-one carve out of `load` and behind
+the game's own `PREPARE!` screen, 2026-09-08, 178 tests — host only, and a
+board run would be reading a wait rather than measuring one.
+"No board needed for a Logo-only milestone" is what
+this entry used to say, and it was wrong three times over — see M1 below.
+Pico 2 and Pico 2 W still to run M0, though nothing in the result is expected
+to be board-specific. `tests/logo/p17m0` timed all three of section 6.3's list
+walks against a 55-point shape and against the full 184-point worst-case
+scene: **`foreach` won on every axis** — fastest (23.2 µs isolated, 97.8 ms
+full scene), no allocation (`nodes`/`atoms` read zero for all three
+candidates, resolving section 6.3's `butfirst` question clean), and the
+candidate the design already said reads best. The present measured 19.95 ms
+against section 12's predicted 19.8. `test_p17m0.c` pins that the three walks
+agree pixel-for-pixel and that the transform matches section 6.2's
+hand-worked numbers; the timing figures themselves read as zero on the host
+(`ticks` is milliseconds, the host is far faster than the target) — same
+caveat as P13 M0.
+
+**M1 — the dungeon and the view. Recorded done 2026-09-02 and it was not;
+confirmed on a board 2026-09-03 after three bugs, one of which had every
+level of the dungeon wrong.** `scripts/gen_daggorath.py` ports `RANDOM.ASM`'s
+24-bit LFSR and `DGNGEN.ASM`'s carve/wall/door algorithm bit-for-bit, and
+flattens `VARC.ASM`'s twelve architectural lists plus `VERT.ASM:CELINE` into
+the absolute polylines section 11.2 asks for — already split into the
+parallel ys/xs lists the cell walk wants. `logo/games/daggorath` ports the
+forward-view cell walk (`VIEWER.ASM`), `MOVE`/`TURN` with both animations,
+the dot fade, and inverted levels with the `write`-based status bar.
+
+**What the board and the maps found.** The milestone shipped host-green and
+came up on a board as a **blank split screen**: all four level colours used
+palette slot 255, which *holds the current graphics background*, so an even
+level drew the whole dungeon in the background colour and an odd level could
+not be entered at all (`setbg 255` is outside its 0..254 range) —
+[B81](bugs.md). Reading the code beside design §6 then found that the cell
+walk drew left and right but never the **forward** face, leaving the entire
+`:dagg.forward` table loaded and dead — [B82](bugs.md). And
+`docs/DungeonsOfDaggorath/Levels/` arriving — five SVG maps of the real
+dungeon — closed the gap this entry used to record as unclosable: the first
+cell-for-cell diff came back **468 of level 1's 500 cells in the wrong
+place**. `RNDCEL` gives the **column** its first random draw and the row the
+second (`TFR A,B` before the second `SWI`); the port had them reversed, which
+transposed every maze. Falling out of that fix, the player start is
+`(16, 11)` — `ONCE.ASM:GAME10`'s `LDD #$100B / STD PROW`, exactly where
+`level1.svg` draws the blue dot — not `COMDAT.ASM`'s `(12, 22)`, which is the
+attract-mode DEMO's position and **not a carved cell**, so the game had been
+starting inside rock. [B83](bugs.md).
+
+**The lesson is the shape of the oracles, not "test on hardware".** All five
+of the generator's internal invariants — 500 open cells, 70/45 door counts,
+full connectivity — stayed green through every one of these, because they
+were the algorithm checking its own arithmetic. Each bug needed a *different*
+kind of witness: a real panel, the design text, and an external map. All
+three are now gates — `tests/test_daggorath.c` refuses any level colour that
+reaches slot 255 and refuses a redraw line in the background colour, asserts
+the forward face is drawn, and the generator's `check_against_published_map()`
+fails outright if any level drifts from `Levels/`.
+
+**It ships as one file.** The maze and the vector lists are generated into
+`logo/games/daggorath` between two markers rather than into a `daggdata`
+beside it, which measured free: whole-row list literals leave **27,082** free
+nodes against **27,025** for the same data read with `readlist` — 57 *better*,
+that being the loader procedure that no longer exists. `dagg.load`,
+`dagg.ys.of`, `dagg.xs.of`, `dagg.read.runs`, the host test's mock-filesystem
+staging and its one-level fixture all go with it, and the test now runs
+against all five real levels. The one form to avoid is splitting rows to
+honour the 40-column source rule and reassembling them with `se`: same nodes,
+but it retains **~10,900 word-table entries**.
+
+24 tests, all passing. See [`daggorath-design.md`](daggorath-design.md) §7.4
+and §15 for the rest of the porting notes — a `MAKDOR` retry bug caught by an
+infinite loop in the generator, `LVLTAB`'s seed table turning out to be a
+sliding window rather than five independent seeds, and an O(n²) list build
+that had to become two `item` lookups.
+
+**M2 — the command line and the clock. Written 2026-09-03; green on the host,
+and the two things it corrects are both places the design read a macro instead
+of the data it generates.** The scheduler of design §5, the parser
+(`PARSER.ASM`/`TOKEN.ASM`), the text furniture of §4.1b–§4.1c, the heart drawn
+and beating, fainting, damage recovery and death. 53 tests, all passing.
+
+**The heart is 46 jiffies at full health, not 45.** `HUPDAT.ASM` opens with
+`J = (P * 64) / (P + 2D) - 19` as a comment and the code below it computes
+something one larger: `HUPD20` divides by repeated subtraction and does
+`INC T6` *before* the `BCC`, so the subtraction that goes negative is counted.
+766 ms and 78 beats a minute, and half-damaged is 14 jiffies rather than 13.
+The gate asked for the rate to track the formula "within a jiffy" over a
+scripted damage ramp; it tracks it **exactly**, because the test's oracle is
+`HUPD20` itself transcribed into C rather than the closed form the Logo
+evaluates — the two agree by arithmetic, not by transcription, which is the
+only way that test could have caught this.
+
+**And "four-letter abbreviations" was never how the parser works.**
+`DTABAS.ASM`'s `CMDXXX` macro carries `ATTK`, `INCN`, `REVE`, `ZSAV` beside
+each command, and those are *assembler symbols*. `TOKEN.ASM`'s `CMDTAB` holds
+the **full words**, `PARS12` stops comparing when the token runs out, and two
+matches are an error rather than a preference — so the game takes **any
+unambiguous prefix**, `M` is `MOVE`, `Z` is neither `ZLOAD` nor `ZSAVE`, and
+`ATTK` matches nothing at all. This is the same mistake in the same place as
+M1's `LVLTAB` "five seeds": **the macro is not the table.** `T.BAK`'s string
+is `BACK`, so the manual's `MOVE BACKWARD` does not parse either.
+
+Three ROM behaviours were kept that a tidier port loses: `PMOV90` charges
+`(weight / 8) + 3` damage on every accepted `MOVE` **whether or not the step
+happened**; `HSLOW` recovers `ceil(damage / 64)` (`ASRD6` floors a *negated*
+damage) and reschedules at the heart's own rate, so healing is slowest exactly
+when you are most hurt; and `HUPD42` walks the light back one step **further**
+than fainting walked it down. Two things the port decided for itself: the line
+buffer is a list of one-character words rather than a growing word, because a
+word interns and a keystroke at a time would put every prefix of every line
+ever typed into the arena `nodes` reports on; and `CMDTAB` arrives as seven
+`se` statements because **`load` runs a file a line at a time**, so a list
+literal cannot span lines. The one departure from the ROM is ESC — `DEATH`
+ends in `BRA *` and `PLAY10` turns every non-letter into a space, so there is
+no key that means stop.
+
+**Run on a Pico Plus 2 W the same day, and the board found two more M1 bugs
+— both in the turn animation.** "I remember animation when turning but is
+missing from the port", "in the distance some lines are not drawn (or
+erased?)", "when I `turn right` I see dots (breaks) on the horizontal lines":
+three faces of one thing. `PTURN.ASM:TURN00` **erases the screen** and draws
+two horizontal lines before the sweep, and `PREVU`/`PUPSUB` build the new view
+*in the backplane* so `PTUR90` can flip it in **after** the animation. M1 had
+it inside out — new view drawn and presented, then the sweep run over it — so
+each stroke's `pe` cut a full-height stripe out of the finished picture: long
+lines holed, short (distant) ones erased outright. And none of it read as
+motion, because the game runs `setrefresh "manual` and the sweep never called
+`refresh`; the damage only reached the panel on the next heartbeat's refresh,
+which is why the corruption showed and the movement did not.
+[B84](bugs.md), and [B85](bugs.md) with it: the fade table had a **seventh
+period of 65 the ROM cannot reach** — `SFAD10`'s `CMPA #-7 / BLE` takes the
+darkness branch before `BITMSK`'s `BIT6` is ever indexed, and `VECTOR`'s
+`INC VCTFAD` means the period is one *more* than the table byte. Six levels,
+1–33, dark at −7. The design's §6.4 and §8 are corrected with the code.
+
+58 tests, and the four animation gates were each checked against the old code
+before the fix. **Confirmed on a Pico Plus 2 W 2026-09-03 with the fixes in** —
+the view, the status bar with the heart beating in it, the scrolling command
+line and both animations, with the sweep's estimated ~13 ms a stroke reading
+right and needing no tuning. What the board has *not* exercised is the half of
+M2 you cannot reach by playing: fainting is 153 damage and death 161, twenty-
+three walks into a wall at seven damage a `MOVE`, so both stay host-tested
+against `HUPD20` and the faint set piece's sixteen back-to-back redraws remain
+uncosted on hardware.
+
+**M3 — objects. Written and confirmed on a Pico Plus 2 W 2026-09-03, and
+its largest visible change is that the game now starts in the dark.**
+OCBs as twelve parallel lists, the bag and both hands, `GET` `PULL` `STOW`
+`DROP` `EXAMINE` `USE` `REVEAL` `INCANT` — and `LOOK`, which came with them
+because `DSPMOD` is sticky and it is the only way back from the inventory
+screen — plus weight, the two light channels, `BURNER`, `LUKNEW`, the map and
+both scrolls. Both halves of the gate are met: all twenty-five object types
+walk `OBIRTH` → `REVEAL` → `OBJNAM`, and a Pine torch is walked through all
+fifteen of its minutes against `BURNER`. 95 tests.
+
+**`PRLITE` is zero and `COMDAT.ASM` never sets it**, so until you `PULL` the
+pine torch out of the bag and `USE` it, `SETFAX` draws nothing at any range.
+That is why the ROM's attract mode opens `EXAMINE` / `PULL RIGHT TORCH` /
+`USE RIGHT` / `LOOK` (`TOKEN.ASM:AUTTAB`). M1 and M2 pinned `dagg.light` at 8
+as an admitted placeholder; the placeholder is gone.
+
+**The third "the macro is not the table", and this time the repair is
+structural.** The design's §10.2 called the level-1 ring **HOTH**, because
+`DTABAS.ASM`'s `OBJXXX` macro does; `TOKEN.ASM`'s `ADJTAB`, which is what the
+parser matches and `OBJNAM` prints, calls it **RIME**, and `HOTH` is not a word
+this game knows. After `LVLTAB`'s "five seeds" at M1 and `CMDTAB`'s
+"four-letter abbreviations" at M2, the fix is not another corrected name:
+`scripts/gen_daggorath.py` now **decodes** `TOKEN.ASM`'s packed five-bit
+strings for every name and parses `DTABAS.ASM`'s macro calls for every number,
+pairing the two by position with the **object class** — which both tables carry
+— as the cross-check. Twenty-five agreements is what makes positional pairing
+safe. `CMDTAB` and `DIRTAB` stay hand-written in the game file, because they
+are code, and are checked against the same decoder.
+
+**Three ROM behaviours kept, and one that surprised the design.** `PDROP`
+never clears `PTORCH` and does not need to: `USE` stows the torch it lights and
+`PULL` is the only way back out of the bag, so a burning torch can never be in
+a hand. Every failure in `USE` and `REVEAL` past the hand parse is **silent**
+(`PUSE24` is a bare `RTS`), which is how you learn what an unrevealed object is
+without being told. An unrevealed *scroll* does nothing at all. And a torch has **three
+phases, not two**: it burns at full value while the timer is above it, dims as
+each light is clamped down to the falling timer, is renamed `DEAD` at five —
+and goes on dimming to nothing over those last five minutes, because `BURNER`'s
+only stopping condition is a timer of zero. So the gate's "dies at five
+minutes" is the *timer* reading five, and the naming and the darkness do not
+line up: `PATT22` reads the **name**, so you fight as though blind from the
+minute it is renamed while the thing is still visibly lighting the corridor —
+a Lunar torch keeps its full magic 4 for two minutes after it is called dead.
+Every torch, every minute of its life, is now checked against `BURNER`
+transcribed into C, the same oracle shape as the heart's `HUPD20` test.
+
+**And `GENVAL` costs a torch its lifetime, not just its light.** An
+unrevealed Solar torch burns for **fifteen minutes at 7/0** — a pine torch's
+whole `XXXTAB` row — and nothing tells it from a real one while it does.
+`PREV00`'s `OCBFIL` restores all three bytes **including the timer**, so
+revealing a torch you have already been burning refills it. Design §8.3 and
+§10.2 are corrected with both.
+
+**Four port decisions, each with a cost behind it.** The floor is its own
+list rather than `OFIND`'s flat walk over all 65 OCBs — that walk is 650
+iterations a redraw at ten ranges, tens of milliseconds against a 100 ms budget
+— kept in OCB order so `OFIND` still answers in the ROM's order. `SETFAD`
+moved from once a range to once a **vector list**, where the ROM has it, which
+is the only way a secret door can be lit by a magical torch while the wall in
+front of it is not. The map inverts with the level where `MAPPER` does not
+(it writes raw `$00`/`$FF` and never reads `VDGINV`), because `clean` fills
+with the level's own background. And the twelve OCB lists are built with
+`fput`: `lput` copies the whole list to append one cell, so building them that
+way is 26,000 cells of garbage against a 32,752-cell pool and it ran out of
+space on the eleventh list.
+
+**One M1/M2 defect fell out of making the light real** ([B86](bugs.md)):
+`HUPD30` decrements `MLIGHT` before the redraw and `RLIGHT` after it, and the
+port decremented `RLIGHT` first and never touched `MLIGHT` — sixteen frames
+either way, ending at the same −8, but each drawn a step darker than the ROM
+draws it, and magical things lit at full magic light all the way to black.
+Invisible while the light was a constant 8.
+
+**Six keystrokes on the board, and each one a different thing.** `E`,
+`P L T`, `U L`, `P R SW`, `L` — from a black screen to a lit corridor with a
+sword in hand, then walking the dungeon until the torch burned out. In order
+that confirms: the inventory screen on its new 40-column grid; the parser's
+*any unambiguous prefix* rule three times, including `SW` where `S` would have
+been ambiguous between `SCROLL`, `SHIELD` and `SWORD`; `PULL` off the bag and
+`USE` stowing the torch it lights; the two-hand status line naming a real
+object; `LOOK` coming back from `EXAMINE`, which is the only way back and the
+reason `LOOK` was pulled into this milestone; and `BURNER` running on the wall
+clock for fifteen minutes with the redraw and the heartbeat going through it.
+It is also `TOKEN.ASM:AUTTAB` — the ROM's own attract-mode opening — arrived at
+independently, which is the strongest available statement that the opening is
+the shape the game intends.
+
+**The torch was watched moving through the backpack listing**: gone from it
+when pulled, back **in reverse video** when used. Three pieces of
+`PGET.ASM`/`PUSE.ASM` agreeing in one visible step — `PPULL` unlinking it and
+clearing `PTORCH`, `PUSE12`'s `PSTOW0` pushing it back at the **head** so a
+burning torch is always first in your backpack, and `EXAM32`'s `CMPX PTORCH /
+COM P.TXINV,U` inverting that one row. That row is
+[P18](#p18--interpreter-work-for-dungeons-of-daggorath) M1's three-argument
+`write` earning its keep a **second** time: the design made the case for it on
+the status bar alone and called the other uses conveniences, and this is one of
+them turning out to be a mechanic — it is how you tell, at a glance, which of
+two torches is the one that is burning.
+
+**A second run closed the object round trip and drew the one thing the
+generator had never had eyes on.** `D R` put the wooden sword **on the ground
+and it read as a sword**, `G R SW` took it back and it was gone from the floor,
+`S R` and `P R SW` moved it in and out of the bag. That is `VIEW52` — the
+floor-object pass inside the cell walk — seen for the first time, and `FSWORD`
+is the one `VOBJ.ASM` list with a **pen lift** in it (`V$NEW` between the blade
+and the hand guard), so it is the only object whose shape says the generator's
+`V$NEW` decode came out *right* rather than merely plausible. The design's
+§11.2 asked for a reference render because a wrong nybble gives something that
+looks almost correct; a sword that reads as a sword is that check made by an
+eye.
+
+**A third run found an M2 defect four runs had walked past** —
+*"I don't have a cursor in the input section"* ([B87](bugs.md)). There was
+none: `screen_txt_enable_cursor(true)` happens in exactly one place,
+`devices/picocalc/input.c`'s line reader, and `dagg.play` polls with
+`key?`/`rc` and never enters it. M2's own comment said so and drew the wrong
+conclusion — "our text window has a real cursor." **The ROM draws its own and
+the port had dropped it**: `M$PROM1` is `FCB I.CR,I.DOT` falling straight into
+`M$CURS`, so `PROMPT` is four characters and not two, and `HMAN20` prints
+`M$CURS` again after every keystroke. Its *bytes* do not transcribe, because
+`I.BS` moves the CoCo's cursor and ours clears the cell it lands on — so the
+underline is drawn with the cursor left **past** it and whatever comes next
+backs over it, erasing it for free. The same shape as this port's three "the
+macro is not the table" findings, one level down: **the ROM's byte stream is
+not the terminal's**, and copying it would have read correctly and drawn
+nothing.
+
+**M3 is confirmed to the exact limit of what M3 can reach.** `GET`, `PULL`,
+`STOW`, `DROP`, `EXAMINE`, `USE`, `INCANT` and `LOOK` have all been typed on a
+board, with the status line, the floor objects, the reverse-video torch and a
+fifteen-minute burn-out under them. What is left — `REVEAL`, the three flasks
+and the map — needs an object the player has no way to get: you start with a
+wooden sword and a pine torch, everything else stays creature-owned until
+`NLVL40` has creatures to hand it to, and `GAME30` **reveals** whatever it puts
+in your bag (`CLR P.OCREV,X`), so the first unrevealed object in a real game
+comes off a corpse. `REVEAL` is gated on M4, not on another run.
+
+**`INCANT` is the exception, because it never reads `P.OCREV`, and a board
+took it.** `PINCAN` wants a ring with a live `P.OCXXX+1` and the reveal does
+not touch that — so the ROM's own two-table seam (`GAMDAT` for a game,
+`DEMDAT` for the attract mode, `GAME20` choosing with a pointer) is all it
+needed: `make "dagg.gamdat [12 15]` before `daggorath` starts you with a Vulcan
+ring and a pine torch, and **`I FIRE` made a Fire ring on a Pico Plus 2 W**.
+Four keystrokes that are both halves of the parser's asymmetry at once: `I` is
+an unambiguous prefix and `PARS12` takes it, while `FIRE` had to be spelled out
+because `PINCAN` is the one place in the game that tests `FULFLG` and `FIR`
+matches nothing. `test_gamdat_is_the_seam_a_board_uses_to_reach_a_ring` runs
+the same sequence on the host, including the half that does not work. For the
+same reason a session is **fifteen minutes long**: everything in the dungeon starts
+creature-owned, so the pine torch `GAMDAT` hands you is the only light in the
+game, and when it burns out you are dark for good. That is the ROM's own
+economy arriving early rather than a limit of the port, but it is what makes M4
+the milestone that turns this into something you can play for longer than a
+torch.
+
+**M4 — creatures. Written 2026-09-03, 144 tests; a Pico Plus 2 W saw the
+first four of them the same day and found the one thing no host test could.** The CCB table,
+`CMOVE` and its preference walk, the peek-a-boo, combat both ways, creature
+loot, death, `CREGEN`, `!CREATURE!` on the inventory screen and the map's
+creature marks. `scripts/gen_daggorath.py` grew `D3.ASM`/`D4.ASM`'s twelve
+creature outlines with the two shared bodies behind them, plus `CDBTAB` and
+`CMTTAB`. **The viper, the blob, the stone giant and the spider all read as
+themselves on a panel**, which is §11.2's asked-for reference render made by
+an eye: `sv()` reconstructs the `SVORG`/`SVECT` nybbles from the source's own
+absolute coordinates and a wrong one gives something that looks almost
+correct, so four recognisable creatures is what says the decode came out
+right rather than merely plausible. Still unanswered by a board: the peek
+mark, and whether a busy level's redraw stays inside 100 ms.
+
+**And the board's other two sentences were both about the same line.**
+*"I cannot attack yet"* was [B88](bugs.md), and the port could. Every blow that landed did its damage;
+nothing said so. `PATT24` is a sound **and** a message — `SWI ISOUND / FCB
+A$KLK2` and then `SWI OUTSTI` with three packed bytes — and M4 ported the
+sound site and read past the string beside it. With M6's noises still to come
+that left a hit and a miss producing identical output, so the only visible
+difference between a working ATTACK and an unimplemented one was that the
+unimplemented one printed `NOT YET`. The string is **`!!!`**, and it is now
+*decoded* rather than transcribed: `read_message()` and
+`check_message_strings()` read all four strings this game prints out of the
+ROM, which is M3's structural repair applied to the one kind of data this
+port had still been copying by eye. The decoder immediately earned itself —
+**the count field is one less than the number of characters**, because a
+table's count is the letters *after* the class field and a message has no
+class, so its first character sits in the class slot. `!CREATURE!`, `IN THIS
+ROOM` and `BACKPACK` all check out; `!!!` was the one that was missing.
+
+**Then, once a hit had something to say: *"There should be a space before
+the hit `!!!`"* — [B89](bugs.md), and it is [B87](bugs.md)'s lesson arriving
+from the other direction.** `HMAN30` is `CLRA / SWI OUTCHR` and M2 read it as
+"erase the old cursor" and emitted a backspace; the character `CLRA` clears A
+to is not a control code, because `CD.ASM` opens its Internal Character Codes
+with **`I.SP EQU $00`**. The ROM writes a *space* over the cursor and
+advances, so every command's output on a CoCo starts one column clear of the
+line you typed — `.ATTACK LEFT !!!`, never run together. B87 was the ROM's
+`I.BS` moving a cursor where ours clears a cell, so copying the bytes would
+have drawn nothing; this is the same seam the other way, where not copying
+one lost a space. The rule that covers both: **`OUTCHR` takes internal codes,
+not ASCII, and the two alphabets disagree at exactly the places this game
+uses.** The message decoder now carries all five printable internal codes
+rather than the two M4 needed, so M5 and M6's speeches decode without another
+reading of the same table.
+
+**And a third report, which is two findings wearing one sentence:** *"the
+game moves faster than a real Color Computer — creatures move and attack
+faster, and even the walking animations seem a bit fast."* The **animation
+was simply wrong**: `wait 13` rested on an estimate of fifty 0.895 MHz cycles
+a point, and counted properly `VECTOR`'s inner loop is **~175** — 195 µs a
+pixel, 118 pixels a stroke, and `TURN10` is *two* `VECTOR` calls because
+`BSR TURN12` falls into `TURN12 JSR VECTOR`. So a sweep is **~370 ms, not
+~105**, three and a half times too fast, which is what a pair of eyes said.
+(The clock is 0.895 MHz for certain: `ONCE.ASM` sets the SAM to `$2046` and
+bits R1 R0 are `00`.) The **creature clock is right**: `COMMON.ASM:ROLTAB`
+rolls the jiffy counter at 6, so a tenth is 100 ms and a spider's 23 is 2.3 s
+with nothing scaled anywhere. One real correction came out of checking it —
+the ROM re-queues a TCB *after* the routine returns, so a creature's next
+delay counts from when its turn **ended**, and the redraw a creature standing
+on you triggers is charged to that creature. **The rest is not a
+transcription error.** With `VECTOR` costed properly a CoCo `VIEWER` redraw is
+hundreds of milliseconds, and the ROM's cooperative scheduler runs creature
+tasks only in the gaps between redraws; our board redraws in 40–80 ms and
+meets every timer on time. Faithful numbers, faster machine — and whether to
+ship the ROM's *numbers* or the ROM's *feel* is a design question, not
+something to settle by quietly scaling a table.
+
+**The answer to the pace is a knob, and the design says why it is not a
+rewrite** (design §19, decision 0). `:dagg.pace` multiplies every creature
+delay in `dagg.creature.delay` and nowhere else, so it moves creature turns
+without touching the heart, the torch, `CREGEN` or the player's own commands.
+Modelling the CoCo's redraw cost so the throttle re-emerges was considered and
+rejected: it fights §12.1, which bought responsiveness for the player's
+commands on purpose, and slowing the machine back down would take that away
+too. **The board came back with 2** — *"`dagg.pace 2` seems closer to the
+original"* — so 2 is the default and 1 is the raw table. That is a measurement
+against a memory of the original, which is the only instrument this question
+has, and it is written down rather than left as taste.
+
+**And playing it found the milestone's real defect** ([B91](bugs.md)):
+*"Out of space in dagg.cmov90"*, a few minutes in. **`.setitem` interns every
+new number it is given** — 12 atoms and 3 nodes apiece, measured, against a
+32 KB word table that nothing frees — and M4 stored each creature's next turn
+as a `ticks`-based **deadline**, a number the interpreter had never seen,
+thirty times a second across a populated level. That is ~360 bytes a second:
+**the whole table in ninety seconds**, which is how long the board lasted. The
+ROM does not store deadlines. `CD.ASM`'s `P.TCTIM` is a *countdown* that
+`QUESCN` decrements once per scan, and ported properly it holds 1..62 tenths —
+small integers the mazes interned long ago — so the scheduler now allocates
+**nothing at all**. More faithful *and* free, which is the shape this port
+keeps finding when it stops paraphrasing.
+
+**Why the budgets missed it is the lesson.** M4 had three allocation tests and
+**every one of them measured a redraw**; nothing measured the scheduler, which
+is the part that runs thirty times a second for ever. And a host test cannot
+reproduce the leak even now — the mock clock is frozen, so a deadline is the
+same number every turn and interns once — so the new gate insists on the
+*property* instead: a creature's timer is a small integer, never a clock
+reading, for every creature type at four paces. One residual is named rather
+than assumed: `dagg.ccdam` really does hold a different value every landed
+blow, measured at 1,232 atoms a hundred blows in the worst case the game can
+reach (a ring on a crescent wizard) — ~2,600 blows against 32 KB, three orders
+of magnitude off the timer, and bounded by its own test.
+
+**And one interpreter bug fell out of the fix** ([B90](bugs.md), open): a
+zero-arg reporter on the left of an infix operator with a **user-defined**
+call inside the parenthesised right operand fails to parse —
+`(ticks + (100 * dagg.cc :y 7))` answers `) without (` at run time, while the
+same form with a variable on the left, or a primitive on the right, is fine.
+The game binds `ticks` to a local, which is the workaround and reads better;
+the parser is worth fixing properly, because a parse error raised at run time
+from code that looks correct is the worst kind to meet on a board.
+
+**The test that should have existed did not, and that is the lesson.** Every
+M4 test built a synthetic corridor and called `dagg.pattk.swing` or `dagg.cmove`
+directly. There was no test of the whole path — the real dungeon, the real
+scheduler, a creature closing on the player from the next cell, and `ATTACK
+LEFT` typed at the command line — and that is exactly the test that fails on
+the shipped code. It exists now.
+
+**The gate's first half is met exactly and the arithmetic is the reason.**
+`ATTACK`'s index runs 97 % against something nearly dead to 21 % against
+something fifteen times your size, measured over 2,000 rolls against a
+reproducible draw, with the zero-bonus midpoint sitting at 50 % between them.
+The second half is met to the limit a host can reach: all thirty-two
+creatures take their turn off one pass of the tick, and a warm redraw with a
+creature in the view and another behind the peek spends **zero** nodes and
+zero atoms. The 100 ms is a board's, the same caveat M0 carries.
+
+**`CFIND` had to stop being a walk, and that is this milestone's one real
+design decision.** A redraw asks it **thirty** times — `VIEW30` once a range,
+`PDRAW` twice — and the ROM's answer is a scan of 32 CCBs. In Logo that is 96
+`item`s a call, which at P13 §13 L2's measured `item` is ~2.7 ms and **~80 ms
+of a 100 ms redraw** before a wall is drawn. So creature position is held a
+second time in a 32 × 32 grid of CCB numbers and `CFIND` is two `item`s. It
+is exact and not approximate — two live creatures can never share a cell,
+because `CWALK` asks before it moves and `CBIRTH` before it places — and it
+costs nothing in the word table, because the only numbers it ever stores are
+0 to 32 and the mazes have already interned those. The same trade as M3's
+`dagg.floor` against `OFIND`'s flat walk, except that one was an optimisation
+and this one is the budget.
+
+**Three ROM behaviours kept, and one correction to the design.** `CMOV90`
+**falls into** `CMOV92`, so a creature that walks onto you is rescheduled at
+its ATTACK delay before it has hit you once — a spider goes from 2.3 s to
+1.1 s the moment it arrives. Picking an object up is a creature's **whole
+turn**, which is what the head of `CRETUR.ASM` means by "the human can delay
+creature attacks by dropping objects" — and a scorpion and both wizards are
+the exceptions that will not stop for loot. `CWLK20`'s sonar is the ROM's:
+heard within eight cells one way and two the other, half the time, at
+`255 − 31 × range`, and a creature past either gate does not even ask for a
+redraw. The correction is the **swing cost**: design §10.3 wrote it as
+`power * (magoff+physoff) / 1024`, and `PATT10` floors the offense by eight
+*first* — so an empty hand costs nothing at all — and its `RORA` keeps the
+ninth bit of the sum, so a ring's 510 indexes **63, not 31**, and a ring
+swing costs **half your own power**. Two in a row faint you. It fell out of a
+test that could not get a Fire ring to its third charge.
+
+**And the fourth "the macro is not the table" is the one that cannot
+happen.** M1's `LVLTAB`, M2's `CMDTAB` and M3's `HOTH`/`RIME` were each this
+design reading a `DTABAS.ASM` macro instead of the table it generates, and
+M3's repair was to decode `TOKEN.ASM`'s strings and cross-check them by
+class. `CREXXX` has no partner to check against, and that is a fact about the
+game rather than a gap: **it never prints a creature's name.** `PEXAM.ASM`
+says `!CREATURE!` and the map draws a mark, so there is no `ADJTAB` row for a
+monster. `CREXXX` generates `CDBTAB` and `FWDCRE` both, and the vector list
+beside each row is what says the plain wizard wears `WIZ0` and the crescent
+one `WIZ1` — and that `WIZ2`, the star sceptre, is not a creature this game
+has.
+
+**Sound sites, not sounds.** §9.3's range gate, coin toss and volume belong
+with the movement they gate and landed here; every sound site in the game now
+calls one `dagg.sound` with `SOUNDS.ASM`'s own `SNDTAB` index and volume,
+which records them so a host test can read them back. M6 fills in §9.2's
+generator behind the index and nothing else moves.
+
+**Three budgets now, and the new one is the one to watch.** 100 procedures
+of 192 at M3 and **130 at M4**; 108 globals of 254 at M3's peak and **134 at
+M4's**. The third is the **node pool**, taken for the first time at M4
+because M4 is where it started to move: nodes and atoms grow toward each
+other inside one 128 KB block, and `daggorath` leaves **7,698 free cells at
+load against M3's 14,277**, 7,207 once level 1 is built and populated. Only
+1,685 of that six thousand is the twelve creature outlines and about 1,056
+the occupancy grid; **most of the rest is the bodies of thirty new
+procedures**, which is a cost this tree has never had to count before. M5 and
+M6 are still ahead and the last two milestones cost about six thousand each,
+so `test_the_game_leaves_room_to_play_in` is written now, with the trend in
+its comment — running out on a board is an out-of-memory panic, and a failing
+test is the warning. A warm redraw still spends **zero**
+nodes and zero atoms with an object on the floor, which is what `OFIND` being
+a cursor rather than a list buys — and still zero at M4 with a creature in
+the view and another behind the peek, which is what the occupancy grid buys.
+
+**And then a Pico 2 W could not load it at all** ([B94](bugs.md)):
+`Out of space`, and the board answered `(pr nodes atoms)` with **72 and 320**
+— the two allocators meeting in the middle. **The arena is not the same on
+every board**, and the paragraph above says "one 128 KB block" because that is
+what one board of three has: 131,072 bytes on a Pico Plus 2 W, **114,688 on a
+Pico 2 W**, **98,304 on a Pico 2**. Four bytes to a cell, so a Pico 2 W has
+4,096 fewer cells than the host that measures — and M5 left 3,978. **Nothing
+in this tree could see that**, because every test builds at the default
+131,072. That blind spot is the real finding; the game was only its first
+victim.
+
+**The mazes were 7,905 cells — a quarter of the pool — and §7.4's own
+prescribed fix does not work.** That section had said the repair, if RAM ever
+bound, was "to emit each row as a 64-character hex *word* and expand only the
+current level". Measured: two characters a cell is 10,240 characters however
+packed, an atom entry costs **19.8 bytes** of overhead on top of its
+characters, and the best arrangement is ~11,052 against **11,224 free** — it
+fits by 172 bytes and leaves nothing for the word table [B91](bugs.md) already
+spends. One character a cell needs ~138 symbols and **only 58 printable
+characters round-trip through a word literal**. A plan written down is not a
+plan measured.
+
+**So the game carves its own mazes now, which is where the ROM had them.**
+§7.2 had rejected that on speed and was right about the port it measured:
+`RANDOX` shifts a 24-bit register eight times a byte, ~91 Logo statements,
+**1.95 ms a byte** on a Pico 2 W at 300 MHz against a level's 2,235 draws —
+4.4 seconds of RNG alone. **But the register is linear, so eight steps
+collapse**: after a byte `SEED+2` holds the old `SEED+1`, `SEED+1` the old
+`SEED`, and the new low byte is `TA[old SEED+1] xor TB[old SEED+2]` — verified
+against the bit-at-a-time original **over all 65,536 pairs**, then end to end
+on all 5,120 cells. A byte becomes five statements: **150 µs**, and a level is
+**2.64 s** at worst, behind `MISC.ASM`'s own "PREPARE!" which `PCLI20` already
+prints one line earlier. Neither table is a constant anyone had to trust:
+`dagg.rtabs` derives both from `dagg.slow8`, the honest ROM byte, in 512 draws
+and ~0.96 s once per `load`.
+
+**A carve allocates nothing**, which is B91's lesson applied before a board
+found it: one grid, allocated once and carved in place, and the values written
+are 0..255 — interned by the first carve and free for ever after. Getting there
+cost one real bug: `dagg.rndcel` answered with a two-element `list` and
+`MAKDOR` asks ~245 times a level, so a generation leaked **1,010 cells**.
+Result: **8,456 free cells at load** where M5 had 3,978, and the whole
+152-test suite green at a Pico 2 W's own 114,688-byte arena.
+
+**Fidelity is pinned without shipping the data.** `gen_daggorath.py` still
+carves all five mazes and still checks them cell-for-cell against
+`docs/DungeonsOfDaggorath/Levels/`; what it emits now is **fingerprints**, and
+`test_the_carve_reproduces_the_1982_dungeon` holds the board's own carve to
+them. The chain from the published 1982 maps to the board is unbroken with no
+maze data in between. `test_the_game_leaves_room_to_play_in` is **per board**
+now — it derives each board's headroom from its arena instead of measuring one
+and hoping — and **the Pico 2 is named in it as not fitting** rather than
+quietly assumed: it needs ~1,500 cells more, and the vector lists (`make "v`,
+2,461 cells) are where they are. §26's "all three boards" is corrected.
+
+**One interpreter bug fell out of it** ([B95](bugs.md)), and it is
+[B26](bugs.md) one path over — the same defect in the path `load` actually
+uses. `proc_define_from_text` interns the procedure name and hands the pointer
+straight to `primitive_find`, which calls `strlen`; a full atom region interns
+nothing and returns NULL. So a file loaded into a workspace one atom short of
+full **faulted instead of reporting**, for every `to ... end` block in it. B94's
+board came within **320 word-table bytes** of that and was saved only by
+running the cells out first, which reports cleanly.
+
+**M6 — sound, the wizard's voice and the attract mode. Written and
+confirmed on a Pico Plus 2 W 2026-09-05, 174 tests — the gate is an ear
+and the board has now met it.**
+SOUNDS.ASM's twenty-three effects behind `SNDTAB`'s index, `say` on the
+wizard's four speeches, and `daggorath.demo` — ONCE.ASM's `DEMO10` and
+HUMAN.ASM's `PLAY20` driving TOKEN.ASM's own seventeen-command autoplay
+table. **Two of those three were removed at M7.** The attract mode went
+because it could not reproduce the cartridge's, and that entry says why;
+**the voice went because there was nothing to reproduce** — the user, playing
+the game: *"take the talking out of the game, the original did not have it."*
+`say` on the wizard was this port's one flagged, switchable addition, and the
+switch is what the removal answers: the default is what the game is, and
+nobody types `make "dagg.voice "false` before `daggorath`. Gone are
+`dagg.voice`, the three `say` sites and the `setvoice` in `dagg.setup.sound`;
+the four lines still print, which is what the CoCo did. Design §9.5 keeps the
+proposal and records the withdrawal beside it. The twenty-three effects — all
+of M6 that was ever the ROM's — stand, and so does its ear gate.
+Design §16 names the attract mode as the first thing this game
+would give up if it ran out of room and it did not have to: the whole
+milestone cost 1,033 cells of 8,456, three procedures of the eleven left,
+and it ends at **184 procedures of 192, 170 globals of 254 and 7,423 free
+cells** — 3,327 on a Pico 2 W against a 2,048 floor.
+
+**The design's own derivation was wrong, and doing the count a second time
+is what found it.** §9.2 gives the squeak family's period as 113 + 16X.
+It is **135 + 16X**: `SNSQK2`'s second half is `CLRA / BRA SNSUB2` and
+`SNSUB2` opens with its own `BSR SNOUT`, seven cycles the 51 does not
+carry; and `SNSQK1`'s loop — `BSR SNSQK2 / LEAX / BNE` — is fifteen more
+that run **between the DAC going low and its going high again**, so they
+are inside the period rather than around it. Every sweep's top moves from
+6.9 kHz to 5.93. The recount is in `tests/test_daggorath.c` as C, the same
+oracle shape as M2's `HUPD20` and M3's `BURNER`, because a table
+transcribed twice agrees with itself and arithmetic does not.
+
+**And the fifth "the comment is not the code".** `PSSST` and `PSSHT` are
+**2 and 1** noise bursts, not the 3 and 2 §9.2 tabulates: that section read
+the ROM's own comment, "rattle count + 1", above a `STA SNDLAY` and a
+`DEC`/`BNE` do-while that runs the loaded value exactly — and read the same
+way `RATTLE`'s 10 would have been eleven. After `LVLTAB`, `CMDTAB`,
+`HOTH`/`RIME` and `CREXXX` the repair is the same one M3 made:
+`scripts/gen_daggorath.py:check_sound_tables()` now reads **every byte
+behind §9.2** out of `SOUNDS.ASM` and `SWCHAR.ASM` — `SNDTAB`'s order, the
+four sweep origins and their repeat counts, `BEOOP`'s rising ramp, the
+three rattle counts, `CSETUP`'s four de-tuned pairs, five envelope
+increments and both `BOOMER` tables — and `check_autoplay_table()` does the
+same for `AUTTAB`.
+
+**Nothing blocks, and that is the whole shape of it.** §9.4 had asked every
+long effect to call `tick` between its steps, the way the CoCo's IRQ kept
+the heart going while `SOUNDS` held the 6809. There are no steps: twelve of
+the twenty-three entries are one `sound` shaped by `setenv` and eleven are a
+`play` queue, and **both return at once**, so a 1.27-second growl costs the
+scheduler nothing. **That is M6's answer to
+[P18](#p18--interpreter-work-for-dungeons-of-daggorath) M4, and the answer
+is no**: the sweeps did not come out awkward, so the frequency glide is not
+asked for. What removed the interleaving is the queue, and a glide would
+not have removed anything.
+
+**Two things `play` cannot spell, both named where they happen.** Its
+lowest note is c1 (32.7 Hz), so `BEOOP`'s bottom five steps clamp there —
+the blob falls 43.4 → 27.9 Hz and we follow it to 32.7. Its shortest note
+is 25 ms, so `SQUEAK` at 14.3 ms is **one note** and the sweep in it is
+gone; what is left is its time-median, 1864 Hz. Everything else has room:
+`PHASER` 19 notes, `WHOOP` 25, `GLUGLG` 27.
+
+**B91's lesson, applied where B91 was found.** `SNOUT` multiplies every
+sample by `SNVOL` and a queued effect takes its volume from a `v` control
+word at the head of its note list — so the obvious spelling is `fput`, and
+that is **one cell a sound** in the scheduler, which is exactly the shape
+that ran a board out in ninety seconds at M4. It is written in place
+instead: every queued list ships with a `v15` placeholder that `.setitem`
+overwrites, and the sixteen words it is overwritten with are interned once
+at load. 336 sounds cost zero cells and zero word-table bytes. The one
+residual is named rather than assumed, the way M4 named `dagg.ccdam`:
+`BDLBDL` is eight *random* squeaks and has to build a list, ~120 cells a
+call, and a game hears it once per wizard.
+
+**And it found a defect M4 could not have found** ([B98](bugs.md)): the
+game was **silent walking into a wall** and silent on a successful
+`INCANT`. M4's entry says every sound site goes through one `dagg.sound`
+and two of the ten did not — `PTURN.ASM:PSTEP`'s `A$THUD` and
+`PINCAN.ASM`'s `A$RING`. Both are `SWI / FCB ISOUND` runs with **no
+commented-out `SOUND$ A$XXXX` line above them**, which is the form the
+other eight carry and the form an eye scans for; so the port matched on the
+comment and read past the code. It was invisible before M6 by construction,
+because with nothing behind the index a missing site and a present one both
+produced silence — which is why M4's board runs, which found
+[B88](bugs.md) and [B89](bugs.md) *by ear*, could not have caught it.
+`test_every_sound_site_in_the_rom_is_a_sound_here` walks the whole list out
+of the ROM rather than counting them by eye again.
+
+**What only a board could say** was the gate itself: a spider, a knight, a
+wraith, a sword swing, a torch, an explosion and the heartbeat, identified
+by ear against a recording of the original, without labels. The host can
+only make silence impossible to ship by accident — a frequency outside
+`sound`'s 20 Hz–10 kHz window is a **rest**, so a slipped decimal would
+pass a listening test by sounding like nothing at all, and every gated and
+queued note is range-checked for that reason. **It said it, and it said
+one more thing first** ([B99](bugs.md)): *"I do get miss sounds, just not
+hit sounds."* Every note shorter than one mixer block — which is every
+percussive effect the ROM has, six of the twenty-three — released from an
+envelope still at zero and was silent, with the ops, the queue and the
+gate log all correct. That is a defect in the **engine**, not the port,
+and no mock could have seen it: the mock records what a program asked for
+and the ask was right. `tests/test_sound_engine.c` is the answer —
+`devices/picocalc/sound.c` compiled on the host against the SDK stubs,
+reading the ring the DMA would play, the pattern `test_screen_refresh`
+already uses. With it fixed the run passes: knight, wraith and spider
+told apart by ear, and the heartbeat under it.
+
+**M7 — the cartridge, and two things come back out: the attract mode and
+the wizard's voice. Written 2026-09-06, five board runs, 177 tests.**
+M6 built the demo and left it on a side entrance; M7 set out to make it the
+front door, which is the shape `ONCE.ASM` had all along, and **finished by
+taking it out altogether** ([B108](bugs.md)) — the last section here is why.
+What follows is what the milestone did and found, because five of its six
+defects are in the game a player still plays. **All three of the things it
+set out to add are ROM instructions this port had read and not used:**
+
+- **`daggorath` opens on the attract mode.** `ORG $C000 / ONCE EQU * /
+  DEMO LDU #DEMO10` — the cartridge's cold start *is* the demo, and
+  `GAME` is the four instructions below it that nothing falls into.
+- **Any key starts a real game.** `COMMON.ASM:CLK50` is the ABORT that
+  `DEMO10` arms, and it is not a quit: in autoplay the clock interrupt
+  strobes the keyboard itself and, on any key, writes `#GAME` over its own
+  return address (`LDX #GAME / STX 10,S`), so the `RTI` lands in a new
+  game. A keystroke does not stop the attract mode, it starts playing.
+- **The demo loops.** `HUMAN.ASM:PLAY20` with `AUTPTR` past the end:
+  `SWI WAIT / SWI WAIT / JMP DEMO`, and the ROM's own comment is *"then
+  restart the whole shebang!!!"*.
+
+**The one deviation is ESC and it is the one this port already had.** The
+ROM's abort has nowhere to go but another game; a Logo program has to give
+the console back. So ESC leaves and every other key plays — the same
+addition, for the same reason, that `dagg.key` has owned since M2.
+
+**It cost two procedures and the shape is COMINI's.** `daggorath.once` is
+COMINI through SCHED — one pass, one dungeon — and `daggorath` is the loop
+the ROM builds out of those two jumps, with `dagg.again` standing for both
+of them and `dagg.autflg` saying which entry the next pass takes.
+`daggorath.game` is `ONCE.ASM:GAME`, the other entry, because sitting
+through the wizard is not what you want the fiftieth time; `daggorath.demo`
+keeps its old meaning — the attract mode alone, any key ends it — which is
+the whole of what the new `dagg.arcade` flag buys. **186 procedures of
+192.** (**The loop survives the removal and the three entries do not**:
+`daggorath` is `ONCE.ASM:GAME` and the only way in, and the loop stays
+because one of the ROM's three restart paths — `DEATH`'s — is a player's.)
+
+**Two things had to change underneath it, and both are the loop finding
+state that only worked once.** `dagg.demo` used to *overwrite* `dagg.gamdat`
+with DEMDAT and `daggorath.demo` put it back on the way out — fine while the
+demo could only end by quitting, and wrong the moment a key turns the demo
+into a game without leaving `daggorath`, which would have dealt the player
+DEMDAT's iron sword. It is **two tables and a flag** now, which is what
+`GAME20` is: `LDU #DEMDAT` from DEMO10, `LDU #GAMDAT` from GAME10, nothing
+downstream knowing which it got and nothing to put back. And `clock` is
+hoisted out of the pass into the loop, because it saves the speed it
+*found* — a second call would find the fast clock it set itself and
+`restore.clock` would have nothing to give back ([B50](bugs.md) one path
+over).
+
+**The restart sweeps, and that is `CINI10` rather than a precaution.**
+COMINI zeroes $0200–$4000 on *every* entry, demo or game; the pool has no
+automatic collection, and a pass leaves a dungeon, 66 OCBs and a creature
+table behind it. One `recycle` at the head of each pass — ~4 ms against a
+demo that runs for two minutes — is the same argument [B97](bugs.md) made
+for the one in `dagg.enter`, and without it an attract mode left running
+overnight is [B97](bugs.md) again with nobody typing.
+
+**And a second sweep, which the demo had to ask for**
+([B101](bugs.md)). With B100 fixed the demo started and then died on its
+*first command*, "Out of space in `dagg.exbar`". `dagg.exbar` is innocent;
+what is missing is a sweep between **building** a pass and **playing** it.
+Init spends ~2,700 atom bytes of garbage — **1,932 of them
+`dagg.setup.heart`**, whose two costumes are long hex rows `putsh` has
+already copied into the device — and B97's `recycle` runs *after* a
+command, never before the first one, so a pass handed the player **120
+atom bytes**. **The demo found it because the ROM's opening is the worst
+first command there is**: `AUTTAB` starts with `EXAMINE`, and `dagg.exbar`
+builds a 40-character rule one `word` at a time — 1+2+…+40 characters of
+intermediates, ~1,144 atoms. A player who typed `EXAMINE` first would have
+hit the same wall any time since M3; nobody did, so it sat there. One more
+`recycle`, at the end of `daggorath.once`, takes handover to **3,128**.
+
+**That it reproduces on the host is the part worth keeping.** The cell
+budget is per board and `test_the_game_leaves_room_to_play_in` does that
+arithmetic — but `mem_free_atoms` caps at `min(node_bottom,
+LOGO_ATOM_LIMIT)`, `LOGO_ATOM_LIMIT` is 32 KB, and this game's node pool
+never grows down that far, so **the atom table is the same size on a Pico
+2 W as on the host**. The second budget in §14 needed no per-board table,
+only a test that walks the path.
+
+**And the milestone opened with a defect the milestone before it could not
+see** ([B100](bugs.md)): `daggorath.demo` **never reached a view at all**,
+on any board or host, from the day M6 shipped it. `DEMDAT` is three objects
+where `GAMDAT` is two, so the demo needs 66 OCBs where a game needs 65, and
+`dagg.ocbmax` was 65 — under a comment that reads *"The ROM has room for 72
+(`OCBLND RMB OC.LEN*72`) and creates 65"*. The ROM's number was read,
+written down, and then not used; the table was sized to the count one path
+happens to stop at. **M6 shipped two attract tests and neither ran
+`daggorath.demo`** — both drove `dagg.demo` and `dagg.autplay` against a
+synthetic fixture. That is [B91](bugs.md)'s lesson and M1's five green
+generator invariants for the **third time in this design**: *the suite was
+thorough about the pieces and had nothing to say about the path*. The first
+thing M7 wrote was the twin of `test_the_game_starts_and_stops` that should
+have existed, and it failed. `test_every_object_in_the_dungeon_is_created_and_creature_owned`
+had the 65 as an invariant — *"there is room for GAMDAT's two on top,
+exactly"* — which is the defect written down as a test, and it now asserts
+`CD.ASM`'s 72.
+
+**What the host cannot reach, named rather than assumed.** Every half of
+the handover has a test — the key sets `dagg.again` and clears `AUTFLG`,
+the exhausted table sets both, the drain empties the ring, `daggorath`
+runs a demo pass end to end and `daggorath.game` a game one — but **no
+test joins two passes**, because the abort drains the ring by design and a
+second pass therefore has no key left to end it. So the loop's own
+`until` is the one thing here proven only by its parts, which is precisely
+the shape of [B100](bugs.md); it is written down instead of stubbed
+around.
+
+**The board run closed the seam and found two more, and both were the same
+mistake as B100: a ROM number read and not used.** The report was one
+sentence — *the demo ends really quickly, the demo player killed, and
+instead of looping, the game ends* — and it is two defects end to end.
+
+**The demo was dealt a real game's power** ([B102](bugs.md)).
+`COMDAT.ASM`'s ONCE-only initialization table ends `FCB $17,160 ;PPOW`,
+which is $17A0 = **6048**, and `ONCE.ASM:GAME10` does not *set* the power,
+it **corrects** it: `CLR PPOW` clears one byte, the high one, leaving $00A0
+= 160. `DEMO10` branches straight to `GAME20` and never reaches that
+instruction. So a game starts at 160 and the attract mode starts at 6048 —
+**the demo is not a better player than you, it is a player with thirty-seven
+times the power**, and that is the entire reason seventeen commands on level
+three do not kill it. This is [B83](bugs.md) again, in the same eight bytes:
+that was the demo's (12,22) being the init value `GAME10` overwrites, and
+this is the line below it.
+
+**A death let go of the cartridge instead of restarting it**
+([B103](bugs.md)). `HUPDAT.ASM:DEATH` ends `CLR FAINT / DEC AUTFLG / BRA *`
+and **the ROM's own comment on the first two is *"force GAME restart on
+char"***: `CLK50` will not scan the keyboard while FAINT is set, AUTFLG
+arms the same abort the attract mode runs under, and the machine then spins
+with no task running — the death screen *holds*, and the next key lands in
+`GAME`. The port had the message and the `BRA *` and neither instruction in
+front of it. **`PINCAN.ASM:WINNER` is the control**, and it is why this is
+one flag rather than a property of the pass: its `BRA *` has neither
+instruction above it, so a *win* freezes for ever where a *death* goes
+round. That also folds `daggorath` and `daggorath.game` into one
+`dagg.cartridge` loop, which is `ONCE.ASM`'s own shape — a death restarts
+the cartridge whichever of the two entries started it.
+
+**And the comments turned out to be the memory** — the most useful thing
+this milestone learned and the one that generalises past this game.
+Writing B102 and B103 up in the prose style the rest of the file uses broke
+**twenty-two tests** with "Out of space", and the only difference between
+green and broken was **28 lines of comment**. `load` defines every
+`to ... end` block through `proc_define_from_text`, which lexes with
+`preserve_comments` set, so **a comment inside a procedure body is stored in
+that body** and costs atoms and cells for as long as the game is loaded,
+while a comment *between* procedures costs nothing. The measurement: 1,748
+free atom bytes with the prose inside the bodies, **3,236** with the same
+prose one line higher — about **53 bytes and 15 cells a line**, against the
+~1,144 atoms `EXAMINE` alone needs ([B101](bugs.md)). Nothing was cut; it
+all sits above its `to`. `test_the_loaded_game_leaves_atoms_to_play_with` is
+now the guard, beside the cell budget it belongs with, and it names the
+cause in its own comment.
+
+**The second board run found the one that had been there since M4, and it
+was a whole section of the design being wrong** ([B104](bugs.md)). The
+report: *"the creatures are not in the correct places that the recorded demo
+expects. I found the same problem with the regular gameplay. Is there a
+problem with the pseudo-random seeded number generator?"* The generator was
+never wrong — `test_the_carve_reproduces_the_1982_dungeon` pins it
+cell-for-cell to the published mazes. **It was not being used.** `CBIRTH`
+draws through `FNDCEL → RNDCEL → RANDOM`, which is the routine the carve is
+built out of, running on the one 24-bit SEED the whole cartridge shares and
+**never re-seeded between the maze and the monsters**. The only thing
+between them is `DGEN90` — `LDB SECOND / SWI RANDOM / DECB / BNE`, the
+seconds counter spent as draws — and on the entry every game makes there is
+no second to spend: COMINI has just zeroed all of RAM, IRQSYN started the
+clock three instructions earlier, and `GAME20` calls `NEWLVL` at once.
+
+**So level one's twenty-four creatures are the same twenty-four cells in
+every copy of the game ever sold**, and that is what makes a
+seventeen-keystroke recorded demo possible at all. `Levels/Levels.html` — in
+this repository since M1, read for its mazes and not for its prose — says it
+outright: *"when you start the game the creatures on level-one will start
+off as shown"*, and *"after that, creatures will be randomized on each new
+level"*, which is `DGEN90` exactly. **It prints creatures for level one and
+for no other level.** Design §7.2 had claimed the opposite in as many words:
+*"creature positions … were never reproducible."* Read once, reasoned about
+once, used never — [B100](bugs.md) and [B102](bugs.md) for the third time in
+one milestone.
+
+`test_level_one_is_born_where_the_1982_game_was_born` pins all twenty-four
+cells **in `NLVL30`'s birth order** — most ferocious first, which is the
+map's own B1/B2/G1… numbering, which is the CCB table — and getting a set of
+cells right is one thing where getting them right *in that order* is what
+says the draws are the ROM's draws. **One thing does not reconcile and is
+written down rather than smoothed over**: the 6809's `DECB / BNE` is a
+post-test, so a literal reading of a zero counter is **256** draws and not
+none — and 256 draws do not produce the published level one, while 0, 2, 4
+and 6 all do. The ROM's own comment on that instruction says *"use the jiffy
+counter"* where the operand says `SECOND`. The published map is the only
+observation of the thing being modelled, and it is what the port follows.
+
+**And it did not fit.** The fix costs 99 cells at load, and that was enough
+to flip all four full-game tests to "Out of space" — which bracketed the
+attract mode's peak at **between 6,953 and 7,051 free cells** and is
+[B105](bugs.md): `GAME40` opens the demo on the whole 32 × 32 map with level
+three's creatures already under it, nothing sweeps between, and the budget
+test measures a *game's* start rather than a demo's. It was landed by moving
+`dagg.enter`'s sixteen in-body comment lines above its `to`, which bought
+back **343 cells and 1,220 atom bytes** — the comment finding above, now
+paying for a fix rather than causing one.
+
+**The third board run found the other half of the same bug** ([B106](bugs.md)).
+The report: *"the creatures are still not in the correct places for the
+demo"* — gameplay now right, the attract mode still wrong — with two facts
+about the original that turn out to be checkable: the demo's first `ATTACK
+RIGHT` lands on a **giant**, and the giant's peek-a-boo is already visible one
+command earlier, after `PULL RIGHT SWORD`. B104 fixed where creatures are
+*born*. This is everything they do afterwards. **`RANDOM.ASM` is the only
+source of randomness the cartridge has**, and five run-time rolls were still
+on Logo's `random`: `CMOV70`'s preference walk, `CWLK20`'s approach sound,
+`PATT22`'s darkness gate, `ATTK30`'s hit roll and `CGEN`'s new creature type —
+each of them one `SWI RANDOM` in the ROM. A generator no seed can put back
+means the world is a different world every time it is built, and **a recorded
+demo played back against a different world is a recording of nothing**. That
+determinism is not a side effect of the ROM's design; it is the mechanism the
+attract mode rests on. `test_the_world_replays_from_the_roms_one_seed` is now
+the property and `test_every_run_time_roll_draws_from_the_seed` is the same
+fact one site at a time; both fail against the old code. `SOUNDS.ASM` stays on
+`random` on purpose — `BDLBDL`'s squeaks come off `SNOISE`'s own `SNDRND`, a
+second generator the ROM keeps for the DAC, which nothing in the dungeon reads.
+
+**Replaying the generator is necessary and it is not sufficient, and that is
+what ended the mode** ([B108](bugs.md), closing B107 and B105). The
+whole demo was driven off `dagg.now` on the host — seventeen `AUTTAB` commands,
+the tenth queue, the creature turns, no real waiting — and `DGEN90`'s spin
+searched from 0 to 12: **no spin puts a giant on the player at the attack.** So
+the gap is not the spin. Two things are: the ROM runs creature TCBs in the
+TENTH queue's order where this port walks CCB slots 1..32, so the same
+generator at the same cadence is consumed in a different order; and the demo's
+own `SECOND` is not nought the way a game's is, because `DEMO10` spends a fade,
+two messages, two 81-jiffy `WAIT`s and a fade-out — provably 190+ jiffies —
+before `GAME20`. **The exact count cannot be derived from the listing**: it
+turns on `WIZZES`'s per-frame drawing cost against a 60 Hz `SYNC`, which is
+6809 time the source does not state. Static bounds give 3 to 5.
+
+**So the attract mode came out, and the reasoning is the same one that would
+have kept it.** Closing the gap means rebuilding the scheduler as `QUESCN`'s
+linked list *and* shipping a constant the listing does not contain — a large
+change bought with a magic number, for a mode a player never asks for — and a
+demo that types the ROM's keystrokes into a different dungeon is a recording
+of nothing, so a plausible-looking one is worse than none. Out went
+`dagg.demo`, `dagg.autplay`, `daggorath.demo`, `daggorath.game`, `AUTTAB`,
+`DEMDAT` and the five `dagg.aut*`/`dagg.arcade` globals; **`daggorath` is
+`ONCE.ASM:GAME` and the only entry**, with the pass loop kept for `DEATH`'s
+restart. Eight tests went and two were rewritten to a player's keystrokes.
+One of those two lost its bite and was re-gated rather than left looking
+green: B101's test found the missing sweep *because the demo was the
+expensive pass* — level 3 under a whole-map render, where a game builds level
+1 — so the unswept build no longer runs `EXAMINE` out of room on the host.
+Measured both ways, the sweep is worth **2,840 atom bytes** (5,656 free at
+the handover against 2,816), and the test now gates that figure at 4,000 and
+fails again without it. This also closes [B105](bugs.md), which wanted a
+per-board gate on the demo's peak: the expensive path is gone and the game's
+own budget test is the whole gate again. **176 tests.**
+
+Two things reported against the demo turned out **not** to be bugs, and both
+are the ROM being faithful. An attacker you cannot see but can hear: level
+three holds eight scorpions, `SCORP`'s magic offense is 255, and `CMRDRW` draws
+any creature with magic offense under the MAGIC light — so `DEMDAT`'s **pine**
+torch cannot see one hitting you. And an unseen killer at the ladder on level
+one, after a climb down and back: level one is born with nothing magical on it,
+but `CREGEN` adds a creature of a random type in 2..9 every five minutes, three
+of those eight are magical, and it increments the *matrix* rather than the
+dungeon — so the new one is born the next time you walk into the level, which
+is what climbing back up is.
+
+**Two changes to the screen closed the milestone, and neither is a defect.**
+The CoCo puts its status line on row 152, the last row of its bitmap and hard
+against its four text lines; ours had been two character rows up from the
+equivalent place, floating in the gap. It is now on **row 23** — turtle
+`y = -75`, device rows 230–239, the last of the band's twenty-four — with the
+heart turtle moved to the same row. And the view itself, which had been pinned
+to the top of the band with all forty rows of the 1.25× mapping's slack below
+it, is now **centred in the band**: the transform's `c` is the y its scaling
+pivots about, so 65 → 40 moves that pivot from device row 95 to row 120 and the
+190-row view spans rows 25–214 at every range, not only at full scale. One
+consequence is recorded rather than left misleading — the map is 320 × 224 and
+now stops short of the status row instead of painting over it, so the comment
+saying the bar is hidden *because the map covers it* is wrong; the map screen is
+bare because `MAPPER` opens with `clean` and nothing redraws the bar, and
+`USC210`'s `CLR HEARTF` is a real `ht` on turtle 1. §4.1 and §6.2 carry the new
+numbers. **Both confirmed on a Pico Plus 2 W 2026-09-06** — the view and the
+turn animation read correctly in their new place, and the status line sits
+where the CoCo's does.
+
+*Gate: met, by answering no. The gate was "a board run — whether an attract
+mode reads as one is a thing you watch", and three runs watched it: it does
+not, and the last of them priced what closing that would take. Each run also
+produced a defect the host could not have found — B102/B103, then B104, then
+B106 — and the pattern held every time: a ROM fact read, reasoned about, and
+then not used. **That is the argument for building a deterministic path
+through a whole game, and it is not the argument for shipping one.** What a
+board is still owed is an ordinary play session against the fixes that outlived
+the demo, since every one of them was reached through the attract mode and none
+of them is the attract mode's. **Three of the five are what a player can
+actually reach**, and the count in an earlier draft of this line was wrong:
+[B102](bugs.md)'s fix was one `make "dagg.ppow 6048` inside `dagg.demo` and it
+left with the demo, and [B100](bugs.md)'s survives but is inert — `dagg.ocbmax`
+is the ROM's 72 where a game creates 65, so no player path reaches the entry
+that overran. That leaves [B101](bugs.md), [B103](bugs.md) and
+[B104](bugs.md). **B101 confirmed on a Pico Plus 2 W 2026-09-06**: `EXAMINE`
+typed as the first command of a pass, which is the crash itself, and the torch's
+`CHUCK` audible with it ([B98](bugs.md), [B99](bugs.md)). Still open: B103's
+death restart and B104's level-one creature cells.*
+
+**And the session found something no board run before it could have**, because
+every earlier one was a recording that ended before anything killed anybody:
+*"a viper can kill the player in the original but it will not in the port"*
+([B109](bugs.md)). `:dagg.pace`, the M4 knob, was scaling the attack delay along
+with the movement delay, and because damage recovery accelerates with the heart
+(`HSLOW` rides `HEARTR`, which falls as you are hurt) halving a creature's
+attack rate does not halve the time it takes to kill you — it takes it to
+infinity. Twenty simulated seeds: 20/20 deaths at pace 1, 0/20 at pace 2. The
+knob is now the **movement** delay only, which is what the ROM's own control
+flow says it always should have been — `CMOV30` jumps past `CMOV90`'s `PUPDAT`,
+so a creature standing on you does no redraw and was never throttled by one.
+**This is the milestone's real lesson about the demo, stated from the other
+side:** removing the attract mode did not cost coverage, it bought it. A
+recording exercises the paths a recording reaches; a game is the only thing
+that can report that it cannot be lost. **Confirmed on a Pico Plus 2 W the same
+day** — *"the game is behaving correctly"* — which also puts B103 within a
+player's reach for the first time, since the way to a death screen is to die.*
+
+**And the same session took the wizard's voice out**, which is the second
+thing the milestone removed and the only one that was never a defect: *"take
+the talking out of the game, the original did not have it."* M6 shipped `say`
+on the three speeches and the death message as a **flagged, switchable**
+addition — design §9.5's own words — and the flag is exactly what the removal
+answers. **A switch does not make an addition safe, because the default is what
+the game is**: nobody types `make "dagg.voice "false` before `daggorath`, so
+the only Daggorath anybody played was the one with a voice the cartridge never
+had. Gone: `dagg.voice`, the three `say` sites, and `setvoice` out of
+`dagg.setup.sound` — `setwave` and `setenv` stay, because those are the PSG and
+the PSG is playing `SOUNDS.ASM`. The four lines still print, unchanged, which
+is all `PATTK.ASM` and `HUPDAT.ASM` ever did with them.
+`test_the_wizard_speaks_and_can_be_told_not_to` became
+`test_the_wizard_prints_his_speeches_and_says_none_of_them` and now asserts
+both halves — the words arrive and nothing reaches the speech engine — which
+also keeps the only assertion in the suite on the two wizard speeches
+themselves. **Put beside the attract mode it is the same removal twice, from
+opposite ends**: the demo went because it could not reproduce the cartridge's,
+and the voice went because there was no cartridge behind it to reproduce.
+**What is left of this port's own additions is `:dagg.pace` and ESC**, and both
+are there because a Logo program on this board is not a cartridge on a CoCo —
+which is the only ground an addition to a faithful port gets to stand on.*
 
 A faithful port of the 1982 DynaMicro game from **its own 6809 source**, 9,866
 lines of it, kept under `docs/DungeonsOfDaggorath/` with the grant of licence
@@ -2470,7 +3580,10 @@ block at the video base itself — so the status line and the inventory listing
 are `write` in the graphics window, not text-screen text, and the screen never
 changes mode. The 8 × 10 glyph over a 320 × 240 band gives **exactly 40 columns
 by 24 rows**: the same 40 as the text screen, and exactly the rows the split
-screen hides, so the ROM's 19-row overlay lays out unchanged. It is also nearly
+screen hides, so the ROM's 19-row `EXAMINE` overlay keeps all nineteen of its
+rows — its *columns* are recomputed for 40, because every one of them is a
+fraction of the screen width rather than a fixed offset (both headers centred,
+the rule the full width, the second entry on a line half way across). It is also nearly
 free — `write` is one statement per *string* into a stack buffer, so a
 40-character status line is ~50 µs of a 38.8 ms redraw and allocates nothing —
 and it never needs erasing, because the redraw's `clean` already did it
@@ -2541,8 +3654,9 @@ bar — `HEARTR = 64P/(P+2D) - 19` jiffies, 80 bpm at the start, faint at 3, dea
 when damage passes power — and every long effect calls the scheduler between
 its steps so the beat keeps time through it, which is what the CoCo's IRQ did
 for free while the sound routine blocked the game. M6's gate is a **listening
-test** against a recording of the original. `say` is adopted for the wizard's
-three speeches as a flagged, switchable addition.
+test** against a recording of the original. `say` was adopted for the wizard's
+three speeches as a flagged, switchable addition **and taken back out at M7 on
+the user's call** — the cartridge printed them and said nothing.
 
 **And the level graph is four rows of a table.** `VFTTAB` plus `PCLIMB`'s one
 rule — down a hole or a ladder, up a ladder only — gives 1↔2 and 2↔3 by ladder,
@@ -2551,14 +3665,45 @@ rule — down a hole or a ladder, up a ladder only — gives 1↔2 and 2↔3 by 
 and 4 → 5 by holes that cannot be climbed back up. None of it is a special case
 in the ROM, and none of it will be here.
 
-M0, M1, M1a (the dot fade, optional) and M2–M6, gates in the design's §15. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) goes first** (decided 2026-09-02): its M0–M2 are the procedure table, the opaque `write` and the dashed pen, and P17 M1 wants all three — a status line it can invert, a file it can grow into, and a fade it can draw the way the ROM draws it. **All three landed the same day**, so nothing here is waiting on the interpreter any more; §8's three fallbacks and the milestone gated on a photograph go with them, because the dotted fade is now what a plain `fd` does. P18 M3 and M4 run the other way round and wait on P17's own M0 and M6. [B65](bugs.md) blocks `ZSAVE` to the internal
+**M8 — the wait moved out of `load`. 2026-09-08, host only, 178 tests.** The
+file ended its maze section with `dagg.rtabs` and `dagg.gen 0`, so the RNG
+tables (0.96 s on a Pico 2 W) and level one's carve (2.64 s at worst) were
+built as the loader ran — **3.6 s in the middle of a file listing, with
+nothing on the screen to say why**, which reads as a file that will not
+finish. Both moved into the game: `dagg.gen` builds the tables on its first
+call, and `daggorath.once` shows `PREPARE!` before it makes the objects and
+enters level one, so the same 3.6 s lands exactly where `PCLI20` already puts
+it on a `CLIMB` — on a cleared band with one word on it, and the player
+spends the wait getting ready. Nothing about the dungeon changes: the carve is
+the same carve and `test_the_carve_reproduces_the_1982_dungeon` still pins it
+to the 1982 maps. **The fixture had been resting on the load-time carve
+without saying so** — nineteen tests failed the moment it went, because
+`build_zero_maze` relied on `:dagg.mzlvl` already being 0 for `dagg.enter.level`
+to leave a synthetic maze alone, and the combat and `CREGEN` rolls relied on
+`load` having left the RNG somewhere. `setUp` now enters level one itself,
+which is the workspace a running game always has and the thing the fixture
+should have been asking for; `test_the_game_and_not_the_load_builds_the_dungeon`
+records what `load` leaves before it does.
+
+M0 through M6 done — the design's §15 is complete. M1a (the grey ramp,
+optional and decided by a pair of eyes) is the only thing left in it, and
+M6's gate, a listening test, is the only gate a board still owes. **[P18](#p18--interpreter-work-for-dungeons-of-daggorath) went
+first** (decided 2026-09-02): its M0–M2 are the procedure table, the opaque
+`write` and the dashed pen, and P17 M1 wanted all three — a status line it can
+invert, a file it can grow into, and a fade it can draw the way the ROM draws
+it. **All three landed the same day**, which is what let M1 land the same day
+too; §8's three fallbacks and the milestone gated on a photograph go with
+them, because the dotted fade is now what a plain `fd` does. P18 M3 and M4 run
+the other way round and wait on P17's own M0 and M6. [B65](bugs.md) blocks `ZSAVE` to the internal
 filesystem at M5, so it writes to `/sd` until that is fixed.
 
 
 ### P18 — interpreter work for Dungeons of Daggorath
 
-Status: **M0, M1 and M2 done 2026-09-02** (opened the same day); M3 and M4
-still gated on P17's own milestones and not started. Five items, all of them
+Status: **M0, M1 and M2 done 2026-09-02** (opened the same day); **M3 and M4
+are both closed as not needed** — P17 M0 measured the list walk and did not
+ask for arrays (2026-09-02), and P17 M6 built the sound the hard way and did
+not ask for a glide (2026-09-05). Five items, all of them
 asked for by P17 and none of them P17-shaped: every one is a general capability
 that happens to have found its first customer. No design document — these are
 primitives and a constant, not a subsystem.
@@ -2607,8 +3752,15 @@ a list walk is too slow — building arrays before that runs would be exactly th
 speculative primitive this tree keeps refusing. M4 waits on P17 M6 finding the
 sweeps awkward in practice.
 
-    P18 M0, M1, M2  →  P17 M0  →  [P18 M3 if M0 asks]  →  P17 M1 …
-       (done)                      [P18 M4 if P17 M6 asks]
+**P17 M0 answered it, and the answer is that M3 is not needed.** Confirmed on
+a Pico Plus 2 W 2026-09-02: `foreach` walked a 184-point worst-case scene in
+97.8 ms at 150 MHz and 53.2 ms at 300 MHz — inside the 100 ms gate, with zero
+`nodes`/`atoms` allocated over 1,000 warm walks. §6.3's own list walk is the
+lever that would have asked for arrays, and it did not ask.
+
+    P18 M0, M1, M2  →  P17 M0  →  P18 M3 not needed  →  P17 M1 …
+       (done)            (done, foreach)   P18 M4 not needed either
+                                           (P17 M6, `play` is a queue)
 
 ---
 
@@ -2882,6 +4034,20 @@ chain is actually awkward.
 
 *Gate: P17 M6 asking for it, with the `tick`-interleaved version built and
 found wanting.*
+
+**P17 M6 answered it on 2026-09-05 and the answer is no.** The
+`tick`-interleaved version was never built, because there is nothing to
+interleave: `play` appends a note sequence to a voice's queue and returns
+at once, so a sweep is one statement already — `(play [1 5] :list)` — and a
+1.27-second growl costs the scheduler nothing. What §9.4 was worried about
+was a chain of `sound` calls with `wait` between them, which is what a
+sweep would have to be **without** a queue; the queue is what removes the
+interleaving and a glide would not have removed anything more. **What a
+glide would buy is the two things `play` cannot spell**, and both are
+small: its lowest note is c1 (32.7 Hz) so `BEOOP`'s bottom five steps
+clamp, and its shortest is 25 ms so `SQUEAK` (14.3 ms) collapses to one
+note. Neither is worth a new `SoundEvent` kind. **This milestone is closed
+as not needed**, the same as M3.
 
 
 ---
