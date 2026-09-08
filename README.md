@@ -121,6 +121,13 @@ per ear, each with its own waveform (`setwave`) and ADSR envelope (`setenv`).
 `play` queues a background melody in note notation that goes on playing while
 your program runs.
 
+`say` speaks text out loud through a built-in formant synthesizer — no sample
+data and no speech ROM, just spelling turned into phonemes and phonemes into
+sound, in the background while your program keeps running. `phonemes` and
+`sayphonemes` let you see and override the pronunciation it chose,
+`speaking?` tells you when it has finished, and `setvoice` picks who is
+talking.
+
 ### The editor
 
 <!-- SHOT: editor -->
@@ -192,6 +199,8 @@ the bootloader so the next UF2 is a drag away.
 |---|---|
 | `asteroids` | The 1979 vector arcade game, drawn as vectors: `fd`/`rt` with the pen down *is* a display list. Rocks, splitting, a shooting saucer, hyperspace, the heartbeat that speeds up as the board thins, and a top-ten score table that survives the power switch. |
 | `battlezone` | The 1980 vector tank game, in 3D: a wireframe plain that wraps, cubes and pyramids projected from four ground columns each, a mountain range and a crescent moon at infinity, and two treads on four keys -- `1`/`Q` the left tread, `0`/`P` the right, one key per tread per direction the way the cabinet's two sticks worked. Four enemies come at you in turn -- a tank, a missile that kills by arriving, a supertank and a saucer worth 5,000 -- and being hit shatters the periscope until your next tank. Radar, an engine idle that revs with the treads, an alarm whose tempo closes as the enemy does, and a top-ten score table. Steer with the arrows or with one key per tread, whichever suits — `C` on the title screen picks. Needs the fast clock: it asks the board for 300 MHz and says so rather than playing badly if the board will not take it. |
+| `berzerk` | The 1980 raster arcade game, drawn back as vectors: a five-by-three grid of electrified rooms, robots that talk before they die, and Evil Otto — the smiley face that walks through walls and gets faster the longer you stay in a room. Speaks through the built-in synthesizer, the way the Vectrex port did. |
+| `daggorath` | The 1982 first-person dungeon crawl, ported from its original 6809 source: a wireframe maze seen from inside it, drawn one visible wall at a time, that keeps moving while you type — creatures walk, your torch burns down and your heart beats whether or not you've decided what to do next. Turn-driven rather than a frame loop, the first game in the tree that is. Needs a Pico 2 W or Pico Plus 2 W (not the Pico 2) and the fast clock. |
 | `temple` | The Snake Temple, after RAX's Oric BASIC 10-liner: a dark labyrinth crawl drawn entirely on the text screen -- no turtle, no sprites, no tiles, just `setcursor` and `type`. |
 | `ttt` | Tic-tac-toe, for a quieter afternoon. |
 
