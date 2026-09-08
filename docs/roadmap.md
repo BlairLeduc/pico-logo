@@ -2534,7 +2534,11 @@ creatures were placed by Logo's `random` instead of DGNGEN's own generator,
 which §7.2 had said was faithful ([B104](bugs.md)), and then every
 *run-time* roll turned out to be on that same wrong generator, so the world
 a recorded demo was recorded against was a different world every time it was
-built ([B106](bugs.md)).** "No board needed for a Logo-only milestone" is what
+built ([B106](bugs.md)).**
+M8 moved the 3.6 s of RNG tables and level-one carve out of `load` and behind
+the game's own `PREPARE!` screen, 2026-09-08, 178 tests — host only, and a
+board run would be reading a wait rather than measuring one.
+"No board needed for a Logo-only milestone" is what
 this entry used to say, and it was wrong three times over — see M1 below.
 Pico 2 and Pico 2 W still to run M0, though nothing in the result is expected
 to be board-specific. `tests/logo/p17m0` timed all three of section 6.3's list
@@ -3660,6 +3664,26 @@ rule — down a hole or a ladder, up a ladder only — gives 1↔2 and 2↔3 by 
 `PATTK.ASM:ENDGAM`, who strips you and hangs a 200-unit weight penalty on you),
 and 4 → 5 by holes that cannot be climbed back up. None of it is a special case
 in the ROM, and none of it will be here.
+
+**M8 — the wait moved out of `load`. 2026-09-08, host only, 178 tests.** The
+file ended its maze section with `dagg.rtabs` and `dagg.gen 0`, so the RNG
+tables (0.96 s on a Pico 2 W) and level one's carve (2.64 s at worst) were
+built as the loader ran — **3.6 s in the middle of a file listing, with
+nothing on the screen to say why**, which reads as a file that will not
+finish. Both moved into the game: `dagg.gen` builds the tables on its first
+call, and `daggorath.once` shows `PREPARE!` before it makes the objects and
+enters level one, so the same 3.6 s lands exactly where `PCLI20` already puts
+it on a `CLIMB` — on a cleared band with one word on it, and the player
+spends the wait getting ready. Nothing about the dungeon changes: the carve is
+the same carve and `test_the_carve_reproduces_the_1982_dungeon` still pins it
+to the 1982 maps. **The fixture had been resting on the load-time carve
+without saying so** — nineteen tests failed the moment it went, because
+`build_zero_maze` relied on `:dagg.mzlvl` already being 0 for `dagg.enter.level`
+to leave a synthetic maze alone, and the combat and `CREGEN` rolls relied on
+`load` having left the RNG somewhere. `setUp` now enters level one itself,
+which is the workspace a running game always has and the thing the fixture
+should have been asking for; `test_the_game_and_not_the_load_builds_the_dungeon`
+records what `load` leaves before it does.
 
 M0 through M6 done — the design's §15 is complete. M1a (the grey ramp,
 optional and decided by a pair of eyes) is the only thing left in it, and

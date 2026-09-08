@@ -89,6 +89,14 @@ static void load_file(const char *path)
     fclose(f);
 }
 
+static float num(const char *expr);
+
+// What `load` left behind, captured before the fixture below enters level
+// one. `load` only defines things now; the wait it used to hold is the
+// first thing `daggorath` does, and the test below is what says so.
+static float loaded_mzlvl;
+static float loaded_rta_count;
+
 void setUp(void)
 {
     test_scaffold_setUp_with_device_and_hardware();
@@ -101,6 +109,12 @@ void setUp(void)
     // the device source altogether.
     set_mock_random_walking(true);
     load_file(DAGGORATH_SOURCE);
+    loaded_mzlvl = num(":dagg.mzlvl");
+    loaded_rta_count = num("count :dagg.rta");
+    // Level one, which is the workspace a running game always has and what
+    // every test below is written against: the maze carved, the carve cache
+    // holding it, and the RNG where DGNGEN left it.
+    run_string("dagg.gen 0");
     run_string("splitscreen  window");
 }
 
@@ -289,8 +303,8 @@ void test_a_climb_spends_no_nodes_and_no_atoms(void)
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(a20, a40, msg);
 }
 
-// RESTORE re-enters the level you are already on, and `daggorath` enters
-// level 1 that `load` has already carved. Both are free, and this is also
+// RESTORE re-enters the level you are already on, and a CLIMB back up
+// re-enters one you have already carved. Both are free, and this is also
 // what lets a save file carry a level number instead of a maze.
 void test_re_entering_the_level_you_are_on_does_not_recarve(void)
 {
@@ -338,6 +352,31 @@ void test_climbing_to_a_new_level_carves_that_levels_dungeon(void)
     run("dagg.newlvl 3");
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(fingerprint[3], num("dagg.mzsum"),
                                     "level 4 came back different");
+}
+
+// The wait moved. `load` used to build the RNG tables (0.96 s on a Pico 2 W)
+// and carve level one (2.64 s at worst) as the loader ran, with nothing on
+// the screen to say why -- three and a half seconds in the middle of a file
+// listing reads as a file that will not finish. Both are the first thing
+// `daggorath` does now, behind MISC.ASM's own PREPARE!, where the wait is a
+// moment to get ready.
+void test_the_game_and_not_the_load_builds_the_dungeon(void)
+{
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(-1, loaded_mzlvl, "`load` carved a dungeon");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, loaded_rta_count,
+                                    "`load` built the RNG tables");
+
+    // Back to what the loader leaves, then the whole path: ESC ends the pass
+    // at the first prompt, which is after the level exists.
+    run("make \"dagg.mzlvl -1  make \"dagg.rta []  make \"dagg.rtb []");
+    mock_device_set_input("\x1b");
+    run("daggorath");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(256, num("count :dagg.rta"),
+                                    "a pass did not build the RNG tables");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, num(":dagg.mzlvl"),
+                                    "a pass did not carve level one");
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(18072, num("dagg.mzsum"),
+                                    "a pass carved something else");
 }
 
 //==========================================================================
@@ -4840,6 +4879,7 @@ int main(void)
     RUN_TEST(test_a_climb_spends_no_nodes_and_no_atoms);
     RUN_TEST(test_climbing_to_a_new_level_carves_that_levels_dungeon);
     RUN_TEST(test_re_entering_the_level_you_are_on_does_not_recarve);
+    RUN_TEST(test_the_game_and_not_the_load_builds_the_dungeon);
     RUN_TEST(test_fpasag_is_the_empty_list);
     RUN_TEST(test_lwall_is_the_rom_shape);
     RUN_TEST(test_the_player_start_cell_is_the_corridor_the_map_draws);

@@ -36,6 +36,11 @@
 ; shipping five of them cost a quarter of the cell pool and a Pico 2 W
 ; could not load the file (B94). There is no second file to ship and
 ; nothing to open at run time.
+;
+; `load` only defines things. The carve and the RNG tables it needs are
+; the first thing `daggorath` does, behind the "PREPARE!" screen, which is
+; where three and a half seconds are a moment to get ready rather than a
+; file that will not finish loading.
 
 ;==========================================================================
 ; The scale tables -- design section 6.1, verbatim (also tests/logo/p17m0,
@@ -943,9 +948,10 @@ end
 ; before it asks for the new level.
 ;
 ; Nothing here is a transcribed constant that could be wrong.  The tables
-; are built at load by `dagg.slow8` -- the honest shift-at-a-time ROM
-; byte -- so they are derived from the original, not copied from it.  The
-; split itself was checked against that original over all 65,536 pairs,
+; are built on the first carve by `dagg.slow8` -- the honest
+; shift-at-a-time ROM byte -- so they are derived from the original, not
+; copied from it.  The split itself was checked against that original over
+; all 65,536 pairs,
 ; and the carve is pinned cell-for-cell to the 1982 dungeon by
 ; `test_the_carve_reproduces_the_1982_dungeon`.
 ;==========================================================================
@@ -973,6 +979,13 @@ to dagg.slow8 :a0 :a1 :a2
   ]
   output :a0
 end
+
+; Empty until the first carve asks for them -- dagg.gen builds them, and
+; nothing else in the file draws before a level exists.  512 shift-at-a-time
+; draws is ~0.96 s on a Pico 2 W at 300 MHz, and `load` is not where a
+; player wants to spend it (see daggorath.once).
+make "dagg.rta []
+make "dagg.rtb []
 
 ; TA[x] is the byte a register holding (0, x, 0) produces; TB[x] the one
 ; (0, 0, x) produces.  `fput` and not `lput`: lput copies the whole list
@@ -1174,19 +1187,19 @@ to dagg.doors
 end
 
 ; Which level :dagg.maze currently holds, so that re-entering the level
-; you are already standing on is free.  RESTORE and the load below both
-; ask for a level the maze may already be, and a CLIMB is the only thing
-; that has to pay.  Safe because nothing ever writes to the maze after
-; the carve: :dagg.maze has two readers (dagg.cell and dagg.map.row) and
-; no writer outside this section.
+; you are already standing on is free.  RESTORE and `daggorath`'s own
+; entry to level one both ask for a level the maze may already be, and a
+; CLIMB is the only thing that has to pay.  Safe because nothing ever
+; writes to the maze after the carve: :dagg.maze has two readers
+; (dagg.cell and dagg.map.row) and no writer outside this section.
 make "dagg.mzlvl -1
 
 ; CD.ASM's TIMBEG counters, through COMMON.ASM:CLK42's chain: TENTH rolls at
 ; 10 into SECOND and SECOND at 60 into MINUTE (ROLTAB).  Only SECOND is ever
 ; read -- DGEN90 spends it, and nothing else in the ROM touches it -- and it
 ; is declared up here rather than beside the rest of the clock because
-; `load` carves level one long before that section is reached.  dagg.tenth
-; is what turns them.
+; DGEN90 reads it on the carve, which is the first thing a game does.
+; dagg.tenth is what turns them.
 make "dagg.tenth.n 0
 make "dagg.second 0
 
@@ -1219,6 +1232,7 @@ make "dagg.mzs2 0
 ; is the only observation of the thing being modelled and it is what this
 ; follows; the discrepancy is recorded in design section 7.2.
 to dagg.gen :lvl
+  if emptyp :dagg.rta [dagg.rtabs]
   ifelse :dagg.mzlvl = :lvl [
     make "dagg.s0 :dagg.mzs0
     make "dagg.s1 :dagg.mzs1
@@ -1242,16 +1256,6 @@ to dagg.gen :lvl
   ]
   repeat :dagg.second [ignore dagg.rnd]
 end
-
-; 512 shift-at-a-time draws, ~0.96 s on a Pico 2 W at 300 MHz, once per
-; `load`.  It is the only place dagg.slow8 is used and the only reason
-; there is no transcribed table constant in this file.
-dagg.rtabs
-
-; Level 1, so that a freshly loaded workspace holds a real dungeon rather
-; than an uncarved grid -- which would read as open passage everywhere.
-; `daggorath` enters level 1 too and the cache above makes that free.
-dagg.gen 0
 
 ; The order-sensitive fold tests/test_daggorath.c pins the carve with.
 ; Kept mod 65521 so it is exact in single-precision floats: the widest
@@ -4255,6 +4259,13 @@ end
 ;
 ; GAME50 makes the initial view, fakes the prompt and falls into the
 ; scheduler, which is the last three statements here.
+;
+; PREPARE! goes up before the world is built and not just before a CLIMB.
+; This is the game's slow moment: the RNG tables (~0.96 s on a Pico 2 W)
+; and level one's carve (2.64 s at worst) both happen below, and they used
+; to happen at `load`, where the player is reading a file listing and has
+; nothing to get ready for. PCLI20 prints the same message one line before
+; it asks for a new level, and GAME20's NEWLVL is a new level.
 to daggorath.once
   make "dagg.row 16  make "dagg.col 11  make "dagg.dir 0
   make "dagg.ppow 160  make "dagg.pdam 0  make "dagg.objwt 35
@@ -4278,6 +4289,7 @@ to daggorath.once
   make "dagg.now ticks
   dagg.setup.sound
   make "dagg.level 0
+  dagg.prepar
   ; CINI40, then GAME20's NEWLVL, then GAME30, and that order is the game:
   ; the whole dungeon's loot exists before the level does, NLVL40 hands it
   ; to the creatures it has just given birth to, and only THEN does the

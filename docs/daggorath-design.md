@@ -609,7 +609,18 @@ the pause is for.
 
 Nothing in the file is a transcribed table that could be wrong: `dagg.rtabs`
 builds both from `dagg.slow8`, the honest shift-at-a-time ROM byte, in 512
-draws and ~0.96 s, once per `load`.
+draws and ~0.96 s, once.
+
+**Neither of those happens at `load`.** They used to: the file ended its maze
+section with `dagg.rtabs` and `dagg.gen 0`, so the tables and level one were
+built as the loader ran. That is 3.6 s in the middle of a file listing, with
+nothing on the screen to say why, and a wait a player cannot read is a file
+that will not finish loading. `dagg.gen` builds the tables on its first call
+instead, and `daggorath.once` shows `PREPARE!` before it makes the objects and
+enters level one — so the same 3.6 s lands where `PCLI20` already puts it on a
+`CLIMB`, on a cleared band with one word on it, and the player spends it
+getting ready. `load` only defines things now, and
+`test_the_game_and_not_the_load_builds_the_dungeon` is what says so.
 
 **And a carve allocates nothing.** One grid, allocated once and carved in
 place, and the values written are 0..255 — which the first carve interns and no
