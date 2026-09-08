@@ -56,7 +56,7 @@ static inline void tight_loop_contents(void) {}
 // GPIO function select.  sound.c routes two pins to the PWM slice at init;
 // the host build has no pins, so the call is dropped.
 #define GPIO_FUNC_PWM 4
-static inline void gpio_set_function(unsigned gpio, int fn) { (void)gpio, (void)fn; }
+static inline void gpio_set_function(unsigned gpio, int fn) { (void)gpio; (void)fn; }
 
 // The SDK's "put this function in RAM" attribute.  On the host it is the
 // identity, so a device file that decorates its IRQ path still compiles.

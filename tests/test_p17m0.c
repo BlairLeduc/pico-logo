@@ -335,8 +335,9 @@ void test_p17m0_script_runs_end_to_end(void)
 void test_p17m0_script_reports_q3_all_ok(void)
 {
     run("p17m0");
-    const char *report = mock_fs_get_file("p17m0.txt", false)->data;
-    TEST_ASSERT_NULL_MESSAGE(strstr(report, "FAIL"), report);
+    MockFile *report = mock_fs_get_file("p17m0.txt", false);
+    TEST_ASSERT_NOT_NULL_MESSAGE(report, "p17m0.txt was not written");
+    TEST_ASSERT_NULL_MESSAGE(strstr(report->data, "FAIL"), report->data);
 }
 
 // Same convention as P13 M0: a timing script that leaves manual refresh set
