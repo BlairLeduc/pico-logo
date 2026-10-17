@@ -208,7 +208,7 @@ Two behaviours worth knowing about when timing changes:
 
 ## See also
 
-- [hardware-notes.md §8](hardware-notes.md) — the PicoCalc's other peripherals,
+- [hardware-notes.md §6](hardware-notes.md) — the PicoCalc's other peripherals,
   and the same keyboard facts from the host's side.
 - [keyboard.h](../devices/picocalc/keyboard.h),
   [keyboard.c](../devices/picocalc/keyboard.c) — our driver.
