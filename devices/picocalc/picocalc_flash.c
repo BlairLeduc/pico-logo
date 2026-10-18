@@ -29,6 +29,7 @@
 #include "hardware/sync.h"
 #include "hardware/xip_cache.h"
 #include "hardware/regs/addressmap.h" // XIP_BASE
+#include "hardware/structs/qmi.h"     // QMI_ATRANSx
 
 #include <string.h>
 
@@ -41,16 +42,75 @@ _Static_assert(PICOCALC_FLASH_LFS_SIZE % PICOCALC_FLASH_SECTOR_SIZE == 0,
 _Static_assert(PICOCALC_FLASH_LFS_SIZE < PICO_FLASH_SIZE_BYTES,
                "PICOCALC_FLASH_LFS_SIZE must be smaller than the board's flash");
 
-void picocalc_flash_read(uint32_t offset, void *dst, size_t len)
+// Erase and program take physical (storage) offsets, but reads go through the
+// XIP window, which QMI address translation can move. UF2 Loader does: it
+// launches the app from a partition at physical 8 KB and maps that to XIP_BASE,
+// so a read at XIP_BASE + x lands on physical x + 8 KB. Reads must subtract the
+// window's base, and any part of the region past the window's end (the Plus 2 W
+// under UF2 Loader, whose partition stops 4 KB short of the top) is unreachable.
+// Under a direct flash the translation is the identity and this changes nothing.
+static bool g_window_known;
+static uint32_t g_window_base; // physical offset that XIP_BASE reads
+static uint32_t g_usable_size; // bytes of the region a read can reach
+
+// Physical offset read by XIP offset `x`, or UINT32_MAX if no read reaches it.
+// ATRANS0..3 each translate one 4 MB slice of chip select 0, in 4 KB units.
+static uint32_t xip_to_phys(uint32_t x)
 {
-    if (!dst || offset > PICOCALC_FLASH_LFS_SIZE ||
-        len > (size_t)(PICOCALC_FLASH_LFS_SIZE - offset))
+    uint32_t slice = x >> 22;
+    if (slice >= 4)
+    {
+        return UINT32_MAX;
+    }
+    uint32_t t = qmi_hw->atrans[slice];
+    uint32_t base = (t & QMI_ATRANS0_BASE_BITS) >> QMI_ATRANS0_BASE_LSB;
+    uint32_t size = (t & QMI_ATRANS0_SIZE_BITS) >> QMI_ATRANS0_SIZE_LSB;
+    uint32_t in = x & 0x3fffffu;
+    return (in >> 12) < size ? (base << 12) + in : UINT32_MAX;
+}
+
+static void find_window(void)
+{
+    if (g_window_known)
     {
         return;
     }
-    const uint8_t *src =
-        (const uint8_t *)(XIP_BASE + PICOCALC_FLASH_LFS_OFFSET + offset);
+    g_window_base = xip_to_phys(0);
+    // Trim whole sectors off the top until the region's last byte is readable
+    // where it was written.
+    uint32_t size = PICOCALC_FLASH_LFS_SIZE;
+    while (size > 0)
+    {
+        uint32_t last = PICOCALC_FLASH_LFS_OFFSET + size - 1;
+        if (last >= g_window_base &&
+            xip_to_phys(last - g_window_base) == last)
+        {
+            break;
+        }
+        size -= PICOCALC_FLASH_SECTOR_SIZE;
+    }
+    g_usable_size = size;
+    g_window_known = true;
+}
+
+uint32_t picocalc_flash_usable_size(void)
+{
+    find_window();
+    return g_usable_size;
+}
+
+bool picocalc_flash_read(uint32_t offset, void *dst, size_t len)
+{
+    find_window();
+    if (!dst || offset > g_usable_size ||
+        len > (size_t)(g_usable_size - offset))
+    {
+        return false;
+    }
+    const uint8_t *src = (const uint8_t *)(XIP_BASE + PICOCALC_FLASH_LFS_OFFSET +
+                                           offset - g_window_base);
     memcpy(dst, src, len);
+    return true;
 }
 
 // Erase exactly one sector at absolute flash offset `flash_offs`, bracketed by
@@ -84,8 +144,8 @@ bool picocalc_flash_erase(uint32_t offset, size_t len)
     {
         return false;
     }
-    if (offset > PICOCALC_FLASH_LFS_SIZE ||
-        len > (size_t)(PICOCALC_FLASH_LFS_SIZE - offset))
+    find_window();
+    if (offset > g_usable_size || len > (size_t)(g_usable_size - offset))
     {
         return false;
     }
@@ -103,8 +163,8 @@ bool picocalc_flash_program(uint32_t offset, const void *src, size_t len)
     {
         return false;
     }
-    if (offset > PICOCALC_FLASH_LFS_SIZE ||
-        len > (size_t)(PICOCALC_FLASH_LFS_SIZE - offset))
+    find_window();
+    if (offset > g_usable_size || len > (size_t)(g_usable_size - offset))
     {
         return false;
     }
