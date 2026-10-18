@@ -47,10 +47,18 @@ extern "C"
 #define PICOCALC_FLASH_SECTOR_SIZE (4096u)
 #define PICOCALC_FLASH_PAGE_SIZE (256u)
 
+    // Bytes of the region, from its start, that reads can reach. This is
+    // PICOCALC_FLASH_LFS_SIZE unless a bootloader's address translation ends
+    // the XIP window early: under UF2 Loader the Plus 2 W's partition stops
+    // 4 KB short of the top of flash, so the region's last sector is unreachable.
+    // All three operations below reject offsets past it.
+    uint32_t picocalc_flash_usable_size(void);
+
     // Read `len` bytes from the reserved region at `offset` (relative to the
-    // start of the region, 0 .. PICOCALC_FLASH_LFS_SIZE) into `dst`. This is a
-    // plain XIP-cached read; no special handling required.
-    void picocalc_flash_read(uint32_t offset, void *dst, size_t len);
+    // start of the region) into `dst`. A plain XIP-cached read, offset by
+    // wherever address translation put the XIP window (see picocalc_flash.c).
+    // Returns false on bad arguments.
+    bool picocalc_flash_read(uint32_t offset, void *dst, size_t len);
 
     // Erase the sectors covering [offset, offset+len). `offset` and `len` must be
     // sector-aligned and within the region. Erases ONE sector per interrupts-off

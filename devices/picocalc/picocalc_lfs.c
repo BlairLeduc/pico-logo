@@ -17,17 +17,36 @@
 // derived byte offsets are page/sector aligned as picocalc_flash_* require. The
 // prog buffer is LittleFS's static SRAM cache, satisfying "program source must
 // be in RAM".
+//
+// A block past picocalc_flash_usable_size() (the Plus 2 W's top sector under
+// UF2 Loader) is reported as LFS_ERR_CORRUPT, which LittleFS treats as a bad
+// block and allocates around. block_count stays the same under every boot path,
+// so one volume mounts under all of them.
+
+static bool block_usable(const struct lfs_config *c, lfs_block_t block)
+{
+    return (block + 1) * c->block_size <= picocalc_flash_usable_size();
+}
 
 static int bd_read(const struct lfs_config *c, lfs_block_t block, lfs_off_t off,
                    void *buffer, lfs_size_t size)
 {
-    picocalc_flash_read(block * c->block_size + off, buffer, size);
-    return LFS_ERR_OK;
+    if (!block_usable(c, block))
+    {
+        return LFS_ERR_CORRUPT;
+    }
+    return picocalc_flash_read(block * c->block_size + off, buffer, size)
+               ? LFS_ERR_OK
+               : LFS_ERR_IO;
 }
 
 static int bd_prog(const struct lfs_config *c, lfs_block_t block, lfs_off_t off,
                    const void *buffer, lfs_size_t size)
 {
+    if (!block_usable(c, block))
+    {
+        return LFS_ERR_CORRUPT;
+    }
     return picocalc_flash_program(block * c->block_size + off, buffer, size)
                ? LFS_ERR_OK
                : LFS_ERR_IO;
@@ -35,6 +54,10 @@ static int bd_prog(const struct lfs_config *c, lfs_block_t block, lfs_off_t off,
 
 static int bd_erase(const struct lfs_config *c, lfs_block_t block)
 {
+    if (!block_usable(c, block))
+    {
+        return LFS_ERR_CORRUPT;
+    }
     return picocalc_flash_erase(block * c->block_size, c->block_size)
                ? LFS_ERR_OK
                : LFS_ERR_IO;

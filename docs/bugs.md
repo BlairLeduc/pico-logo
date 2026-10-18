@@ -22,6 +22,7 @@ edge case)
 
 | ID | Bug | Area | Severity | Found | Status |
 |---|---|---|---|---|---|
+| [B110](#b110--under-uf2-loader-the-internal-filesystem-reads-8-kb-away-from-where-it-writes) | Under UF2 Loader the internal filesystem reads 8 KB away from where it writes | files | high | 2026-10-17 | in progress |
 | [B93](#b93--a-top-level-repeat-command-abandons-its-body-cells-which-reads-as-atom-loss-below-logo_atom_limit) | A top-level repeat-command abandons its body cells, which reads as atom loss below `LOGO_ATOM_LIMIT` | interpreter | low | 2026-09-04 | open |
 | [B92](#b92--several-nested-user-procedure-calls-in-one-expression-fail-while-primitives-nest-fine) | Several nested user-procedure calls in one expression fail, while primitives nest fine | interpreter | medium | 2026-09-04 | open |
 | [B90](#b90--a-zero-arg-reporter-beside-a-user-procedure-call-inside-parentheses-fails-to-parse) | A zero-arg reporter beside a user-procedure call inside parentheses fails to parse | interpreter | medium | 2026-09-03 | open |
@@ -29,6 +30,45 @@ edge case)
 | [B51](#b51--an-arithmetic-statement-got-23--slower-on-the-board-and-only-on-the-board) | An arithmetic statement got 23 % slower on the board, and only on the board | interpreter | medium | 2026-08-24 | open |
 | [B19](#b19--collision-tests-ignore-the-wrapped-playfield) | Collision tests ignore the wrapped playfield (Asteroids) | games | low | 2026-08-12 | open |
 | [B6](#b6--penreverse-ignores-pen-size-always-1-px) | `penreverse` ignores pen size (always 1 px) | graphics | low | 2026-07-18 | won't fix (documented) |
+
+### B110 — Under UF2 Loader the internal filesystem reads 8 KB away from where it writes
+
+Found by reading the code, not on a board. `picocalc_flash_erase` and
+`_program` call `flash_range_erase` / `flash_range_program`, which take
+**physical** flash offsets and ignore address translation, while
+`picocalc_flash_read` `memcpy`s from `XIP_BASE + offset`, which goes through
+the QMI's ATRANS registers. With a direct flash (picotool, debugger) the
+translation is the identity and the two agree. **UF2 Loader moves it**: its
+RP2350 partition table puts the App partition at physical 8 KB
+(`stage3/partitions.json.in`), and the app is launched with `0x10000000`
+mapped there. So every read of block N returned physical block N + 2 — two
+sectors past what was written — and the flash layer reported success.
+
+The window also ends early. The partition is `flash − 8 KB` on the 4 MB
+boards, which still covers the whole region once reads are shifted, but on the
+16 MB Plus 2 W it is capped at 16,372 KB to avoid the top 4 KB (RP2350-E10), so
+the region's last sector cannot be read at all and a read there faults.
+
+**Likely the cause of [B65](#b65--the-internal-littlefs-walk-fails-on-a-board-so-free-writes-past-256-bytes-and-backup-all-fail)**,
+if that board boots Pico Logo through UF2 Loader: a volume written under one
+boot path and read under the other is mostly self-consistent metadata in the
+wrong places, which fits "103 blocks walk cleanly, one data pointer reads as
+erased flash."
+
+**Fix**: `picocalc_flash.c` reads ATRANS0 once to learn which physical offset
+`XIP_BASE` maps to and subtracts it on every read; erase and program are
+unchanged, so data written under the loader stays where it is. Sectors at the
+top of the region that no read can reach are trimmed off
+`picocalc_flash_usable_size()`, and `picocalc_lfs.c` reports those blocks as
+`LFS_ERR_CORRUPT`, which LittleFS treats as bad blocks and allocates around.
+`block_count` is unchanged, so a volume formatted under either boot path mounts
+under both, and nothing needs reformatting. Not host-testable — the flash
+layer is not in the test build and the mock has no address translation.
+
+**To close**: on a board booted through UF2 Loader, write a file to `/`,
+reboot, read it back, and `fscheck`; then the same with a direct flash.
+On the Plus 2 W, fill the volume (so the allocator reaches the last block)
+and `fscheck` again.
 
 ### B93 — A top-level repeat-command abandons its body cells, which reads as atom loss below `LOGO_ATOM_LIMIT`
 
@@ -124,6 +164,8 @@ its lookahead window by walking the whole filesystem
 (lfs_backup.c:119). Operations that never walk — mount, `open`, `cat`, `files`,
 reading — keep working, which is what makes the volume look healthy. 256 is
 `PICOCALC_LFS_CACHE_SIZE`: the first byte that must leave SRAM and claim a block.
+
+**Suspected cause: [B110](#b110--under-uf2-loader-the-internal-filesystem-reads-8-kb-away-from-where-it-writes)** — under UF2 Loader every flash read landed 8 KB from its write. Re-test on that board once B110 is in.
 
 **What B64 fixed was the message, not this.** What is still unknown is *why* the
 walk fails on that board. Ruled out so far:
